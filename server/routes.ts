@@ -113,6 +113,85 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/projects/:id/archive", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      if (project.status === "generating") {
+        return res.status(400).json({ error: "No se puede archivar un proyecto mientras se genera" });
+      }
+
+      const updated = await storage.updateProject(id, { status: "archived" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error archiving project:", error);
+      res.status(500).json({ error: "Failed to archive project" });
+    }
+  });
+
+  app.post("/api/projects/:id/unarchive", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      if (project.status !== "archived") {
+        return res.status(400).json({ error: "El proyecto no está archivado" });
+      }
+
+      const chapters = await storage.getChaptersByProject(id);
+      const hasCompleted = chapters.some(c => c.status === "completed");
+      const newStatus = hasCompleted ? "completed" : "idle";
+
+      const updated = await storage.updateProject(id, { status: newStatus });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error unarchiving project:", error);
+      res.status(500).json({ error: "Failed to unarchive project" });
+    }
+  });
+
+  app.post("/api/projects/:id/duplicate", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const duplicated = await storage.createProject({
+        title: `${project.title} (Copia)`,
+        premise: project.premise,
+        genre: project.genre,
+        tone: project.tone,
+        chapterCount: project.chapterCount,
+        hasPrologue: project.hasPrologue,
+        hasEpilogue: project.hasEpilogue,
+        hasAuthorNote: project.hasAuthorNote,
+        pseudonymId: project.pseudonymId,
+        styleGuideId: project.styleGuideId,
+      });
+
+      for (const agentName of ["architect", "ghostwriter", "editor", "copyeditor"]) {
+        await storage.updateAgentStatus(duplicated.id, agentName, { status: "idle" });
+      }
+
+      res.status(201).json(duplicated);
+    } catch (error) {
+      console.error("Error duplicating project:", error);
+      res.status(500).json({ error: "Failed to duplicate project" });
+    }
+  });
+
   app.get("/api/projects/:id/export-docx", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);

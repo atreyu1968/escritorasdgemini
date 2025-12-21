@@ -6,24 +6,29 @@ import { ChapterViewer } from "@/components/chapter-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Download, BookOpen } from "lucide-react";
+import { ProjectSelector } from "@/components/project-selector";
 import type { Project, Chapter } from "@shared/schema";
 
 export default function ManuscriptPage() {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });
 
-  const latestProject = projects[0];
+  const selectedProject = selectedProjectId 
+    ? projects.find(p => p.id === selectedProjectId) 
+    : projects.filter(p => p.status !== "archived")[0];
+  const currentProject = selectedProject || projects[0];
 
   const { data: chapters = [], isLoading: chaptersLoading } = useQuery<Chapter[]>({
-    queryKey: ["/api/projects", latestProject?.id, "chapters"],
-    enabled: !!latestProject?.id,
+    queryKey: ["/api/projects", currentProject?.id, "chapters"],
+    enabled: !!currentProject?.id,
   });
 
   const handleDownload = () => {
-    if (!latestProject || chapters.length === 0) return;
+    if (!currentProject || chapters.length === 0) return;
 
     const content = chapters
       .filter(c => c.content)
@@ -45,7 +50,7 @@ export default function ManuscriptPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${latestProject.title.replace(/\s+/g, '_')}.md`;
+    a.download = `${currentProject.title.replace(/\s+/g, '_')}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -66,7 +71,7 @@ export default function ManuscriptPage() {
     );
   }
 
-  if (!latestProject) {
+  if (!currentProject) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6">
         <BookOpen className="h-16 w-16 text-muted-foreground/20 mb-4" />
@@ -80,29 +85,53 @@ export default function ManuscriptPage() {
 
   return (
     <div className="h-full flex flex-col p-6" data-testid="manuscript-page">
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold">{latestProject.title}</h1>
-          <div className="flex items-center gap-3 mt-2">
-            <Badge variant="secondary">{latestProject.genre}</Badge>
-            <Badge variant="outline">{latestProject.tone}</Badge>
+          <h1 className="text-3xl font-bold">{currentProject.title}</h1>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <Badge variant="secondary">{currentProject.genre}</Badge>
+            <Badge variant="outline">{currentProject.tone}</Badge>
             <span className="text-sm text-muted-foreground">
-              {completedChapters.length}/{latestProject.chapterCount} capítulos
+              {completedChapters.length}/{currentProject.chapterCount} capítulos
             </span>
             <span className="text-sm text-muted-foreground">
               {totalWordCount.toLocaleString()} palabras
             </span>
           </div>
         </div>
-        <Button 
-          variant="outline"
-          onClick={handleDownload}
-          disabled={completedChapters.length === 0}
-          data-testid="button-download-manuscript"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Descargar Manuscrito
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          {projects.length > 1 && (
+            <ProjectSelector
+              projects={projects}
+              selectedProjectId={currentProject.id}
+              onSelectProject={(id) => {
+                setSelectedProjectId(id);
+                setSelectedChapter(null);
+              }}
+            />
+          )}
+          <Button 
+            variant="outline"
+            onClick={handleDownload}
+            disabled={completedChapters.length === 0}
+            data-testid="button-download-manuscript"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Descargar MD
+          </Button>
+          {currentProject.status === "completed" && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                window.open(`/api/projects/${currentProject.id}/export-docx`, "_blank");
+              }}
+              data-testid="button-export-docx-manuscript"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Exportar Word
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">

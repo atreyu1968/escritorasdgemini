@@ -10,7 +10,8 @@ import { ConsoleOutput, type LogEntry } from "@/components/console-output";
 import { ConfigPanel, type ConfigFormData } from "@/components/config-panel";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Play, StopCircle, FileText, Clock, CheckCircle, Pencil, X, Download } from "lucide-react";
+import { Play, StopCircle, FileText, Clock, CheckCircle, Pencil, X, Download, Archive, Copy, Trash2 } from "lucide-react";
+import { ProjectSelector } from "@/components/project-selector";
 import type { Project, AgentStatus, Chapter } from "@shared/schema";
 
 type AgentRole = "architect" | "ghostwriter" | "editor" | "copyeditor";
@@ -28,6 +29,7 @@ export default function Dashboard() {
   const [currentStage, setCurrentStage] = useState<AgentRole | null>(null);
   const [completedStages, setCompletedStages] = useState<AgentRole[]>([]);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -38,12 +40,15 @@ export default function Dashboard() {
     refetchInterval: 2000,
   });
 
-  const activeProject = projects.find(p => p.status !== "completed" && p.status !== "idle");
-  const latestProject = projects[0];
+  const activeProject = projects.find(p => p.status === "generating");
+  const selectedProject = selectedProjectId 
+    ? projects.find(p => p.id === selectedProjectId) 
+    : projects.filter(p => p.status !== "archived")[0];
+  const currentProject = selectedProject || projects[0];
 
   const { data: chapters = [] } = useQuery<Chapter[]>({
-    queryKey: ["/api/projects", latestProject?.id, "chapters"],
-    enabled: !!latestProject?.id,
+    queryKey: ["/api/projects", currentProject?.id, "chapters"],
+    enabled: !!currentProject?.id,
   });
 
   const createProjectMutation = useMutation({
@@ -109,6 +114,64 @@ export default function Dashboard() {
         variant: "destructive",
       });
       addLog("error", `Error al actualizar: ${error.message}`);
+    },
+  });
+
+  const archiveProjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("POST", `/api/projects/${id}/archive`);
+      return response.json();
+    },
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setSelectedProjectId(null);
+      toast({ title: "Proyecto archivado", description: `"${project.title}" ha sido archivado` });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "No se pudo archivar el proyecto", variant: "destructive" });
+    },
+  });
+
+  const unarchiveProjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("POST", `/api/projects/${id}/unarchive`);
+      return response.json();
+    },
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Proyecto restaurado", description: `"${project.title}" ha sido restaurado` });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "No se pudo restaurar el proyecto", variant: "destructive" });
+    },
+  });
+
+  const duplicateProjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("POST", `/api/projects/${id}/duplicate`);
+      return response.json();
+    },
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setSelectedProjectId(project.id);
+      toast({ title: "Proyecto duplicado", description: `"${project.title}" ha sido creado` });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "No se pudo duplicar el proyecto", variant: "destructive" });
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/projects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setSelectedProjectId(null);
+      toast({ title: "Proyecto eliminado" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "No se pudo eliminar el proyecto", variant: "destructive" });
     },
   });
 
@@ -202,26 +265,35 @@ export default function Dashboard() {
   };
 
   const handleStartGeneration = () => {
-    if (latestProject && latestProject.status === "idle") {
-      startGenerationMutation.mutate(latestProject.id);
+    if (currentProject && currentProject.status === "idle") {
+      startGenerationMutation.mutate(currentProject.id);
     }
   };
 
   return (
     <div className="space-y-6 p-6" data-testid="dashboard-page">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold">Panel de Control</h1>
           <p className="text-muted-foreground mt-1">
             Orquestación de agentes literarios autónomos
           </p>
         </div>
-        {activeProject && (
-          <Badge className="bg-green-500/20 text-green-600 dark:text-green-400 text-sm px-3 py-1">
-            <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse" />
-            Generando: {activeProject.title}
-          </Badge>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          {projects.length > 0 && (
+            <ProjectSelector
+              projects={projects}
+              selectedProjectId={currentProject?.id || null}
+              onSelectProject={setSelectedProjectId}
+            />
+          )}
+          {activeProject && (
+            <Badge className="bg-green-500/20 text-green-600 dark:text-green-400 text-sm px-3 py-1">
+              <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse" />
+              Generando: {activeProject.title}
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -272,25 +344,25 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {latestProject && (
+          {currentProject && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
                 <CardTitle className="text-lg">Progreso del Manuscrito</CardTitle>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 text-sm">
                     <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{completedChapters}/{latestProject.chapterCount} capítulos</span>
+                    <span>{completedChapters}/{currentProject.chapterCount} capítulos</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{totalWordCount.toLocaleString()} palabras</span>
                   </div>
-                  {latestProject.status === "completed" && (
+                  {currentProject.status === "completed" && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        window.open(`/api/projects/${latestProject.id}/export-docx`, "_blank");
+                        window.open(`/api/projects/${currentProject.id}/export-docx`, "_blank");
                       }}
                       data-testid="button-export-docx"
                     >
@@ -390,7 +462,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {latestProject && latestProject.status === "idle" && !editingProject && (
+          {currentProject && currentProject.status === "idle" && !editingProject && (
             <Card>
               <CardContent className="pt-6 space-y-3">
                 <div className="flex gap-2">
@@ -407,14 +479,81 @@ export default function Dashboard() {
                   <Button 
                     variant="outline"
                     size="lg"
-                    onClick={() => handleEditProject(latestProject)}
+                    onClick={() => handleEditProject(currentProject)}
                     data-testid="button-edit-project"
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  Proyecto: {latestProject.title}
+                  Proyecto: {currentProject.title}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentProject && !editingProject && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">Acciones del Proyecto</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => duplicateProjectMutation.mutate(currentProject.id)}
+                    disabled={duplicateProjectMutation.isPending}
+                    data-testid="button-duplicate-project"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicar
+                  </Button>
+                  
+                  {currentProject.status === "archived" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => unarchiveProjectMutation.mutate(currentProject.id)}
+                      disabled={unarchiveProjectMutation.isPending}
+                      data-testid="button-unarchive-project"
+                    >
+                      <Archive className="h-4 w-4 mr-2" />
+                      Restaurar
+                    </Button>
+                  ) : currentProject.status !== "generating" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => archiveProjectMutation.mutate(currentProject.id)}
+                      disabled={archiveProjectMutation.isPending}
+                      data-testid="button-archive-project"
+                    >
+                      <Archive className="h-4 w-4 mr-2" />
+                      Archivar
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`¿Estás seguro de eliminar "${currentProject.title}"?`)) {
+                        deleteProjectMutation.mutate(currentProject.id);
+                      }
+                    }}
+                    disabled={deleteProjectMutation.isPending || currentProject.status === "generating"}
+                    className="text-destructive hover:text-destructive"
+                    data-testid="button-delete-project"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {currentProject.title} - {currentProject.status === "completed" ? "Completado" : 
+                   currentProject.status === "archived" ? "Archivado" :
+                   currentProject.status === "generating" ? "Generando" : "Pendiente"}
                 </p>
               </CardContent>
             </Card>
