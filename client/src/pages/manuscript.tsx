@@ -1,0 +1,122 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChapterList } from "@/components/chapter-list";
+import { ChapterViewer } from "@/components/chapter-viewer";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Download, BookOpen } from "lucide-react";
+import type { Project, Chapter } from "@shared/schema";
+
+export default function ManuscriptPage() {
+  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  const latestProject = projects[0];
+
+  const { data: chapters = [], isLoading: chaptersLoading } = useQuery<Chapter[]>({
+    queryKey: ["/api/projects", latestProject?.id, "chapters"],
+    enabled: !!latestProject?.id,
+  });
+
+  const handleDownload = () => {
+    if (!latestProject || chapters.length === 0) return;
+
+    const content = chapters
+      .filter(c => c.content)
+      .map(c => `# Capítulo ${c.chapterNumber}${c.title ? `: ${c.title}` : ''}\n\n${c.content}`)
+      .join('\n\n---\n\n');
+
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${latestProject.title.replace(/\s+/g, '_')}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const completedChapters = chapters.filter(c => c.status === "completed");
+  const totalWordCount = chapters.reduce((sum, c) => sum + (c.wordCount || 0), 0);
+
+  if (projectsLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <BookOpen className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4 animate-pulse" />
+          <p className="text-muted-foreground">Cargando manuscrito...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!latestProject) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-6">
+        <BookOpen className="h-16 w-16 text-muted-foreground/20 mb-4" />
+        <h2 className="text-xl font-semibold mb-2">Sin manuscrito</h2>
+        <p className="text-muted-foreground max-w-md">
+          Crea un nuevo proyecto desde el panel de control para comenzar a generar tu novela
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col p-6" data-testid="manuscript-page">
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">{latestProject.title}</h1>
+          <div className="flex items-center gap-3 mt-2">
+            <Badge variant="secondary">{latestProject.genre}</Badge>
+            <Badge variant="outline">{latestProject.tone}</Badge>
+            <span className="text-sm text-muted-foreground">
+              {completedChapters.length}/{latestProject.chapterCount} capítulos
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {totalWordCount.toLocaleString()} palabras
+            </span>
+          </div>
+        </div>
+        <Button 
+          variant="outline"
+          onClick={handleDownload}
+          disabled={completedChapters.length === 0}
+          data-testid="button-download-manuscript"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Descargar Manuscrito
+        </Button>
+      </div>
+
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Capítulos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChapterList 
+              chapters={chapters}
+              selectedChapterId={selectedChapter?.id}
+              onSelectChapter={setSelectedChapter}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2 flex flex-col">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Vista Previa</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 min-h-0">
+            <ChapterViewer chapter={selectedChapter} />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

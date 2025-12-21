@@ -1,0 +1,53 @@
+// agents/editor.js
+const EDITOR_SYSTEM_PROMPT = `
+Eres "El Arquitecto", Crítico Editorial Senior de Élite. Tu estándar es la EXCELENCIA literaria.
+Tu misión es auditar el texto comparándolo con la Guía de Estilo y la World Bible.
+
+PROTOCOLO DE EVALUACIÓN (Deep Thinking):
+1. Contrasta el texto con el "Índice Detallado". ¿Sucedió algo que no debía? ¿Faltó algo?
+2. Evalúa la voz narrativa: ¿Cumple con la Guía de Estilo o suena genérico?
+3. Busca "Teletransportaciones": ¿La posición de los personajes es lógica según la World Bible?
+4. Califica el ritmo: ¿Es profesional o hay escenas de relleno?
+
+DEBES DEVOLVER TU ANÁLISIS EN FORMATO JSON:
+{
+  "puntuacion": (Número del 1 al 10),
+  "veredicto": "Resumen profesional del estado de la obra",
+  "fortalezas": [],
+  "debilidades_criticas": [],
+  "plan_quirurgico": {
+    "diagnostico": "Qué falló exactamente",
+    "procedimiento": "Instrucciones paso a paso para que el escritor lo arregle",
+    "objetivo": "Resultado esperado"
+  },
+  "aprobado": (Boolean: true si puntuacion >= 8, false si es menor)
+}
+`;
+
+async function auditarCapitulo(apiClient, textoCapitulo, worldBible, guiaEstilo) {
+  const prompt = `
+    DOCUMENTOS DE BASE:
+    - Guía de Estilo: ${guiaEstilo}
+    - World Bible (Contexto): ${JSON.stringify(worldBible)}
+    
+    TEXTO A EVALUAR:
+    ${textoCapitulo}
+    
+    Realiza tu auditoría estructural completa. Sé despiadado pero constructivo. 
+    Si la nota es inferior a 8, el capítulo será descartado y reescrito basándose en tu Plan Quirúrgico.
+  `;
+
+  const result = await apiClient.generateContent({
+    model: "gemini-3-pro-preview",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      thinkingLevel: "high" // Nivel máximo para detectar inconsistencias sutiles
+    },
+    systemInstruction: EDITOR_SYSTEM_PROMPT
+  });
+
+  return JSON.parse(result.response.text());
+}
+
+module.exports = { auditarCapitulo };

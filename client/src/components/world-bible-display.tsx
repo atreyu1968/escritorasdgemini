@@ -1,0 +1,348 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Clock, Users, BookOpen, Shield, Heart, Skull } from "lucide-react";
+import type { WorldBible, Character, TimelineEvent, WorldRule, PlotOutline } from "@shared/schema";
+
+interface WorldBibleDisplayProps {
+  worldBible: WorldBible | null;
+}
+
+function TimelineTab({ events }: { events: TimelineEvent[] }) {
+  if (!events || events.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Clock className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground text-sm">Sin eventos en la línea temporal</p>
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="h-[400px]">
+      <div className="relative pl-6 pr-4 space-y-4">
+        <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-border" />
+        {events.map((event, index) => (
+          <div key={index} className="relative" data-testid={`timeline-event-${index}`}>
+            <div className="absolute -left-4 top-1.5 w-3 h-3 rounded-full bg-primary border-2 border-background" />
+            <div className="bg-card border border-card-border rounded-md p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="secondary" className="text-xs">Cap. {event.chapter}</Badge>
+                <span className="text-sm font-medium">{event.event}</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {event.characters.map((char, i) => (
+                  <Badge key={i} className="text-xs bg-chart-1/10 text-chart-1">{char}</Badge>
+                ))}
+              </div>
+              {event.significance && (
+                <p className="text-xs text-muted-foreground mt-2 italic">{event.significance}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
+function CharactersTab({ characters }: { characters: Character[] }) {
+  if (!characters || characters.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground text-sm">Sin personajes definidos</p>
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="h-[400px]">
+      <div className="grid gap-3 pr-4">
+        {characters.map((character, index) => (
+          <Card key={index} data-testid={`character-card-${index}`}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  {character.name}
+                  {!character.isAlive && <Skull className="h-4 w-4 text-destructive" />}
+                </CardTitle>
+                <Badge variant="outline" className="text-xs">{character.role}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">
+                  Perfil Psicológico
+                </p>
+                <p className="text-sm text-foreground">{character.psychologicalProfile}</p>
+              </div>
+              {character.arc && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">
+                    Arco del Personaje
+                  </p>
+                  <p className="text-sm text-foreground">{character.arc}</p>
+                </div>
+              )}
+              {character.relationships && character.relationships.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  <Heart className="h-3.5 w-3.5 text-muted-foreground mr-1" />
+                  {character.relationships.map((rel, i) => (
+                    <Badge key={i} variant="secondary" className="text-xs">{rel}</Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
+function WorldRulesTab({ rules }: { rules: WorldRule[] }) {
+  if (!rules || rules.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Shield className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground text-sm">Sin reglas del mundo definidas</p>
+      </div>
+    );
+  }
+
+  const groupedRules = rules.reduce((acc, rule) => {
+    const category = rule.category || "General";
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(rule);
+    return acc;
+  }, {} as Record<string, WorldRule[]>);
+
+  return (
+    <ScrollArea className="h-[400px]">
+      <div className="space-y-4 pr-4">
+        {Object.entries(groupedRules).map(([category, categoryRules]) => (
+          <div key={category}>
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              {category}
+            </h3>
+            <div className="space-y-2">
+              {categoryRules.map((rule, index) => (
+                <div 
+                  key={index} 
+                  className="bg-card border border-card-border rounded-md p-3"
+                  data-testid={`world-rule-${index}`}
+                >
+                  <p className="text-sm font-medium">{rule.rule}</p>
+                  {rule.constraints && rule.constraints.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {rule.constraints.map((constraint, i) => (
+                        <Badge key={i} variant="outline" className="text-xs">{constraint}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
+function PlotTab({ plotOutline }: { plotOutline: PlotOutline | null }) {
+  if (!plotOutline || !plotOutline.premise) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <BookOpen className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground text-sm">Sin esquema de trama definido</p>
+      </div>
+    );
+  }
+
+  const { threeActStructure, chapterOutlines } = plotOutline;
+
+  return (
+    <ScrollArea className="h-[400px]">
+      <div className="space-y-6 pr-4">
+        {plotOutline.premise && (
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Premisa
+            </h3>
+            <p className="text-sm">{plotOutline.premise}</p>
+          </div>
+        )}
+
+        {threeActStructure && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Estructura de Tres Actos
+            </h3>
+            
+            {threeActStructure.act1 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Acto I: Planteamiento</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {threeActStructure.act1.setup && (
+                    <div>
+                      <span className="font-medium">Setup: </span>
+                      {threeActStructure.act1.setup}
+                    </div>
+                  )}
+                  {threeActStructure.act1.incitingIncident && (
+                    <div>
+                      <span className="font-medium">Incidente Incitador: </span>
+                      {threeActStructure.act1.incitingIncident}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {threeActStructure.act2 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Acto II: Confrontación</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {threeActStructure.act2.risingAction && (
+                    <div>
+                      <span className="font-medium">Acción Ascendente: </span>
+                      {threeActStructure.act2.risingAction}
+                    </div>
+                  )}
+                  {threeActStructure.act2.midpoint && (
+                    <div>
+                      <span className="font-medium">Punto Medio: </span>
+                      {threeActStructure.act2.midpoint}
+                    </div>
+                  )}
+                  {threeActStructure.act2.complications && (
+                    <div>
+                      <span className="font-medium">Complicaciones: </span>
+                      {threeActStructure.act2.complications}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {threeActStructure.act3 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Acto III: Resolución</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {threeActStructure.act3.climax && (
+                    <div>
+                      <span className="font-medium">Clímax: </span>
+                      {threeActStructure.act3.climax}
+                    </div>
+                  )}
+                  {threeActStructure.act3.resolution && (
+                    <div>
+                      <span className="font-medium">Resolución: </span>
+                      {threeActStructure.act3.resolution}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {chapterOutlines && chapterOutlines.length > 0 && (
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Resumen por Capítulo
+            </h3>
+            <div className="space-y-2">
+              {chapterOutlines.map((chapter, index) => (
+                <div 
+                  key={index} 
+                  className="bg-card border border-card-border rounded-md p-3"
+                  data-testid={`chapter-outline-${chapter.number}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="secondary" className="text-xs">Cap. {chapter.number}</Badge>
+                  </div>
+                  <p className="text-sm mb-2">{chapter.summary}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {chapter.keyEvents.map((event, i) => (
+                      <Badge key={i} variant="outline" className="text-xs">{event}</Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </ScrollArea>
+  );
+}
+
+export function WorldBibleDisplay({ worldBible }: WorldBibleDisplayProps) {
+  if (!worldBible) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <BookOpen className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground text-sm">
+          No hay biblia del mundo disponible
+        </p>
+        <p className="text-muted-foreground/60 text-xs mt-1">
+          Se generará automáticamente al crear un proyecto
+        </p>
+      </div>
+    );
+  }
+
+  const timeline = (worldBible.timeline || []) as TimelineEvent[];
+  const characters = (worldBible.characters || []) as Character[];
+  const worldRules = (worldBible.worldRules || []) as WorldRule[];
+  const plotOutline = (worldBible.plotOutline || null) as PlotOutline | null;
+
+  return (
+    <Tabs defaultValue="plot" className="w-full" data-testid="world-bible-tabs">
+      <TabsList className="w-full justify-start mb-4">
+        <TabsTrigger value="plot" className="gap-1.5">
+          <BookOpen className="h-4 w-4" />
+          Trama
+        </TabsTrigger>
+        <TabsTrigger value="timeline" className="gap-1.5">
+          <Clock className="h-4 w-4" />
+          Cronología
+        </TabsTrigger>
+        <TabsTrigger value="characters" className="gap-1.5">
+          <Users className="h-4 w-4" />
+          Personajes
+        </TabsTrigger>
+        <TabsTrigger value="rules" className="gap-1.5">
+          <Shield className="h-4 w-4" />
+          Reglas
+        </TabsTrigger>
+      </TabsList>
+      
+      <TabsContent value="plot">
+        <PlotTab plotOutline={plotOutline} />
+      </TabsContent>
+      
+      <TabsContent value="timeline">
+        <TimelineTab events={timeline} />
+      </TabsContent>
+      
+      <TabsContent value="characters">
+        <CharactersTab characters={characters} />
+      </TabsContent>
+      
+      <TabsContent value="rules">
+        <WorldRulesTab rules={worldRules} />
+      </TabsContent>
+    </Tabs>
+  );
+}
