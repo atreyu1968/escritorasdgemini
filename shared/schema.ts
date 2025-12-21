@@ -38,6 +38,7 @@ export const styleGuides = pgTable("style_guides", {
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
+  premise: text("premise"),
   genre: text("genre").notNull().default("fantasy"),
   tone: text("tone").notNull().default("dramatic"),
   chapterCount: integer("chapter_count").notNull().default(5),

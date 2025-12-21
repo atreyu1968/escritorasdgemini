@@ -2,13 +2,13 @@ import { BaseAgent, AgentResponse } from "./base-agent";
 
 interface ArchitectInput {
   title: string;
+  premise?: string;
   genre: string;
   tone: string;
   chapterCount: number;
   hasPrologue?: boolean;
   hasEpilogue?: boolean;
   hasAuthorNote?: boolean;
-  ideaInicial?: string;
   guiaEstilo?: string;
 }
 
@@ -62,7 +62,7 @@ export class ArchitectAgent extends BaseAgent {
 
   async execute(input: ArchitectInput): Promise<AgentResponse> {
     const guiaEstilo = input.guiaEstilo || `Género: ${input.genre}, Tono: ${input.tone}`;
-    const ideaInicial = input.ideaInicial || input.title;
+    const ideaInicial = input.premise || input.title;
 
     const sectionsInfo = [];
     if (input.hasPrologue) sectionsInfo.push("PRÓLOGO");

@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 import { Play, RotateCcw, BookOpen, FileText, ScrollText, User } from "lucide-react";
 import type { Pseudonym, StyleGuide } from "@shared/schema";
 
@@ -51,6 +52,7 @@ const tones = [
 
 const configSchema = z.object({
   title: z.string().min(1, "El título es requerido").max(100),
+  premise: z.string().min(10, "Describe la idea de tu novela (mínimo 10 caracteres)").max(2000),
   genre: z.string().min(1, "Selecciona un género"),
   tone: z.string().min(1, "Selecciona un tono"),
   chapterCount: z.number().min(1).max(50),
@@ -75,6 +77,7 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: Con
     resolver: zodResolver(configSchema),
     defaultValues: {
       title: defaultValues?.title || "",
+      premise: (defaultValues as any)?.premise || "",
       genre: defaultValues?.genre || "fantasy",
       tone: defaultValues?.tone || "dramatic",
       chapterCount: defaultValues?.chapterCount || 10,
@@ -125,6 +128,28 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: Con
               </FormControl>
               <FormDescription>
                 El título de tu novela o manuscrito
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="premise"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Idea / Premisa de la Novela</FormLabel>
+              <FormControl>
+                <Textarea 
+                  placeholder="Describe la idea central de tu novela: ¿De qué trata? ¿Quién es el protagonista? ¿Cuál es el conflicto principal? ¿En qué época y lugar transcurre?"
+                  className="min-h-[120px]"
+                  {...field}
+                  data-testid="input-project-premise"
+                />
+              </FormControl>
+              <FormDescription>
+                Esta premisa guiará a los agentes para diseñar la trama, personajes y mundo de tu novela
               </FormDescription>
               <FormMessage />
             </FormItem>

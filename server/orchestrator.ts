@@ -69,6 +69,7 @@ export class Orchestrator {
       
       const architectResult = await this.architect.execute({
         title: project.title,
+        premise: project.premise || "",
         genre: project.genre,
         tone: project.tone,
         chapterCount: project.chapterCount,
