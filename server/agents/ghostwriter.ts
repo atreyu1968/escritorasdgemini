@@ -16,6 +16,7 @@ interface GhostwriterInput {
   guiaEstilo: string;
   previousContinuity?: string;
   refinementInstructions?: string;
+  authorName?: string;
 }
 
 const SYSTEM_PROMPT = `

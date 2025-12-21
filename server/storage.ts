@@ -1,13 +1,26 @@
 import { db } from "./db";
 import { 
-  projects, chapters, worldBibles, thoughtLogs, agentStatuses,
+  projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
-  type AgentStatus, type InsertAgentStatus
+  type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
+  type StyleGuide, type InsertStyleGuide
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
+  createPseudonym(data: InsertPseudonym): Promise<Pseudonym>;
+  getPseudonym(id: number): Promise<Pseudonym | undefined>;
+  getAllPseudonyms(): Promise<Pseudonym[]>;
+  updatePseudonym(id: number, data: Partial<Pseudonym>): Promise<Pseudonym | undefined>;
+  deletePseudonym(id: number): Promise<void>;
+
+  createStyleGuide(data: InsertStyleGuide): Promise<StyleGuide>;
+  getStyleGuide(id: number): Promise<StyleGuide | undefined>;
+  getStyleGuidesByPseudonym(pseudonymId: number): Promise<StyleGuide[]>;
+  updateStyleGuide(id: number, data: Partial<StyleGuide>): Promise<StyleGuide | undefined>;
+  deleteStyleGuide(id: number): Promise<void>;
+
   createProject(data: InsertProject): Promise<Project>;
   getProject(id: number): Promise<Project | undefined>;
   getAllProjects(): Promise<Project[]>;
@@ -31,6 +44,52 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  async createPseudonym(data: InsertPseudonym): Promise<Pseudonym> {
+    const [pseudonym] = await db.insert(pseudonyms).values(data).returning();
+    return pseudonym;
+  }
+
+  async getPseudonym(id: number): Promise<Pseudonym | undefined> {
+    const [pseudonym] = await db.select().from(pseudonyms).where(eq(pseudonyms.id, id));
+    return pseudonym;
+  }
+
+  async getAllPseudonyms(): Promise<Pseudonym[]> {
+    return db.select().from(pseudonyms).orderBy(desc(pseudonyms.createdAt));
+  }
+
+  async updatePseudonym(id: number, data: Partial<Pseudonym>): Promise<Pseudonym | undefined> {
+    const [updated] = await db.update(pseudonyms).set(data).where(eq(pseudonyms.id, id)).returning();
+    return updated;
+  }
+
+  async deletePseudonym(id: number): Promise<void> {
+    await db.delete(pseudonyms).where(eq(pseudonyms.id, id));
+  }
+
+  async createStyleGuide(data: InsertStyleGuide): Promise<StyleGuide> {
+    const [guide] = await db.insert(styleGuides).values(data).returning();
+    return guide;
+  }
+
+  async getStyleGuide(id: number): Promise<StyleGuide | undefined> {
+    const [guide] = await db.select().from(styleGuides).where(eq(styleGuides.id, id));
+    return guide;
+  }
+
+  async getStyleGuidesByPseudonym(pseudonymId: number): Promise<StyleGuide[]> {
+    return db.select().from(styleGuides).where(eq(styleGuides.pseudonymId, pseudonymId)).orderBy(desc(styleGuides.createdAt));
+  }
+
+  async updateStyleGuide(id: number, data: Partial<StyleGuide>): Promise<StyleGuide | undefined> {
+    const [updated] = await db.update(styleGuides).set(data).where(eq(styleGuides.id, id)).returning();
+    return updated;
+  }
+
+  async deleteStyleGuide(id: number): Promise<void> {
+    await db.delete(styleGuides).where(eq(styleGuides.id, id));
+  }
+
   async createProject(data: InsertProject): Promise<Project> {
     const [project] = await db.insert(projects).values(data).returning();
     return project;

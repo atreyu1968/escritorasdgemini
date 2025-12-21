@@ -13,6 +13,7 @@ import ManuscriptPage from "@/pages/manuscript";
 import WorldBiblePage from "@/pages/world-bible";
 import ThoughtLogsPage from "@/pages/thought-logs";
 import ConfigPage from "@/pages/config";
+import PseudonymsPage from "@/pages/pseudonyms";
 
 function Router() {
   return (
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/manuscript" component={ManuscriptPage} />
       <Route path="/world-bible" component={WorldBiblePage} />
       <Route path="/thought-logs" component={ThoughtLogsPage} />
+      <Route path="/pseudonyms" component={PseudonymsPage} />
       <Route path="/config" component={ConfigPage} />
       <Route component={NotFound} />
     </Switch>

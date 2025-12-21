@@ -48,6 +48,23 @@ export class Orchestrator {
     try {
       await storage.updateProject(project.id, { status: "generating" });
 
+      let styleGuideContent = "";
+      let authorName = "";
+      
+      if (project.styleGuideId) {
+        const styleGuide = await storage.getStyleGuide(project.styleGuideId);
+        if (styleGuide) {
+          styleGuideContent = styleGuide.content;
+        }
+      }
+      
+      if (project.pseudonymId) {
+        const pseudonym = await storage.getPseudonym(project.pseudonymId);
+        if (pseudonym) {
+          authorName = pseudonym.name;
+        }
+      }
+
       this.callbacks.onAgentStatus("architect", "thinking", "El Arquitecto está diseñando la estructura narrativa...");
       
       const architectResult = await this.architect.execute({
@@ -113,13 +130,19 @@ export class Orchestrator {
         let refinementInstructions = "";
 
         while (!approved && refinementAttempts < this.maxRefinementLoops) {
+          const baseStyleGuide = `Género: ${project.genre}, Tono: ${project.tone}`;
+          const fullStyleGuide = styleGuideContent 
+            ? `${baseStyleGuide}\n\n--- GUÍA DE ESTILO DEL AUTOR ---\n${styleGuideContent}`
+            : baseStyleGuide;
+
           const writerResult = await this.ghostwriter.execute({
             chapterNumber: sectionData.numero,
             chapterData: sectionData,
             worldBible: worldBibleData.world_bible,
-            guiaEstilo: `Género: ${project.genre}, Tono: ${project.tone}`,
+            guiaEstilo: fullStyleGuide,
             previousContinuity,
             refinementInstructions,
+            authorName,
           });
 
           chapterContent = writerResult.content;
@@ -181,6 +204,7 @@ export class Orchestrator {
           chapterContent,
           chapterNumber: sectionData.numero,
           chapterTitle: sectionData.titulo,
+          guiaEstilo: styleGuideContent || undefined,
         });
 
         if (polishResult.thoughtSignature) {

@@ -17,7 +17,8 @@ import {
   Brain, 
   Globe, 
   Settings,
-  Feather 
+  Feather,
+  User
 } from "lucide-react";
 
 const mainNavItems = [
@@ -28,6 +29,7 @@ const mainNavItems = [
 ];
 
 const settingsNavItems = [
+  { title: "Pseudónimos", url: "/pseudonyms", icon: User },
   { title: "Configuración", url: "/config", icon: Settings },
 ];
 

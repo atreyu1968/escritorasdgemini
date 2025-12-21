@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { Orchestrator } from "./orchestrator";
-import { insertProjectSchema } from "@shared/schema";
+import { insertProjectSchema, insertPseudonymSchema, insertStyleGuideSchema } from "@shared/schema";
 
 const activeStreams = new Map<number, Set<Response>>();
 
@@ -191,6 +191,152 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching agent statuses:", error);
       res.status(500).json({ error: "Failed to fetch agent statuses" });
+    }
+  });
+
+  app.get("/api/pseudonyms", async (req: Request, res: Response) => {
+    try {
+      const pseudonyms = await storage.getAllPseudonyms();
+      res.json(pseudonyms);
+    } catch (error) {
+      console.error("Error fetching pseudonyms:", error);
+      res.status(500).json({ error: "Failed to fetch pseudonyms" });
+    }
+  });
+
+  app.get("/api/pseudonyms/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const pseudonym = await storage.getPseudonym(id);
+      if (!pseudonym) {
+        return res.status(404).json({ error: "Pseudonym not found" });
+      }
+      res.json(pseudonym);
+    } catch (error) {
+      console.error("Error fetching pseudonym:", error);
+      res.status(500).json({ error: "Failed to fetch pseudonym" });
+    }
+  });
+
+  app.post("/api/pseudonyms", async (req: Request, res: Response) => {
+    try {
+      const parsed = insertPseudonymSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid pseudonym data", details: parsed.error });
+      }
+      const pseudonym = await storage.createPseudonym(parsed.data);
+      res.status(201).json(pseudonym);
+    } catch (error) {
+      console.error("Error creating pseudonym:", error);
+      res.status(500).json({ error: "Failed to create pseudonym" });
+    }
+  });
+
+  app.patch("/api/pseudonyms/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, bio } = req.body;
+      const updateData: { name?: string; bio?: string } = {};
+      if (name !== undefined) updateData.name = name;
+      if (bio !== undefined) updateData.bio = bio;
+      
+      const updated = await storage.updatePseudonym(id, updateData);
+      if (!updated) {
+        return res.status(404).json({ error: "Pseudonym not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating pseudonym:", error);
+      res.status(500).json({ error: "Failed to update pseudonym" });
+    }
+  });
+
+  app.delete("/api/pseudonyms/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deletePseudonym(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting pseudonym:", error);
+      res.status(500).json({ error: "Failed to delete pseudonym" });
+    }
+  });
+
+  app.get("/api/pseudonyms/:id/style-guides", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        return res.json([]);
+      }
+      const pseudonym = await storage.getPseudonym(id);
+      if (!pseudonym) {
+        return res.json([]);
+      }
+      const guides = await storage.getStyleGuidesByPseudonym(id);
+      res.json(guides);
+    } catch (error) {
+      console.error("Error fetching style guides:", error);
+      res.status(500).json({ error: "Failed to fetch style guides" });
+    }
+  });
+
+  app.post("/api/pseudonyms/:id/style-guides", async (req: Request, res: Response) => {
+    try {
+      const pseudonymId = parseInt(req.params.id);
+      const parsed = insertStyleGuideSchema.safeParse({ ...req.body, pseudonymId });
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid style guide data", details: parsed.error });
+      }
+      const guide = await storage.createStyleGuide(parsed.data);
+      res.status(201).json(guide);
+    } catch (error) {
+      console.error("Error creating style guide:", error);
+      res.status(500).json({ error: "Failed to create style guide" });
+    }
+  });
+
+  app.get("/api/style-guides/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const guide = await storage.getStyleGuide(id);
+      if (!guide) {
+        return res.status(404).json({ error: "Style guide not found" });
+      }
+      res.json(guide);
+    } catch (error) {
+      console.error("Error fetching style guide:", error);
+      res.status(500).json({ error: "Failed to fetch style guide" });
+    }
+  });
+
+  app.patch("/api/style-guides/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { title, content, isActive } = req.body;
+      const updateData: { title?: string; content?: string; isActive?: boolean } = {};
+      if (title !== undefined) updateData.title = title;
+      if (content !== undefined) updateData.content = content;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      
+      const updated = await storage.updateStyleGuide(id, updateData);
+      if (!updated) {
+        return res.status(404).json({ error: "Style guide not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating style guide:", error);
+      res.status(500).json({ error: "Failed to update style guide" });
+    }
+  });
+
+  app.delete("/api/style-guides/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteStyleGuide(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting style guide:", error);
+      res.status(500).json({ error: "Failed to delete style guide" });
     }
   });
 

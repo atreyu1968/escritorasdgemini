@@ -17,6 +17,24 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const pseudonyms = pgTable("pseudonyms", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  bio: text("bio"),
+  defaultGenre: text("default_genre"),
+  defaultTone: text("default_tone"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const styleGuides = pgTable("style_guides", {
+  id: serial("id").primaryKey(),
+  pseudonymId: integer("pseudonym_id").notNull().references(() => pseudonyms.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -26,6 +44,8 @@ export const projects = pgTable("projects", {
   hasPrologue: boolean("has_prologue").notNull().default(false),
   hasEpilogue: boolean("has_epilogue").notNull().default(false),
   hasAuthorNote: boolean("has_author_note").notNull().default(false),
+  pseudonymId: integer("pseudonym_id").references(() => pseudonyms.id, { onDelete: "set null" }),
+  styleGuideId: integer("style_guide_id").references(() => styleGuides.id, { onDelete: "set null" }),
   status: text("status").notNull().default("idle"),
   currentChapter: integer("current_chapter").default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -71,6 +91,16 @@ export const agentStatuses = pgTable("agent_statuses", {
   lastActivity: timestamp("last_activity").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const insertPseudonymSchema = createInsertSchema(pseudonyms).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertStyleGuideSchema = createInsertSchema(styleGuides).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
@@ -97,6 +127,12 @@ export const insertAgentStatusSchema = createInsertSchema(agentStatuses).omit({
   id: true,
   lastActivity: true,
 });
+
+export type Pseudonym = typeof pseudonyms.$inferSelect;
+export type InsertPseudonym = z.infer<typeof insertPseudonymSchema>;
+
+export type StyleGuide = typeof styleGuides.$inferSelect;
+export type InsertStyleGuide = z.infer<typeof insertStyleGuideSchema>;
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;

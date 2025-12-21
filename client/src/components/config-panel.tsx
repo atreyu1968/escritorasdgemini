@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,7 +22,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Slider } from "@/components/ui/slider";
-import { Play, RotateCcw, BookOpen, FileText, ScrollText } from "lucide-react";
+import { Play, RotateCcw, BookOpen, FileText, ScrollText, User } from "lucide-react";
+import type { Pseudonym, StyleGuide } from "@shared/schema";
 
 const genres = [
   { value: "fantasy", label: "Fantasía", description: "Mundos mágicos y criaturas sobrenaturales" },
@@ -55,6 +57,8 @@ const configSchema = z.object({
   hasPrologue: z.boolean().default(false),
   hasEpilogue: z.boolean().default(false),
   hasAuthorNote: z.boolean().default(false),
+  pseudonymId: z.number().nullable().optional(),
+  styleGuideId: z.number().nullable().optional(),
 });
 
 type ConfigFormData = z.infer<typeof configSchema>;
@@ -77,6 +81,8 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: Con
       hasPrologue: defaultValues?.hasPrologue || false,
       hasEpilogue: defaultValues?.hasEpilogue || false,
       hasAuthorNote: defaultValues?.hasAuthorNote || false,
+      pseudonymId: defaultValues?.pseudonymId || null,
+      styleGuideId: defaultValues?.styleGuideId || null,
     },
   });
 
@@ -84,8 +90,18 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: Con
   const hasPrologue = form.watch("hasPrologue");
   const hasEpilogue = form.watch("hasEpilogue");
   const hasAuthorNote = form.watch("hasAuthorNote");
+  const selectedPseudonymId = form.watch("pseudonymId");
 
   const totalSections = chapterCount + (hasPrologue ? 1 : 0) + (hasEpilogue ? 1 : 0) + (hasAuthorNote ? 1 : 0);
+
+  const { data: pseudonyms = [] } = useQuery<Pseudonym[]>({
+    queryKey: ["/api/pseudonyms"],
+  });
+
+  const { data: styleGuides = [] } = useQuery<StyleGuide[]>({
+    queryKey: ["/api/pseudonyms", selectedPseudonymId, "style-guides"],
+    enabled: !!selectedPseudonymId && selectedPseudonymId > 0,
+  });
 
   return (
     <Form {...form}>
@@ -170,6 +186,82 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: Con
             </FormItem>
           )}
         />
+
+        <div className="space-y-4 pt-2 border-t">
+          <div className="flex items-center gap-2 pt-4">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <FormLabel className="text-base mb-0">Identidad del Autor</FormLabel>
+          </div>
+          
+          <FormField
+            control={form.control}
+            name="pseudonymId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Pseudónimo (Opcional)</FormLabel>
+                <Select 
+                  onValueChange={(value) => {
+                    field.onChange(value === "none" ? null : parseInt(value));
+                    form.setValue("styleGuideId", null);
+                  }} 
+                  value={field.value?.toString() || "none"}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-pseudonym">
+                      <SelectValue placeholder="Selecciona un pseudónimo" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">Sin pseudónimo</SelectItem>
+                    {pseudonyms.map((p) => (
+                      <SelectItem key={p.id} value={p.id.toString()}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Asocia una identidad de autor al proyecto
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {selectedPseudonymId && styleGuides.length > 0 && (
+            <FormField
+              control={form.control}
+              name="styleGuideId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Guía de Estilo</FormLabel>
+                  <Select 
+                    onValueChange={(value) => field.onChange(value === "none" ? null : parseInt(value))} 
+                    value={field.value?.toString() || "none"}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-style-guide">
+                        <SelectValue placeholder="Selecciona una guía de estilo" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Sin guía específica</SelectItem>
+                      {styleGuides.map((sg) => (
+                        <SelectItem key={sg.id} value={sg.id.toString()}>
+                          {sg.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    La guía de estilo define la voz y estilo narrativo
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </div>
 
         <FormField
           control={form.control}

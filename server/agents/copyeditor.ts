@@ -4,6 +4,7 @@ interface CopyEditorInput {
   chapterContent: string;
   chapterNumber: number;
   chapterTitle: string;
+  guiaEstilo?: string;
 }
 
 export interface CopyEditorResult {
@@ -39,9 +40,13 @@ export class CopyEditorAgent extends BaseAgent {
   }
 
   async execute(input: CopyEditorInput): Promise<AgentResponse & { result?: CopyEditorResult }> {
+    const styleGuideSection = input.guiaEstilo 
+      ? `\n    GUÍA DE ESTILO DEL AUTOR:\n    ${input.guiaEstilo}\n    \n    Respeta la voz y estilo definidos en la guía mientras aplicas las correcciones técnicas.\n`
+      : "";
+
     const prompt = `
     Por favor, toma el siguiente texto y aplícale el protocolo de Corrección de Élite y Maquetado para Ebook:
-    
+    ${styleGuideSection}
     CAPÍTULO ${input.chapterNumber}: ${input.chapterTitle}
     
     ${input.chapterContent}
