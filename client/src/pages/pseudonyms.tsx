@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export default function PseudonymsPage() {
   const [newGuideTitle, setNewGuideTitle] = useState("");
   const [newGuideContent, setNewGuideContent] = useState("");
   const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: pseudonyms = [], isLoading } = useQuery<Pseudonym[]>({
     queryKey: ["/api/pseudonyms"],
@@ -305,29 +306,30 @@ export default function PseudonymsPage() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <Label>Contenido de la guía</Label>
-                        <div className="relative">
-                          <input
-                            type="file"
-                            accept=".docx,.doc"
-                            onChange={handleFileUpload}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            disabled={isUploadingFile}
-                            data-testid="input-upload-word"
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={isUploadingFile}
-                          >
-                            {isUploadingFile ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            ) : (
-                              <Upload className="h-3 w-3 mr-1" />
-                            )}
-                            Subir Word
-                          </Button>
-                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".docx,.doc"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          disabled={isUploadingFile}
+                          data-testid="input-upload-word"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isUploadingFile}
+                          onClick={() => fileInputRef.current?.click()}
+                          data-testid="button-upload-word"
+                        >
+                          {isUploadingFile ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Upload className="h-3 w-3 mr-1" />
+                          )}
+                          Subir Word
+                        </Button>
                       </div>
                       <Textarea
                         placeholder="Describe el estilo de escritura, vocabulario preferido, estructura de oraciones, nivel de descripción, manejo de diálogos, ritmo narrativo, etc."
