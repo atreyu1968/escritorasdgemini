@@ -5,6 +5,7 @@ import { Orchestrator } from "./orchestrator";
 import { insertProjectSchema, insertPseudonymSchema, insertStyleGuideSchema } from "@shared/schema";
 import multer from "multer";
 import mammoth from "mammoth";
+import { generateManuscriptDocx } from "./services/docx-exporter";
 
 const activeStreams = new Map<number, Set<Response>>();
 
@@ -109,6 +110,61 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting project:", error);
       res.status(500).json({ error: "Failed to delete project" });
+    }
+  });
+
+  app.get("/api/projects/:id/export-docx", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      if (project.status !== "completed") {
+        return res.status(400).json({ error: "El proyecto debe estar completado para exportar" });
+      }
+
+      const allChapters = await storage.getChaptersByProject(id);
+      
+      const prologue = project.hasPrologue 
+        ? allChapters.find(c => c.chapterNumber === 0) 
+        : null;
+      const epilogue = project.hasEpilogue 
+        ? allChapters.find(c => c.chapterNumber === -1) 
+        : null;
+      const authorNote = project.hasAuthorNote 
+        ? allChapters.find(c => c.chapterNumber === -2) 
+        : null;
+      
+      const regularChapters = allChapters.filter(c => c.chapterNumber > 0);
+
+      let pseudonym = null;
+      if (project.pseudonymId) {
+        pseudonym = await storage.getPseudonym(project.pseudonymId);
+      }
+
+      const buffer = await generateManuscriptDocx({
+        project,
+        chapters: regularChapters,
+        pseudonym,
+        prologue,
+        epilogue,
+        authorNote,
+      });
+
+      const safeTitle = project.title.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s]/g, "").replace(/\s+/g, "_");
+      const filename = `${safeTitle}_manuscrito.docx`;
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("Error exporting manuscript:", error);
+      res.status(500).json({ error: "Failed to export manuscript" });
     }
   });
 
