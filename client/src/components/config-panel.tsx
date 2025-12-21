@@ -70,9 +70,10 @@ interface ConfigPanelProps {
   onReset?: () => void;
   isLoading?: boolean;
   defaultValues?: Partial<ConfigFormData>;
+  isEditing?: boolean;
 }
 
-export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: ConfigPanelProps) {
+export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEditing }: ConfigPanelProps) {
   const form = useForm<ConfigFormData>({
     resolver: zodResolver(configSchema),
     defaultValues: {
@@ -407,7 +408,7 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues }: Con
             data-testid="button-start-project"
           >
             <Play className="h-4 w-4 mr-2" />
-            {isLoading ? "Creando..." : "Crear Proyecto"}
+            {isLoading ? (isEditing ? "Guardando..." : "Creando...") : (isEditing ? "Guardar Cambios" : "Crear Proyecto")}
           </Button>
           {onReset && (
             <Button 

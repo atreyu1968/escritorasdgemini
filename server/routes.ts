@@ -72,6 +72,35 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/projects/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      
+      if (project.status === "generating") {
+        return res.status(400).json({ error: "Cannot edit a project while it's generating" });
+      }
+
+      const allowedFields = ["title", "premise", "genre", "tone", "chapterCount", "hasPrologue", "hasEpilogue", "hasAuthorNote", "pseudonymId", "styleGuideId"];
+      const updateData: Record<string, any> = {};
+      
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = req.body[field];
+        }
+      }
+
+      const updated = await storage.updateProject(id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating project:", error);
+      res.status(500).json({ error: "Failed to update project" });
+    }
+  });
+
   app.delete("/api/projects/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);

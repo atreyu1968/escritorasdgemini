@@ -10,7 +10,7 @@ import { ConsoleOutput, type LogEntry } from "@/components/console-output";
 import { ConfigPanel, type ConfigFormData } from "@/components/config-panel";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Play, StopCircle, FileText, Clock, CheckCircle } from "lucide-react";
+import { Play, StopCircle, FileText, Clock, CheckCircle, Pencil, X } from "lucide-react";
 import type { Project, AgentStatus, Chapter } from "@shared/schema";
 
 type AgentRole = "architect" | "ghostwriter" | "editor" | "copyeditor";
@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentStage, setCurrentStage] = useState<AgentRole | null>(null);
   const [completedStages, setCompletedStages] = useState<AgentRole[]>([]);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -87,6 +88,30 @@ export default function Dashboard() {
     },
   });
 
+  const updateProjectMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: ConfigFormData }) => {
+      const response = await apiRequest("PATCH", `/api/projects/${id}`, data);
+      return response.json();
+    },
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setEditingProject(null);
+      toast({
+        title: "Proyecto actualizado",
+        description: `"${project.title}" ha sido actualizado`,
+      });
+      addLog("info", `Proyecto "${project.title}" actualizado`);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el proyecto",
+        variant: "destructive",
+      });
+      addLog("error", `Error al actualizar: ${error.message}`);
+    },
+  });
+
   const addLog = (type: LogEntry["type"], message: string, agent?: string) => {
     const newLog: LogEntry = {
       id: crypto.randomUUID(),
@@ -116,7 +141,7 @@ export default function Dashboard() {
             } else if (data.status === "editing") {
               addLog("editing", data.message || `${agentNames[role]} está revisando...`, role);
             } else if (data.status === "completed") {
-              setCompletedStages(prev => [...new Set([...prev, role])]);
+              setCompletedStages(prev => prev.includes(role) ? prev : [...prev, role]);
               addLog("success", data.message || `${agentNames[role]} completó su tarea`, role);
             }
           } else if (data.type === "chapter_complete") {
@@ -161,7 +186,19 @@ export default function Dashboard() {
   const totalWordCount = chapters.reduce((sum, c) => sum + (c.wordCount || 0), 0);
 
   const handleSubmit = (data: ConfigFormData) => {
-    createProjectMutation.mutate(data);
+    if (editingProject) {
+      updateProjectMutation.mutate({ id: editingProject.id, data });
+    } else {
+      createProjectMutation.mutate(data);
+    }
+  };
+
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProject(null);
   };
 
   const handleStartGeneration = () => {
@@ -303,31 +340,67 @@ export default function Dashboard() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Nuevo Proyecto</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+              <CardTitle className="text-lg">
+                {editingProject ? "Editar Proyecto" : "Nuevo Proyecto"}
+              </CardTitle>
+              {editingProject && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={handleCancelEdit}
+                  data-testid="button-cancel-edit"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               <ConfigPanel 
+                key={editingProject?.id || "new"}
                 onSubmit={handleSubmit}
-                isLoading={createProjectMutation.isPending || startGenerationMutation.isPending}
+                isLoading={createProjectMutation.isPending || updateProjectMutation.isPending || startGenerationMutation.isPending}
+                defaultValues={editingProject ? {
+                  title: editingProject.title,
+                  premise: editingProject.premise || "",
+                  genre: editingProject.genre,
+                  tone: editingProject.tone,
+                  chapterCount: editingProject.chapterCount,
+                  hasPrologue: editingProject.hasPrologue,
+                  hasEpilogue: editingProject.hasEpilogue,
+                  hasAuthorNote: editingProject.hasAuthorNote,
+                  pseudonymId: editingProject.pseudonymId,
+                  styleGuideId: editingProject.styleGuideId,
+                } : undefined}
+                isEditing={!!editingProject}
               />
             </CardContent>
           </Card>
 
-          {latestProject && latestProject.status === "idle" && (
+          {latestProject && latestProject.status === "idle" && !editingProject && (
             <Card>
-              <CardContent className="pt-6">
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  onClick={handleStartGeneration}
-                  disabled={startGenerationMutation.isPending}
-                  data-testid="button-continue-generation"
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Continuar Generación
-                </Button>
-                <p className="text-xs text-muted-foreground text-center mt-2">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex gap-2">
+                  <Button 
+                    className="flex-1" 
+                    size="lg"
+                    onClick={handleStartGeneration}
+                    disabled={startGenerationMutation.isPending}
+                    data-testid="button-continue-generation"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Iniciar Generación
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    size="lg"
+                    onClick={() => handleEditProject(latestProject)}
+                    data-testid="button-edit-project"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
                   Proyecto: {latestProject.title}
                 </p>
               </CardContent>
