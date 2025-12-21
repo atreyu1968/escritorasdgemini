@@ -10,7 +10,7 @@ import { ConsoleOutput, type LogEntry } from "@/components/console-output";
 import { ConfigPanel, type ConfigFormData } from "@/components/config-panel";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Play, StopCircle, FileText, Clock, CheckCircle, Pencil, X } from "lucide-react";
+import { Play, StopCircle, FileText, Clock, CheckCircle, Pencil, X, Download } from "lucide-react";
 import type { Project, AgentStatus, Chapter } from "@shared/schema";
 
 type AgentRole = "architect" | "ghostwriter" | "editor" | "copyeditor";
@@ -285,6 +285,19 @@ export default function Dashboard() {
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{totalWordCount.toLocaleString()} palabras</span>
                   </div>
+                  {latestProject.status === "completed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        window.open(`/api/projects/${latestProject.id}/export-docx`, "_blank");
+                      }}
+                      data-testid="button-export-docx"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Exportar Word
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
