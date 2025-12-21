@@ -3,8 +3,26 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { Orchestrator } from "./orchestrator";
 import { insertProjectSchema, insertPseudonymSchema, insertStyleGuideSchema } from "@shared/schema";
+import multer from "multer";
+import mammoth from "mammoth";
 
 const activeStreams = new Map<number, Set<Response>>();
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword'
+    ];
+    if (allowedTypes.includes(file.mimetype) || file.originalname.endsWith('.docx') || file.originalname.endsWith('.doc')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten archivos Word (.docx, .doc)'));
+    }
+  }
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -337,6 +355,30 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting style guide:", error);
       res.status(500).json({ error: "Failed to delete style guide" });
+    }
+  });
+
+  app.post("/api/upload/word", upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No se proporcionó ningún archivo" });
+      }
+
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      const extractedText = result.value.trim();
+
+      if (!extractedText) {
+        return res.status(400).json({ error: "El archivo está vacío o no se pudo extraer el texto" });
+      }
+
+      res.json({ 
+        content: extractedText,
+        filename: req.file.originalname,
+        messages: result.messages
+      });
+    } catch (error) {
+      console.error("Error processing Word file:", error);
+      res.status(500).json({ error: "Error al procesar el archivo Word" });
     }
   });
 

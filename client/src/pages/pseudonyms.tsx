@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { User, Plus, Trash2, FileText, Edit2, Check, X } from "lucide-react";
+import { User, Plus, Trash2, FileText, Edit2, Check, X, Upload, Loader2 } from "lucide-react";
 import type { Pseudonym, StyleGuide } from "@shared/schema";
 
 export default function PseudonymsPage() {
@@ -21,6 +21,7 @@ export default function PseudonymsPage() {
   const [newBio, setNewBio] = useState("");
   const [newGuideTitle, setNewGuideTitle] = useState("");
   const [newGuideContent, setNewGuideContent] = useState("");
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
 
   const { data: pseudonyms = [], isLoading } = useQuery<Pseudonym[]>({
     queryKey: ["/api/pseudonyms"],
@@ -100,6 +101,46 @@ export default function PseudonymsPage() {
   const handleCreateStyleGuide = () => {
     if (!newGuideTitle.trim() || !newGuideContent.trim()) return;
     createStyleGuideMutation.mutate({ title: newGuideTitle, content: newGuideContent });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload/word", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Error al procesar el archivo");
+      }
+
+      const result = await response.json();
+      setNewGuideContent(result.content);
+      
+      if (!newGuideTitle.trim()) {
+        const filenameWithoutExt = file.name.replace(/\.(docx?|doc)$/i, "");
+        setNewGuideTitle(filenameWithoutExt);
+      }
+      
+      toast({ title: "Archivo procesado", description: `Contenido extraído de "${file.name}"` });
+    } catch (error: any) {
+      toast({ 
+        title: "Error", 
+        description: error.message || "No se pudo procesar el archivo Word", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsUploadingFile(false);
+      e.target.value = "";
+    }
   };
 
   const selectedPseudonymData = pseudonyms.find(p => p.id === selectedPseudonym);
@@ -262,7 +303,32 @@ export default function PseudonymsPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Contenido de la guía</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label>Contenido de la guía</Label>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept=".docx,.doc"
+                            onChange={handleFileUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            disabled={isUploadingFile}
+                            data-testid="input-upload-word"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isUploadingFile}
+                          >
+                            {isUploadingFile ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Upload className="h-3 w-3 mr-1" />
+                            )}
+                            Subir Word
+                          </Button>
+                        </div>
+                      </div>
                       <Textarea
                         placeholder="Describe el estilo de escritura, vocabulario preferido, estructura de oraciones, nivel de descripción, manejo de diálogos, ritmo narrativo, etc."
                         value={newGuideContent}
@@ -270,6 +336,9 @@ export default function PseudonymsPage() {
                         className="min-h-[200px] font-mono text-sm"
                         data-testid="input-guide-content"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Puedes escribir directamente o subir un archivo Word (.docx, .doc)
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <Button 
