@@ -14,12 +14,14 @@ import WorldBiblePage from "@/pages/world-bible";
 import ThoughtLogsPage from "@/pages/thought-logs";
 import ConfigPage from "@/pages/config";
 import PseudonymsPage from "@/pages/pseudonyms";
+import ImportPage from "@/pages/import";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/manuscript" component={ManuscriptPage} />
+      <Route path="/import" component={ImportPage} />
       <Route path="/world-bible" component={WorldBiblePage} />
       <Route path="/thought-logs" component={ThoughtLogsPage} />
       <Route path="/pseudonyms" component={PseudonymsPage} />

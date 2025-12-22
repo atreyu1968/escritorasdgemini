@@ -1,12 +1,14 @@
 import { db } from "./db";
 import { 
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
-  series, continuitySnapshots,
+  series, continuitySnapshots, importedManuscripts, importedChapters,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
   type StyleGuide, type InsertStyleGuide, type Series, type InsertSeries,
-  type ContinuitySnapshot, type InsertContinuitySnapshot
+  type ContinuitySnapshot, type InsertContinuitySnapshot,
+  type ImportedManuscript, type InsertImportedManuscript,
+  type ImportedChapter, type InsertImportedChapter
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -55,6 +57,17 @@ export interface IStorage {
   getContinuitySnapshotByProject(projectId: number): Promise<ContinuitySnapshot | undefined>;
   updateContinuitySnapshot(id: number, data: Partial<ContinuitySnapshot>): Promise<ContinuitySnapshot | undefined>;
   getSeriesContinuitySnapshots(seriesId: number): Promise<ContinuitySnapshot[]>;
+
+  createImportedManuscript(data: InsertImportedManuscript): Promise<ImportedManuscript>;
+  getImportedManuscript(id: number): Promise<ImportedManuscript | undefined>;
+  getAllImportedManuscripts(): Promise<ImportedManuscript[]>;
+  updateImportedManuscript(id: number, data: Partial<ImportedManuscript>): Promise<ImportedManuscript | undefined>;
+  deleteImportedManuscript(id: number): Promise<void>;
+
+  createImportedChapter(data: InsertImportedChapter): Promise<ImportedChapter>;
+  getImportedChaptersByManuscript(manuscriptId: number): Promise<ImportedChapter[]>;
+  getImportedChapter(id: number): Promise<ImportedChapter | undefined>;
+  updateImportedChapter(id: number, data: Partial<ImportedChapter>): Promise<ImportedChapter | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -255,6 +268,50 @@ export class DatabaseStorage implements IStorage {
       if (snapshot) snapshots.push(snapshot);
     }
     return snapshots;
+  }
+
+  async createImportedManuscript(data: InsertImportedManuscript): Promise<ImportedManuscript> {
+    const [manuscript] = await db.insert(importedManuscripts).values(data).returning();
+    return manuscript;
+  }
+
+  async getImportedManuscript(id: number): Promise<ImportedManuscript | undefined> {
+    const [manuscript] = await db.select().from(importedManuscripts).where(eq(importedManuscripts.id, id));
+    return manuscript;
+  }
+
+  async getAllImportedManuscripts(): Promise<ImportedManuscript[]> {
+    return db.select().from(importedManuscripts).orderBy(desc(importedManuscripts.createdAt));
+  }
+
+  async updateImportedManuscript(id: number, data: Partial<ImportedManuscript>): Promise<ImportedManuscript | undefined> {
+    const [updated] = await db.update(importedManuscripts).set(data).where(eq(importedManuscripts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteImportedManuscript(id: number): Promise<void> {
+    await db.delete(importedManuscripts).where(eq(importedManuscripts.id, id));
+  }
+
+  async createImportedChapter(data: InsertImportedChapter): Promise<ImportedChapter> {
+    const [chapter] = await db.insert(importedChapters).values(data).returning();
+    return chapter;
+  }
+
+  async getImportedChaptersByManuscript(manuscriptId: number): Promise<ImportedChapter[]> {
+    return db.select().from(importedChapters)
+      .where(eq(importedChapters.manuscriptId, manuscriptId))
+      .orderBy(importedChapters.chapterNumber);
+  }
+
+  async getImportedChapter(id: number): Promise<ImportedChapter | undefined> {
+    const [chapter] = await db.select().from(importedChapters).where(eq(importedChapters.id, id));
+    return chapter;
+  }
+
+  async updateImportedChapter(id: number, data: Partial<ImportedChapter>): Promise<ImportedChapter | undefined> {
+    const [updated] = await db.update(importedChapters).set(data).where(eq(importedChapters.id, id)).returning();
+    return updated;
   }
 }
 

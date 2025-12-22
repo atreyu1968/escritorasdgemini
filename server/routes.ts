@@ -7,6 +7,7 @@ import multer from "multer";
 import mammoth from "mammoth";
 import { generateManuscriptDocx } from "./services/docx-exporter";
 import { z } from "zod";
+import { CopyEditorAgent } from "./agents/copyeditor";
 
 const workTypeEnum = z.enum(["standalone", "series", "trilogy"]);
 
@@ -736,6 +737,311 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error processing Word file:", error);
       res.status(500).json({ error: "Error al procesar el archivo Word" });
+    }
+  });
+
+  const importManuscriptSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    originalFileName: z.string().min(1),
+    detectedLanguage: z.string().nullable().optional(),
+    targetLanguage: z.string().default("es"),
+    chapters: z.array(z.object({
+      chapterNumber: z.number(),
+      title: z.string().nullable().optional(),
+      content: z.string(),
+    })),
+  });
+
+  app.get("/api/imported-manuscripts", async (req: Request, res: Response) => {
+    try {
+      const manuscripts = await storage.getAllImportedManuscripts();
+      res.json(manuscripts);
+    } catch (error) {
+      console.error("Error fetching imported manuscripts:", error);
+      res.status(500).json({ error: "Failed to fetch imported manuscripts" });
+    }
+  });
+
+  app.get("/api/imported-manuscripts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const manuscript = await storage.getImportedManuscript(id);
+      if (!manuscript) {
+        return res.status(404).json({ error: "Manuscript not found" });
+      }
+      res.json(manuscript);
+    } catch (error) {
+      console.error("Error fetching manuscript:", error);
+      res.status(500).json({ error: "Failed to fetch manuscript" });
+    }
+  });
+
+  app.post("/api/imported-manuscripts", async (req: Request, res: Response) => {
+    try {
+      const parsed = importManuscriptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid manuscript data", details: parsed.error });
+      }
+
+      const { chapters, ...manuscriptData } = parsed.data;
+      
+      const manuscript = await storage.createImportedManuscript({
+        ...manuscriptData,
+        totalChapters: chapters.length,
+      });
+
+      for (const chapter of chapters) {
+        await storage.createImportedChapter({
+          manuscriptId: manuscript.id,
+          chapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          originalContent: chapter.content,
+          wordCount: chapter.content.split(/\s+/).length,
+          status: "pending",
+        });
+      }
+
+      res.status(201).json(manuscript);
+    } catch (error) {
+      console.error("Error creating imported manuscript:", error);
+      res.status(500).json({ error: "Failed to create imported manuscript" });
+    }
+  });
+
+  app.get("/api/imported-manuscripts/:id/chapters", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const chapters = await storage.getImportedChaptersByManuscript(id);
+      res.json(chapters);
+    } catch (error) {
+      console.error("Error fetching imported chapters:", error);
+      res.status(500).json({ error: "Failed to fetch imported chapters" });
+    }
+  });
+
+  app.patch("/api/imported-manuscripts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const manuscript = await storage.getImportedManuscript(id);
+      if (!manuscript) {
+        return res.status(404).json({ error: "Manuscript not found" });
+      }
+
+      const allowedFields = ["status", "processedChapters", "totalInputTokens", "totalOutputTokens", "totalThinkingTokens"];
+      const updateData: Record<string, any> = {};
+      
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = req.body[field];
+        }
+      }
+
+      const updated = await storage.updateImportedManuscript(id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating manuscript:", error);
+      res.status(500).json({ error: "Failed to update manuscript" });
+    }
+  });
+
+  app.patch("/api/imported-chapters/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const chapter = await storage.getImportedChapter(id);
+      if (!chapter) {
+        return res.status(404).json({ error: "Chapter not found" });
+      }
+
+      const allowedFields = ["editedContent", "changesLog", "status"];
+      const updateData: Record<string, any> = {};
+      
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = req.body[field];
+        }
+      }
+
+      const updated = await storage.updateImportedChapter(id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating chapter:", error);
+      res.status(500).json({ error: "Failed to update chapter" });
+    }
+  });
+
+  app.delete("/api/imported-manuscripts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteImportedManuscript(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting manuscript:", error);
+      res.status(500).json({ error: "Failed to delete manuscript" });
+    }
+  });
+
+  app.get("/api/imported-manuscripts/:id/cost", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const manuscript = await storage.getImportedManuscript(id);
+      if (!manuscript) {
+        return res.status(404).json({ error: "Manuscript not found" });
+      }
+
+      const INPUT_PRICE_PER_MILLION = 1.25;
+      const OUTPUT_PRICE_PER_MILLION = 10.0;
+      const THINKING_PRICE_PER_MILLION = 3.0;
+
+      const inputCost = ((manuscript.totalInputTokens || 0) / 1_000_000) * INPUT_PRICE_PER_MILLION;
+      const outputCost = ((manuscript.totalOutputTokens || 0) / 1_000_000) * OUTPUT_PRICE_PER_MILLION;
+      const thinkingCost = ((manuscript.totalThinkingTokens || 0) / 1_000_000) * THINKING_PRICE_PER_MILLION;
+      const totalCost = inputCost + outputCost + thinkingCost;
+
+      res.json({
+        manuscriptId: manuscript.id,
+        inputTokens: manuscript.totalInputTokens || 0,
+        outputTokens: manuscript.totalOutputTokens || 0,
+        thinkingTokens: manuscript.totalThinkingTokens || 0,
+        inputCostUSD: inputCost,
+        outputCostUSD: outputCost,
+        thinkingCostUSD: thinkingCost,
+        totalCostUSD: totalCost,
+        pricing: {
+          inputPricePerMillion: INPUT_PRICE_PER_MILLION,
+          outputPricePerMillion: OUTPUT_PRICE_PER_MILLION,
+          thinkingPricePerMillion: THINKING_PRICE_PER_MILLION,
+        }
+      });
+    } catch (error) {
+      console.error("Error calculating cost:", error);
+      res.status(500).json({ error: "Failed to calculate cost" });
+    }
+  });
+
+  app.post("/api/imported-chapters/:id/edit", async (req: Request, res: Response) => {
+    try {
+      const chapterId = parseInt(req.params.id);
+      const chapter = await storage.getImportedChapter(chapterId);
+      if (!chapter) {
+        return res.status(404).json({ error: "Chapter not found" });
+      }
+
+      const manuscript = await storage.getImportedManuscript(chapter.manuscriptId);
+      if (!manuscript) {
+        return res.status(404).json({ error: "Manuscript not found" });
+      }
+
+      await storage.updateImportedChapter(chapterId, { status: "processing" });
+      await storage.updateImportedManuscript(manuscript.id, { status: "processing" });
+
+      const copyEditor = new CopyEditorAgent();
+      const result = await copyEditor.execute({
+        chapterContent: chapter.originalContent,
+        chapterNumber: chapter.chapterNumber,
+        chapterTitle: chapter.title || `Capítulo ${chapter.chapterNumber}`,
+      });
+
+      const inputTokens = result.tokenUsage?.inputTokens || 0;
+      const outputTokens = result.tokenUsage?.outputTokens || 0;
+      const thinkingTokens = result.tokenUsage?.thinkingTokens || 0;
+
+      await storage.updateImportedChapter(chapterId, {
+        editedContent: result.result?.texto_final || chapter.originalContent,
+        changesLog: result.result?.cambios_realizados || "Sin cambios",
+        status: "completed",
+      });
+
+      const chapters = await storage.getImportedChaptersByManuscript(manuscript.id);
+      const completedChapters = chapters.filter(c => c.status === "completed").length;
+      const allCompleted = completedChapters === manuscript.totalChapters;
+
+      await storage.updateImportedManuscript(manuscript.id, {
+        processedChapters: completedChapters,
+        totalInputTokens: (manuscript.totalInputTokens || 0) + inputTokens,
+        totalOutputTokens: (manuscript.totalOutputTokens || 0) + outputTokens,
+        totalThinkingTokens: (manuscript.totalThinkingTokens || 0) + thinkingTokens,
+        status: allCompleted ? "completed" : "processing",
+      });
+
+      res.json({
+        success: true,
+        chapterId,
+        editedContent: result.result?.texto_final,
+        changesLog: result.result?.cambios_realizados,
+        tokensUsed: { input: inputTokens, output: outputTokens, thinking: thinkingTokens },
+      });
+    } catch (error) {
+      console.error("Error editing chapter:", error);
+      res.status(500).json({ error: "Failed to edit chapter" });
+    }
+  });
+
+  app.post("/api/imported-manuscripts/:id/edit-all", async (req: Request, res: Response) => {
+    try {
+      const manuscriptId = parseInt(req.params.id);
+      const manuscript = await storage.getImportedManuscript(manuscriptId);
+      if (!manuscript) {
+        return res.status(404).json({ error: "Manuscript not found" });
+      }
+
+      const chapters = await storage.getImportedChaptersByManuscript(manuscriptId);
+      const pendingChapters = chapters.filter(c => c.status === "pending");
+
+      if (pendingChapters.length === 0) {
+        return res.status(400).json({ error: "No pending chapters to edit" });
+      }
+
+      await storage.updateImportedManuscript(manuscriptId, { status: "processing" });
+
+      res.json({ 
+        message: "Editing started", 
+        manuscriptId, 
+        chaptersToEdit: pendingChapters.length 
+      });
+
+      const copyEditor = new CopyEditorAgent();
+      
+      for (const chapter of pendingChapters) {
+        try {
+          await storage.updateImportedChapter(chapter.id, { status: "processing" });
+
+          const result = await copyEditor.execute({
+            chapterContent: chapter.originalContent,
+            chapterNumber: chapter.chapterNumber,
+            chapterTitle: chapter.title || `Capítulo ${chapter.chapterNumber}`,
+          });
+
+          const inputTokens = result.tokenUsage?.inputTokens || 0;
+          const outputTokens = result.tokenUsage?.outputTokens || 0;
+          const thinkingTokens = result.tokenUsage?.thinkingTokens || 0;
+
+          await storage.updateImportedChapter(chapter.id, {
+            editedContent: result.result?.texto_final || chapter.originalContent,
+            changesLog: result.result?.cambios_realizados || "Sin cambios",
+            status: "completed",
+          });
+
+          const updatedManuscript = await storage.getImportedManuscript(manuscriptId);
+          if (updatedManuscript) {
+            const updatedChapters = await storage.getImportedChaptersByManuscript(manuscriptId);
+            const completedCount = updatedChapters.filter(c => c.status === "completed").length;
+
+            await storage.updateImportedManuscript(manuscriptId, {
+              processedChapters: completedCount,
+              totalInputTokens: (updatedManuscript.totalInputTokens || 0) + inputTokens,
+              totalOutputTokens: (updatedManuscript.totalOutputTokens || 0) + outputTokens,
+              totalThinkingTokens: (updatedManuscript.totalThinkingTokens || 0) + thinkingTokens,
+              status: completedCount === updatedManuscript.totalChapters ? "completed" : "processing",
+            });
+          }
+        } catch (chapterError) {
+          console.error(`Error editing chapter ${chapter.id}:`, chapterError);
+          await storage.updateImportedChapter(chapter.id, { status: "error" });
+        }
+      }
+    } catch (error) {
+      console.error("Error starting batch edit:", error);
+      res.status(500).json({ error: "Failed to start batch editing" });
     }
   });
 
