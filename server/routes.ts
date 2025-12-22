@@ -429,6 +429,12 @@ export async function registerRoutes(
         });
       }
 
+      await storage.updateProject(id, { status: "generating" });
+
+      for (const agentName of ["architect", "ghostwriter", "editor", "copyeditor", "final-reviewer"]) {
+        await storage.updateAgentStatus(id, agentName, { status: "idle", currentTask: "Preparando reanudación..." });
+      }
+
       res.json({ message: "Resume started", projectId: id });
 
       const sendToStreams = (data: any) => {
