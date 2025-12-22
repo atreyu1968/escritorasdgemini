@@ -1,17 +1,22 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ConfigPanel, type ConfigFormData } from "@/components/config-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, Trash2, BookOpen, Clock } from "lucide-react";
+import { Settings, Trash2, BookOpen, Clock, Pencil } from "lucide-react";
 import { Link } from "wouter";
 import type { Project } from "@shared/schema";
 
 export default function ConfigPage() {
   const { toast } = useToast();
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -53,6 +58,28 @@ export default function ConfigPage() {
       toast({
         title: "Error",
         description: "No se pudo eliminar el proyecto",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateProjectMutation = useMutation({
+    mutationFn: async ({ id, title }: { id: number; title: string }) => {
+      const response = await apiRequest("PATCH", `/api/projects/${id}`, { title });
+      return response.json();
+    },
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setEditingProject(null);
+      toast({
+        title: "Proyecto actualizado",
+        description: `El nombre se ha cambiado a "${project.title}"`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el proyecto",
         variant: "destructive",
       });
     },
@@ -157,6 +184,17 @@ export default function ConfigPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => {
+                          setEditingProject(project);
+                          setEditTitle(project.title);
+                        }}
+                        data-testid={`button-edit-${project.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                       <Link href="/manuscript">
                         <Button variant="ghost" size="sm" data-testid={`button-view-${project.id}`}>
                           Ver
@@ -219,6 +257,38 @@ export default function ConfigPage() {
           </p>
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingProject} onOpenChange={(open) => !open && setEditingProject(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar nombre del proyecto</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Nombre del proyecto"
+              data-testid="input-edit-title"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingProject(null)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => {
+                if (editingProject && editTitle.trim()) {
+                  updateProjectMutation.mutate({ id: editingProject.id, title: editTitle.trim() });
+                }
+              }}
+              disabled={updateProjectMutation.isPending || !editTitle.trim()}
+              data-testid="button-save-title"
+            >
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
