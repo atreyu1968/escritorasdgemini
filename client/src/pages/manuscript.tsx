@@ -9,6 +9,14 @@ import { Download, BookOpen } from "lucide-react";
 import { ProjectSelector } from "@/components/project-selector";
 import type { Project, Chapter } from "@shared/schema";
 
+function sortChaptersForDisplay<T extends { chapterNumber: number }>(chapters: T[]): T[] {
+  return [...chapters].sort((a, b) => {
+    const orderA = a.chapterNumber === 0 ? -1000 : a.chapterNumber === -1 ? 1000 : a.chapterNumber === -2 ? 1001 : a.chapterNumber;
+    const orderB = b.chapterNumber === 0 ? -1000 : b.chapterNumber === -1 ? 1000 : b.chapterNumber === -2 ? 1001 : b.chapterNumber;
+    return orderA - orderB;
+  });
+}
+
 export default function ManuscriptPage() {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -30,9 +38,7 @@ export default function ManuscriptPage() {
   const handleDownload = () => {
     if (!currentProject || chapters.length === 0) return;
 
-    const content = chapters
-      .filter(c => c.content)
-      .sort((a, b) => a.chapterNumber - b.chapterNumber)
+    const content = sortChaptersForDisplay(chapters.filter(c => c.content))
       .map(c => {
         const chapterContent = c.content?.trim() || "";
         const startsWithHeading = /^#/.test(chapterContent);
@@ -141,7 +147,7 @@ export default function ManuscriptPage() {
           </CardHeader>
           <CardContent>
             <ChapterList 
-              chapters={chapters}
+              chapters={sortChaptersForDisplay(chapters)}
               selectedChapterId={selectedChapter?.id}
               onSelectChapter={setSelectedChapter}
             />

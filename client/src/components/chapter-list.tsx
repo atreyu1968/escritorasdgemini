@@ -56,7 +56,10 @@ export function ChapterList({ chapters, selectedChapterId, onSelectChapter }: Ch
             >
               <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="font-medium text-sm">
-                  Capítulo {chapter.chapterNumber}
+                  {chapter.chapterNumber === 0 ? "Prólogo" 
+                    : chapter.chapterNumber === -1 ? "Epílogo" 
+                    : chapter.chapterNumber === -2 ? "Nota del Autor"
+                    : `Capítulo ${chapter.chapterNumber}`}
                 </span>
                 <Badge className={`${config.color} text-xs`}>
                   <StatusIcon className={`h-3 w-3 mr-1 ${isLoading ? "animate-spin" : ""}`} />
