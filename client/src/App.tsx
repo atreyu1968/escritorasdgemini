@@ -7,6 +7,8 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ProjectProvider, useProject } from "@/lib/project-context";
+import { ProjectSelector } from "@/components/project-selector";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import ManuscriptPage from "@/pages/manuscript";
@@ -21,13 +23,27 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/manuscript" component={ManuscriptPage} />
-      <Route path="/import" component={ImportPage} />
+      <Route path="/translations" component={ImportPage} />
       <Route path="/world-bible" component={WorldBiblePage} />
       <Route path="/thought-logs" component={ThoughtLogsPage} />
       <Route path="/pseudonyms" component={PseudonymsPage} />
       <Route path="/config" component={ConfigPage} />
       <Route component={NotFound} />
     </Switch>
+  );
+}
+
+function GlobalProjectSelector() {
+  const { projects, currentProject, setSelectedProjectId } = useProject();
+  
+  if (projects.length === 0) return null;
+  
+  return (
+    <ProjectSelector
+      projects={projects}
+      selectedProjectId={currentProject?.id || null}
+      onSelectProject={setSelectedProjectId}
+    />
   );
 }
 
@@ -41,21 +57,26 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 min-w-0">
-                <header className="flex items-center justify-between gap-4 p-3 border-b shrink-0 sticky top-0 z-50 bg-background">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <ThemeToggle />
-                </header>
-                <main className="flex-1 overflow-auto">
-                  <Router />
-                </main>
+          <ProjectProvider>
+            <SidebarProvider style={style as React.CSSProperties}>
+              <div className="flex h-screen w-full">
+                <AppSidebar />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <header className="flex items-center justify-between gap-4 p-3 border-b shrink-0 sticky top-0 z-50 bg-background">
+                    <SidebarTrigger data-testid="button-sidebar-toggle" />
+                    <div className="flex items-center gap-3">
+                      <GlobalProjectSelector />
+                      <ThemeToggle />
+                    </div>
+                  </header>
+                  <main className="flex-1 overflow-auto">
+                    <Router />
+                  </main>
+                </div>
               </div>
-            </div>
-          </SidebarProvider>
-          <Toaster />
+            </SidebarProvider>
+            <Toaster />
+          </ProjectProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

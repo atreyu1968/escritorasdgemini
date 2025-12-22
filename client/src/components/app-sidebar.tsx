@@ -25,7 +25,7 @@ import {
 const mainNavItems = [
   { title: "Panel Principal", url: "/", icon: LayoutDashboard },
   { title: "Manuscrito", url: "/manuscript", icon: BookOpen },
-  { title: "Importar", url: "/import", icon: Upload },
+  { title: "Traducciones", url: "/translations", icon: Upload },
   { title: "Biblia del Mundo", url: "/world-bible", icon: Globe },
   { title: "Logs de Pensamiento", url: "/thought-logs", icon: Brain },
 ];
