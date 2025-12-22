@@ -10,6 +10,7 @@ The application features:
 - **Thought Signature Logging**: Captures AI reasoning processes for auditing how decisions were made
 - **Real-time Dashboard**: Monitors agent status, chapter progress, and console output
 - **Refinement Loops**: Automatic rejection and rewriting of chapters that don't meet quality thresholds
+- **Imported Manuscripts**: Upload external Word documents in 6 languages (EN, FR, DE, IT, PT, CA), automatically parse chapters, and professionally edit them using the CopyEditor agent with token cost tracking
 
 ## User Preferences
 
@@ -46,6 +47,8 @@ Preferred communication style: Simple, everyday language.
   - `agentStatuses`: Real-time status tracking for dashboard display
   - `series`: Groups projects into series/trilogies for continuity
   - `continuitySnapshots`: Stores summaries of completed works for AI continuity (8-12k tokens)
+  - `importedManuscripts`: External manuscript uploads with language and status tracking
+  - `importedChapters`: Chapters parsed from uploaded manuscripts with original/edited content and token usage
 
 ### AI Integration
 - **Model**: Gemini 3 Pro Preview via Replit AI Integrations
