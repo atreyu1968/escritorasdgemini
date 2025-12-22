@@ -128,6 +128,7 @@ export abstract class BaseAgent {
             topP: 0.95,
             thinkingConfig: {
               thinkingBudget: 8192,
+              includeThoughts: true,
             },
           },
         });
@@ -144,12 +145,25 @@ export abstract class BaseAgent {
 
         if (candidate?.content?.parts) {
           for (const part of candidate.content.parts) {
-            if (part.thought) {
+            // El campo 'thought' indica que es contenido de pensamiento del modelo
+            if ((part as any).thought === true) {
               thoughtSignature += part.text || "";
             } else if (part.text) {
               content += part.text;
             }
           }
+        }
+        
+        // Log para debug si no hay pensamiento capturado
+        if (!thoughtSignature && candidate?.content?.parts) {
+          console.log(`[${this.config.name}] No thought signature captured. Parts structure:`, 
+            candidate.content.parts.map((p: any) => ({ 
+              hasText: !!p.text, 
+              textLength: p.text?.length || 0,
+              thought: p.thought,
+              keys: Object.keys(p)
+            }))
+          );
         }
 
         const usageMetadata = response.usageMetadata;
