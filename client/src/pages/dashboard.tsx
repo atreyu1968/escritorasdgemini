@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { AgentCard } from "@/components/agent-card";
 import { ProcessFlow } from "@/components/process-flow";
 import { ConsoleOutput, type LogEntry } from "@/components/console-output";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Play, FileText, Clock, CheckCircle, Download, Archive, Copy, Trash2, ClipboardCheck, RefreshCw, Ban, CheckCheck, Plus } from "lucide-react";
@@ -38,11 +39,14 @@ function calculateCost(inputTokens: number, outputTokens: number, thinkingTokens
   return inputCost + outputCost + thinkingCost;
 }
 
+type ConfirmType = "cancel" | "forceComplete" | "resume" | "delete" | null;
+
 export default function Dashboard() {
   const { toast } = useToast();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentStage, setCurrentStage] = useState<AgentRole | null>(null);
   const [completedStages, setCompletedStages] = useState<AgentRole[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmType>(null);
   const { projects, currentProject, setSelectedProjectId } = useProject();
 
   const { data: agentStatuses = [] } = useQuery<AgentStatus[]>({
@@ -603,11 +607,7 @@ export default function Dashboard() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          if (confirm("¿Cancelar la generación? El progreso actual se mantendrá.")) {
-                            cancelProjectMutation.mutate(currentProject.id);
-                          }
-                        }}
+                        onClick={() => setConfirmDialog("cancel")}
                         disabled={cancelProjectMutation.isPending}
                         className="text-destructive hover:text-destructive"
                         data-testid="button-cancel-generation"
@@ -618,11 +618,7 @@ export default function Dashboard() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          if (confirm("¿Marcar como completado? Los capítulos con contenido se guardarán.")) {
-                            forceCompleteMutation.mutate(currentProject.id);
-                          }
-                        }}
+                        onClick={() => setConfirmDialog("forceComplete")}
                         disabled={forceCompleteMutation.isPending}
                         data-testid="button-force-complete"
                       >
@@ -636,11 +632,7 @@ export default function Dashboard() {
                     <Button
                       variant="default"
                       size="sm"
-                      onClick={() => {
-                        if (confirm("¿Continuar la generación desde donde se detuvo?")) {
-                          resumeProjectMutation.mutate(currentProject.id);
-                        }
-                      }}
+                      onClick={() => setConfirmDialog("resume")}
                       disabled={resumeProjectMutation.isPending}
                       data-testid="button-resume-generation"
                     >
@@ -676,11 +668,7 @@ export default function Dashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      if (confirm(`¿Estás seguro de eliminar "${currentProject.title}"?`)) {
-                        deleteProjectMutation.mutate(currentProject.id);
-                      }
-                    }}
+                    onClick={() => setConfirmDialog("delete")}
                     disabled={deleteProjectMutation.isPending || currentProject.status === "generating"}
                     className="text-destructive hover:text-destructive"
                     data-testid="button-delete-project"
@@ -699,6 +687,56 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDialog === "cancel"}
+        onOpenChange={(open) => !open && setConfirmDialog(null)}
+        title="Cancelar generación"
+        description="¿Cancelar la generación? El progreso actual se mantendrá."
+        confirmText="Cancelar generación"
+        variant="destructive"
+        onConfirm={() => {
+          if (currentProject) cancelProjectMutation.mutate(currentProject.id);
+          setConfirmDialog(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDialog === "forceComplete"}
+        onOpenChange={(open) => !open && setConfirmDialog(null)}
+        title="Forzar completado"
+        description="¿Marcar como completado? Los capítulos con contenido se guardarán."
+        confirmText="Completar"
+        onConfirm={() => {
+          if (currentProject) forceCompleteMutation.mutate(currentProject.id);
+          setConfirmDialog(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDialog === "resume"}
+        onOpenChange={(open) => !open && setConfirmDialog(null)}
+        title="Continuar generación"
+        description="¿Continuar la generación desde donde se detuvo?"
+        confirmText="Continuar"
+        onConfirm={() => {
+          if (currentProject) resumeProjectMutation.mutate(currentProject.id);
+          setConfirmDialog(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDialog === "delete"}
+        onOpenChange={(open) => !open && setConfirmDialog(null)}
+        title="Eliminar proyecto"
+        description={`¿Estás seguro de eliminar "${currentProject?.title}"? Esta acción no se puede deshacer.`}
+        confirmText="Eliminar"
+        variant="destructive"
+        onConfirm={() => {
+          if (currentProject) deleteProjectMutation.mutate(currentProject.id);
+          setConfirmDialog(null);
+        }}
+      />
     </div>
   );
 }

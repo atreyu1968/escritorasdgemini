@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { User, Plus, Trash2, FileText, Edit2, Check, X, Upload, Loader2 } from "lucide-react";
@@ -22,6 +23,8 @@ export default function PseudonymsPage() {
   const [newGuideTitle, setNewGuideTitle] = useState("");
   const [newGuideContent, setNewGuideContent] = useState("");
   const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [deletePseudonymId, setDeletePseudonymId] = useState<number | null>(null);
+  const [deleteGuideId, setDeleteGuideId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: pseudonyms = [], isLoading } = useQuery<Pseudonym[]>({
@@ -244,9 +247,7 @@ export default function PseudonymsPage() {
                     variant="ghost"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm("¿Eliminar este pseudónimo y todas sus guías de estilo?")) {
-                        deletePseudonymMutation.mutate(pseudonym.id);
-                      }
+                      setDeletePseudonymId(pseudonym.id);
                     }}
                     data-testid={`button-delete-pseudonym-${pseudonym.id}`}
                   >
@@ -389,11 +390,7 @@ export default function PseudonymsPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => {
-                            if (confirm("¿Eliminar esta guía de estilo?")) {
-                              deleteStyleGuideMutation.mutate(guide.id);
-                            }
-                          }}
+                          onClick={() => setDeleteGuideId(guide.id)}
                           data-testid={`button-delete-guide-${guide.id}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -412,6 +409,39 @@ export default function PseudonymsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={deletePseudonymId !== null}
+        onOpenChange={(open) => !open && setDeletePseudonymId(null)}
+        title="Eliminar pseudónimo"
+        description="¿Eliminar este pseudónimo y todas sus guías de estilo? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        variant="destructive"
+        onConfirm={() => {
+          if (deletePseudonymId) {
+            deletePseudonymMutation.mutate(deletePseudonymId);
+            if (selectedPseudonym === deletePseudonymId) {
+              setSelectedPseudonym(null);
+            }
+          }
+          setDeletePseudonymId(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteGuideId !== null}
+        onOpenChange={(open) => !open && setDeleteGuideId(null)}
+        title="Eliminar guía de estilo"
+        description="¿Eliminar esta guía de estilo? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteGuideId) {
+            deleteStyleGuideMutation.mutate(deleteGuideId);
+          }
+          setDeleteGuideId(null);
+        }}
+      />
     </div>
   );
 }

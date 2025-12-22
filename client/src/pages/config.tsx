@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Settings, Trash2, BookOpen, Clock, Pencil } from "lucide-react";
@@ -17,6 +18,7 @@ export default function ConfigPage() {
   const { toast } = useToast();
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -90,9 +92,7 @@ export default function ConfigPage() {
   };
 
   const handleDelete = (projectId: number) => {
-    if (confirm("¿Estás seguro de que quieres eliminar este proyecto?")) {
-      deleteProjectMutation.mutate(projectId);
-    }
+    setDeleteProjectId(projectId);
   };
 
   const statusLabels: Record<string, string> = {
@@ -289,6 +289,21 @@ export default function ConfigPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteProjectId !== null}
+        onOpenChange={(open) => !open && setDeleteProjectId(null)}
+        title="Eliminar proyecto"
+        description="¿Estás seguro de que quieres eliminar este proyecto? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteProjectId) {
+            deleteProjectMutation.mutate(deleteProjectId);
+          }
+          setDeleteProjectId(null);
+        }}
+      />
     </div>
   );
 }
