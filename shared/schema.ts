@@ -89,10 +89,40 @@ export const chapters = pgTable("chapters", {
   chapterNumber: integer("chapter_number").notNull(),
   title: text("title"),
   content: text("content"),
+  originalContent: text("original_content"),
   wordCount: integer("word_count").default(0),
   status: text("status").notNull().default("pending"),
   needsRevision: boolean("needs_revision").default(false),
   revisionReason: text("revision_reason"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const importedManuscripts = pgTable("imported_manuscripts", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  detectedLanguage: text("detected_language"),
+  targetLanguage: text("target_language").default("es"),
+  totalChapters: integer("total_chapters").default(0),
+  processedChapters: integer("processed_chapters").default(0),
+  status: text("status").notNull().default("pending"),
+  parsingErrors: text("parsing_errors"),
+  totalInputTokens: integer("total_input_tokens").default(0),
+  totalOutputTokens: integer("total_output_tokens").default(0),
+  totalThinkingTokens: integer("total_thinking_tokens").default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const importedChapters = pgTable("imported_chapters", {
+  id: serial("id").primaryKey(),
+  manuscriptId: integer("manuscript_id").notNull().references(() => importedManuscripts.id, { onDelete: "cascade" }),
+  chapterNumber: integer("chapter_number").notNull(),
+  title: text("title"),
+  originalContent: text("original_content").notNull(),
+  editedContent: text("edited_content"),
+  changesLog: text("changes_log"),
+  wordCount: integer("word_count").default(0),
+  status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -173,6 +203,21 @@ export const insertAgentStatusSchema = createInsertSchema(agentStatuses).omit({
   lastActivity: true,
 });
 
+export const insertImportedManuscriptSchema = createInsertSchema(importedManuscripts).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+  processedChapters: true,
+  totalInputTokens: true,
+  totalOutputTokens: true,
+  totalThinkingTokens: true,
+});
+
+export const insertImportedChapterSchema = createInsertSchema(importedChapters).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Pseudonym = typeof pseudonyms.$inferSelect;
 export type InsertPseudonym = z.infer<typeof insertPseudonymSchema>;
 
@@ -199,6 +244,12 @@ export type InsertThoughtLog = z.infer<typeof insertThoughtLogSchema>;
 
 export type AgentStatus = typeof agentStatuses.$inferSelect;
 export type InsertAgentStatus = z.infer<typeof insertAgentStatusSchema>;
+
+export type ImportedManuscript = typeof importedManuscripts.$inferSelect;
+export type InsertImportedManuscript = z.infer<typeof insertImportedManuscriptSchema>;
+
+export type ImportedChapter = typeof importedChapters.$inferSelect;
+export type InsertImportedChapter = z.infer<typeof insertImportedChapterSchema>;
 
 export const characterSchema = z.object({
   name: z.string(),
