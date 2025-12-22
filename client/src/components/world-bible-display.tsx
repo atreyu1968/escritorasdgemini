@@ -89,9 +89,18 @@ function CharactersTab({ characters }: { characters: Character[] }) {
               {character.relationships && character.relationships.length > 0 && (
                 <div className="flex flex-wrap gap-1 pt-1">
                   <Heart className="h-3.5 w-3.5 text-muted-foreground mr-1" />
-                  {character.relationships.map((rel, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">{rel}</Badge>
-                  ))}
+                  {character.relationships.map((rel, i) => {
+                    const displayText = typeof rel === 'string' 
+                      ? rel 
+                      : typeof rel === 'object' && rel !== null
+                        ? (rel as { con?: string; tipo?: string }).con 
+                          ? `${(rel as { con: string; tipo?: string }).con}${(rel as { tipo?: string }).tipo ? ` (${(rel as { tipo: string }).tipo})` : ''}`
+                          : JSON.stringify(rel)
+                        : String(rel);
+                    return (
+                      <Badge key={i} variant="secondary" className="text-xs">{displayText}</Badge>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
