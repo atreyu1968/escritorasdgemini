@@ -1000,6 +1000,7 @@ export async function registerRoutes(
         chapterContent: chapter.originalContent,
         chapterNumber: chapter.chapterNumber,
         chapterTitle: chapter.title || `Capítulo ${chapter.chapterNumber}`,
+        targetLanguage: manuscript.detectedLanguage || manuscript.targetLanguage || "es",
       });
 
       const inputTokens = result.tokenUsage?.inputTokens || 0;
@@ -1061,6 +1062,7 @@ export async function registerRoutes(
       });
 
       const copyEditor = new CopyEditorAgent();
+      const manuscriptLanguage = manuscript.detectedLanguage || manuscript.targetLanguage || "es";
       
       for (const chapter of pendingChapters) {
         try {
@@ -1070,6 +1072,7 @@ export async function registerRoutes(
             chapterContent: chapter.originalContent,
             chapterNumber: chapter.chapterNumber,
             chapterTitle: chapter.title || `Capítulo ${chapter.chapterNumber}`,
+            targetLanguage: manuscriptLanguage,
           });
 
           const inputTokens = result.tokenUsage?.inputTokens || 0;
