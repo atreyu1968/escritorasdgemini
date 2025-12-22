@@ -39,11 +39,13 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL with Drizzle ORM
 - **Schema Location**: `shared/schema.ts` contains all table definitions
 - **Key Tables**:
-  - `projects`: Novel projects with genre, tone, and chapter count settings
+  - `projects`: Novel projects with genre, tone, chapter count, and series settings (workType, seriesId, seriesOrder)
   - `chapters`: Individual chapter content with status tracking
   - `worldBibles`: JSON storage for characters, timeline, rules, and plot outlines
   - `thoughtLogs`: AI reasoning signatures for each agent action
   - `agentStatuses`: Real-time status tracking for dashboard display
+  - `series`: Groups projects into series/trilogies for continuity
+  - `continuitySnapshots`: Stores summaries of completed works for AI continuity (8-12k tokens)
 
 ### AI Integration
 - **Model**: Gemini 3 Pro Preview via Replit AI Integrations

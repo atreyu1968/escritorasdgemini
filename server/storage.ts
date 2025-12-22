@@ -1,10 +1,12 @@
 import { db } from "./db";
 import { 
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
+  series, continuitySnapshots,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
-  type StyleGuide, type InsertStyleGuide
+  type StyleGuide, type InsertStyleGuide, type Series, type InsertSeries,
+  type ContinuitySnapshot, type InsertContinuitySnapshot
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -41,6 +43,18 @@ export interface IStorage {
   createAgentStatus(data: InsertAgentStatus): Promise<AgentStatus>;
   getAgentStatusesByProject(projectId: number): Promise<AgentStatus[]>;
   updateAgentStatus(projectId: number, agentName: string, data: Partial<AgentStatus>): Promise<AgentStatus | undefined>;
+
+  createSeries(data: InsertSeries): Promise<Series>;
+  getSeries(id: number): Promise<Series | undefined>;
+  getAllSeries(): Promise<Series[]>;
+  updateSeries(id: number, data: Partial<Series>): Promise<Series | undefined>;
+  deleteSeries(id: number): Promise<void>;
+  getProjectsBySeries(seriesId: number): Promise<Project[]>;
+
+  createContinuitySnapshot(data: InsertContinuitySnapshot): Promise<ContinuitySnapshot>;
+  getContinuitySnapshotByProject(projectId: number): Promise<ContinuitySnapshot | undefined>;
+  updateContinuitySnapshot(id: number, data: Partial<ContinuitySnapshot>): Promise<ContinuitySnapshot | undefined>;
+  getSeriesContinuitySnapshots(seriesId: number): Promise<ContinuitySnapshot[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -181,6 +195,66 @@ export class DatabaseStorage implements IStorage {
       lastActivity: new Date(),
     }).where(eq(agentStatuses.id, existing.id)).returning();
     return updated;
+  }
+
+  async createSeries(data: InsertSeries): Promise<Series> {
+    const [newSeries] = await db.insert(series).values(data).returning();
+    return newSeries;
+  }
+
+  async getSeries(id: number): Promise<Series | undefined> {
+    const [foundSeries] = await db.select().from(series).where(eq(series.id, id));
+    return foundSeries;
+  }
+
+  async getAllSeries(): Promise<Series[]> {
+    return db.select().from(series).orderBy(desc(series.createdAt));
+  }
+
+  async updateSeries(id: number, data: Partial<Series>): Promise<Series | undefined> {
+    const [updated] = await db.update(series).set(data).where(eq(series.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSeries(id: number): Promise<void> {
+    await db.delete(series).where(eq(series.id, id));
+  }
+
+  async getProjectsBySeries(seriesId: number): Promise<Project[]> {
+    return db.select().from(projects)
+      .where(eq(projects.seriesId, seriesId))
+      .orderBy(projects.seriesOrder);
+  }
+
+  async createContinuitySnapshot(data: InsertContinuitySnapshot): Promise<ContinuitySnapshot> {
+    const [snapshot] = await db.insert(continuitySnapshots).values(data).returning();
+    return snapshot;
+  }
+
+  async getContinuitySnapshotByProject(projectId: number): Promise<ContinuitySnapshot | undefined> {
+    const [snapshot] = await db.select().from(continuitySnapshots).where(eq(continuitySnapshots.projectId, projectId));
+    return snapshot;
+  }
+
+  async updateContinuitySnapshot(id: number, data: Partial<ContinuitySnapshot>): Promise<ContinuitySnapshot | undefined> {
+    const [updated] = await db.update(continuitySnapshots).set({
+      ...data,
+      updatedAt: new Date(),
+    }).where(eq(continuitySnapshots.id, id)).returning();
+    return updated;
+  }
+
+  async getSeriesContinuitySnapshots(seriesId: number): Promise<ContinuitySnapshot[]> {
+    const seriesProjects = await this.getProjectsBySeries(seriesId);
+    const projectIds = seriesProjects.map(p => p.id);
+    if (projectIds.length === 0) return [];
+    
+    const snapshots: ContinuitySnapshot[] = [];
+    for (const projectId of projectIds) {
+      const snapshot = await this.getContinuitySnapshotByProject(projectId);
+      if (snapshot) snapshots.push(snapshot);
+    }
+    return snapshots;
   }
 }
 

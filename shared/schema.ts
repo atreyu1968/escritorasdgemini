@@ -35,6 +35,15 @@ export const styleGuides = pgTable("style_guides", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const series = pgTable("series", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  workType: text("work_type").notNull().default("trilogy"),
+  totalPlannedBooks: integer("total_planned_books").default(3),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -47,6 +56,9 @@ export const projects = pgTable("projects", {
   hasAuthorNote: boolean("has_author_note").notNull().default(false),
   pseudonymId: integer("pseudonym_id").references(() => pseudonyms.id, { onDelete: "set null" }),
   styleGuideId: integer("style_guide_id").references(() => styleGuides.id, { onDelete: "set null" }),
+  workType: text("work_type").notNull().default("standalone"),
+  seriesId: integer("series_id").references(() => series.id, { onDelete: "set null" }),
+  seriesOrder: integer("series_order"),
   status: text("status").notNull().default("idle"),
   currentChapter: integer("current_chapter").default(0),
   revisionCycle: integer("revision_cycle").default(0),
@@ -56,6 +68,19 @@ export const projects = pgTable("projects", {
   totalOutputTokens: integer("total_output_tokens").default(0),
   totalThinkingTokens: integer("total_thinking_tokens").default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const continuitySnapshots = pgTable("continuity_snapshots", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  synopsis: text("synopsis"),
+  characterStates: jsonb("character_states").default([]),
+  unresolvedThreads: jsonb("unresolved_threads").default([]),
+  worldStateChanges: jsonb("world_state_changes").default([]),
+  keyEvents: jsonb("key_events").default([]),
+  tokenCount: integer("token_count").default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const chapters = pgTable("chapters", {
@@ -110,11 +135,22 @@ export const insertStyleGuideSchema = createInsertSchema(styleGuides).omit({
   createdAt: true,
 });
 
+export const insertSeriesSchema = createInsertSchema(series).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
   status: true,
   currentChapter: true,
+});
+
+export const insertContinuitySnapshotSchema = createInsertSchema(continuitySnapshots).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertChapterSchema = createInsertSchema(chapters).omit({
@@ -143,8 +179,14 @@ export type InsertPseudonym = z.infer<typeof insertPseudonymSchema>;
 export type StyleGuide = typeof styleGuides.$inferSelect;
 export type InsertStyleGuide = z.infer<typeof insertStyleGuideSchema>;
 
+export type Series = typeof series.$inferSelect;
+export type InsertSeries = z.infer<typeof insertSeriesSchema>;
+
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
+
+export type ContinuitySnapshot = typeof continuitySnapshots.$inferSelect;
+export type InsertContinuitySnapshot = z.infer<typeof insertContinuitySnapshotSchema>;
 
 export type Chapter = typeof chapters.$inferSelect;
 export type InsertChapter = z.infer<typeof insertChapterSchema>;

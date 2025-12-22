@@ -2,10 +2,38 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { Orchestrator } from "./orchestrator";
-import { insertProjectSchema, insertPseudonymSchema, insertStyleGuideSchema } from "@shared/schema";
+import { insertProjectSchema, insertPseudonymSchema, insertStyleGuideSchema, insertSeriesSchema } from "@shared/schema";
 import multer from "multer";
 import mammoth from "mammoth";
 import { generateManuscriptDocx } from "./services/docx-exporter";
+import { z } from "zod";
+
+const workTypeEnum = z.enum(["standalone", "series", "trilogy"]);
+
+const projectSeriesUpdateSchema = z.object({
+  workType: workTypeEnum.optional(),
+  seriesId: z.number().nullable().optional(),
+  seriesOrder: z.number().min(1).nullable().optional(),
+}).refine((data) => {
+  if (data.workType === "standalone") {
+    return data.seriesId === null || data.seriesId === undefined;
+  }
+  return true;
+}, { message: "Standalone works cannot have a seriesId" });
+
+const createSeriesSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+  description: z.string().max(2000).nullable().optional(),
+  workType: z.enum(["series", "trilogy"]).default("trilogy"),
+  totalPlannedBooks: z.number().min(2).max(20).default(3),
+});
+
+const updateSeriesSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  workType: z.enum(["series", "trilogy"]).optional(),
+  totalPlannedBooks: z.number().min(2).max(20).optional(),
+});
 
 const activeStreams = new Map<number, Set<Response>>();
 
@@ -85,12 +113,28 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Cannot edit a project while it's generating" });
       }
 
-      const allowedFields = ["title", "premise", "genre", "tone", "chapterCount", "hasPrologue", "hasEpilogue", "hasAuthorNote", "pseudonymId", "styleGuideId"];
+      const allowedFields = ["title", "premise", "genre", "tone", "chapterCount", "hasPrologue", "hasEpilogue", "hasAuthorNote", "pseudonymId", "styleGuideId", "workType", "seriesId", "seriesOrder"];
       const updateData: Record<string, any> = {};
       
       for (const field of allowedFields) {
         if (req.body[field] !== undefined) {
           updateData[field] = req.body[field];
+        }
+      }
+
+      if (updateData.workType || updateData.seriesId !== undefined || updateData.seriesOrder !== undefined) {
+        const seriesParsed = projectSeriesUpdateSchema.safeParse({
+          workType: updateData.workType || project.workType,
+          seriesId: updateData.seriesId !== undefined ? updateData.seriesId : project.seriesId,
+          seriesOrder: updateData.seriesOrder !== undefined ? updateData.seriesOrder : project.seriesOrder,
+        });
+        if (!seriesParsed.success) {
+          return res.status(400).json({ error: "Invalid series configuration", details: seriesParsed.error.flatten() });
+        }
+        
+        if (seriesParsed.data.workType === "standalone") {
+          updateData.seriesId = null;
+          updateData.seriesOrder = null;
         }
       }
 
@@ -438,6 +482,90 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching agent statuses:", error);
       res.status(500).json({ error: "Failed to fetch agent statuses" });
+    }
+  });
+
+  app.get("/api/series", async (req: Request, res: Response) => {
+    try {
+      const allSeries = await storage.getAllSeries();
+      res.json(allSeries);
+    } catch (error) {
+      console.error("Error fetching series:", error);
+      res.status(500).json({ error: "Failed to fetch series" });
+    }
+  });
+
+  app.get("/api/series/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const foundSeries = await storage.getSeries(id);
+      if (!foundSeries) {
+        return res.status(404).json({ error: "Series not found" });
+      }
+      res.json(foundSeries);
+    } catch (error) {
+      console.error("Error fetching series:", error);
+      res.status(500).json({ error: "Failed to fetch series" });
+    }
+  });
+
+  app.get("/api/series/:id/projects", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const projects = await storage.getProjectsBySeries(id);
+      res.json(projects);
+    } catch (error) {
+      console.error("Error fetching series projects:", error);
+      res.status(500).json({ error: "Failed to fetch series projects" });
+    }
+  });
+
+  app.post("/api/series", async (req: Request, res: Response) => {
+    try {
+      const parsed = createSeriesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid series data", details: parsed.error.flatten() });
+      }
+      const newSeries = await storage.createSeries({
+        title: parsed.data.title,
+        description: parsed.data.description || null,
+        workType: parsed.data.workType,
+        totalPlannedBooks: parsed.data.totalPlannedBooks,
+      });
+      res.status(201).json(newSeries);
+    } catch (error) {
+      console.error("Error creating series:", error);
+      res.status(500).json({ error: "Failed to create series" });
+    }
+  });
+
+  app.patch("/api/series/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const parsed = updateSeriesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid series data", details: parsed.error.flatten() });
+      }
+      
+      const updated = await storage.updateSeries(id, parsed.data);
+      if (!updated) {
+        return res.status(404).json({ error: "Series not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating series:", error);
+      res.status(500).json({ error: "Failed to update series" });
+    }
+  });
+
+  app.delete("/api/series/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSeries(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting series:", error);
+      res.status(500).json({ error: "Failed to delete series" });
     }
   });
 

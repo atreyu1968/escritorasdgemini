@@ -23,8 +23,8 @@ import {
 } from "@/components/ui/form";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
-import { Play, RotateCcw, BookOpen, FileText, ScrollText, User } from "lucide-react";
-import type { Pseudonym, StyleGuide } from "@shared/schema";
+import { Play, RotateCcw, BookOpen, FileText, ScrollText, User, Library, BookMarked } from "lucide-react";
+import type { Pseudonym, StyleGuide, Series } from "@shared/schema";
 
 const genres = [
   { value: "fantasy", label: "Fantasía", description: "Mundos mágicos y criaturas sobrenaturales" },
@@ -50,6 +50,12 @@ const tones = [
   { value: "suspenseful", label: "Tenso", description: "Mantiene al lector en vilo" },
 ];
 
+const workTypes = [
+  { value: "standalone", label: "Obra Independiente", description: "Una novela autónoma sin continuación" },
+  { value: "series", label: "Serie", description: "Parte de una serie de libros" },
+  { value: "trilogy", label: "Trilogía", description: "Parte de una trilogía de 3 libros" },
+];
+
 const configSchema = z.object({
   title: z.string().min(1, "El título es requerido").max(100),
   premise: z.string().min(10, "Describe la idea de tu novela (mínimo 10 caracteres)").max(2000),
@@ -61,6 +67,9 @@ const configSchema = z.object({
   hasAuthorNote: z.boolean().default(false),
   pseudonymId: z.number().nullable().optional(),
   styleGuideId: z.number().nullable().optional(),
+  workType: z.string().default("standalone"),
+  seriesId: z.number().nullable().optional(),
+  seriesOrder: z.number().nullable().optional(),
 });
 
 type ConfigFormData = z.infer<typeof configSchema>;
@@ -87,6 +96,9 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
       hasAuthorNote: defaultValues?.hasAuthorNote || false,
       pseudonymId: defaultValues?.pseudonymId || null,
       styleGuideId: defaultValues?.styleGuideId || null,
+      workType: (defaultValues as any)?.workType || "standalone",
+      seriesId: (defaultValues as any)?.seriesId || null,
+      seriesOrder: (defaultValues as any)?.seriesOrder || null,
     },
   });
 
@@ -95,6 +107,8 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
   const hasEpilogue = form.watch("hasEpilogue");
   const hasAuthorNote = form.watch("hasAuthorNote");
   const selectedPseudonymId = form.watch("pseudonymId");
+  const selectedWorkType = form.watch("workType");
+  const selectedSeriesId = form.watch("seriesId");
 
   const totalSections = chapterCount + (hasPrologue ? 1 : 0) + (hasEpilogue ? 1 : 0) + (hasAuthorNote ? 1 : 0);
 
@@ -106,6 +120,12 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
     queryKey: ["/api/pseudonyms", selectedPseudonymId, "style-guides"],
     enabled: !!selectedPseudonymId && selectedPseudonymId > 0,
   });
+
+  const { data: allSeries = [] } = useQuery<Series[]>({
+    queryKey: ["/api/series"],
+  });
+
+  const isSerialized = selectedWorkType === "series" || selectedWorkType === "trilogy";
 
   return (
     <Form {...form}>
@@ -212,6 +232,116 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
             </FormItem>
           )}
         />
+
+        <div className="space-y-4 pt-2 border-t">
+          <div className="flex items-center gap-2 pt-4">
+            <Library className="h-4 w-4 text-muted-foreground" />
+            <FormLabel className="text-base mb-0">Tipo de Obra</FormLabel>
+          </div>
+          
+          <FormField
+            control={form.control}
+            name="workType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Clasificación</FormLabel>
+                <Select 
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    if (value === "standalone") {
+                      form.setValue("seriesId", null);
+                      form.setValue("seriesOrder", null);
+                    }
+                  }} 
+                  value={field.value || "standalone"}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-work-type">
+                      <SelectValue placeholder="Selecciona tipo de obra" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {workTypes.map((wt) => (
+                      <SelectItem key={wt.value} value={wt.value}>
+                        <div className="flex flex-col">
+                          <span>{wt.label}</span>
+                          <span className="text-xs text-muted-foreground">{wt.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Define si esta novela es parte de una serie o trilogía
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {isSerialized && (
+            <>
+              <FormField
+                control={form.control}
+                name="seriesId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Serie / Saga</FormLabel>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === "none" ? null : parseInt(value))} 
+                      value={field.value?.toString() || "none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-series">
+                          <SelectValue placeholder="Selecciona o crea una serie" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Ninguna (crear nueva después)</SelectItem>
+                        {allSeries.map((s) => (
+                          <SelectItem key={s.id} value={s.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <BookMarked className="h-3 w-3" />
+                              <span>{s.title}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Agrupa novelas en una serie para mantener continuidad narrativa
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="seriesOrder"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Orden en la Serie</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number"
+                        min={1}
+                        placeholder="1, 2, 3..."
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                        data-testid="input-series-order"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Posición de esta novela dentro de la serie (1 = primera, 2 = segunda, etc.)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
+        </div>
 
         <div className="space-y-4 pt-2 border-t">
           <div className="flex items-center gap-2 pt-4">
