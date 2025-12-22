@@ -1041,32 +1041,74 @@ export class Orchestrator {
   }
 
   private parseArchitectOutput(content: string): ParsedWorldBible {
+    console.log(`[Orchestrator] Parsing architect output, length: ${content.length}`);
+    
+    // Método 1: Parse directo
     try {
-      // Intentar parse directo primero
-      return JSON.parse(content);
-    } catch {
-      // Si falla, intentar extraer JSON del texto
-      try {
-        // Buscar el primer { y el último }
-        const firstBrace = content.indexOf('{');
-        const lastBrace = content.lastIndexOf('}');
-        
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          const jsonStr = content.substring(firstBrace, lastBrace + 1);
-          const parsed = JSON.parse(jsonStr);
-          console.log(`[Orchestrator] Parsed architect output with ${parsed.world_bible?.personajes?.length || 0} characters`);
-          return parsed;
-        }
-      } catch (innerError) {
-        console.error('[Orchestrator] Failed to parse architect JSON:', innerError);
-      }
-      
-      console.warn('[Orchestrator] Could not parse architect output, returning empty structure');
-      return {
-        world_bible: { personajes: [], lugares: [], reglas_lore: [] },
-        escaleta_capitulos: [],
-      };
+      const parsed = JSON.parse(content);
+      console.log(`[Orchestrator] Direct JSON parse SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
+      return parsed;
+    } catch (e1) {
+      console.log(`[Orchestrator] Direct parse failed: ${(e1 as Error).message}`);
     }
+    
+    // Método 2: Extraer JSON del texto (buscar estructura con world_bible)
+    try {
+      // Buscar el inicio del JSON real (puede estar precedido por texto)
+      const worldBibleMatch = content.match(/"world_bible"\s*:/);
+      if (worldBibleMatch && worldBibleMatch.index !== undefined) {
+        // Encontrar la llave de apertura antes de world_bible
+        let braceStart = content.lastIndexOf('{', worldBibleMatch.index);
+        if (braceStart !== -1) {
+          // Contar llaves para encontrar el cierre correcto
+          let depth = 0;
+          let jsonEnd = -1;
+          for (let i = braceStart; i < content.length; i++) {
+            if (content[i] === '{') depth++;
+            if (content[i] === '}') {
+              depth--;
+              if (depth === 0) {
+                jsonEnd = i + 1;
+                break;
+              }
+            }
+          }
+          
+          if (jsonEnd !== -1) {
+            const jsonStr = content.substring(braceStart, jsonEnd);
+            const parsed = JSON.parse(jsonStr);
+            console.log(`[Orchestrator] Extracted JSON SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
+            return parsed;
+          }
+        }
+      }
+    } catch (e2) {
+      console.log(`[Orchestrator] JSON extraction method 2 failed: ${(e2 as Error).message}`);
+    }
+    
+    // Método 3: Buscar primer { y último } (fallback)
+    try {
+      const firstBrace = content.indexOf('{');
+      const lastBrace = content.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const jsonStr = content.substring(firstBrace, lastBrace + 1);
+        const parsed = JSON.parse(jsonStr);
+        console.log(`[Orchestrator] Fallback JSON parse SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
+        return parsed;
+      }
+    } catch (e3) {
+      console.log(`[Orchestrator] Fallback parse failed: ${(e3 as Error).message}`);
+    }
+    
+    // CRITICAL: Log the first 2000 chars to see what architect returned
+    console.error(`[Orchestrator] ALL PARSE METHODS FAILED. Content preview (first 2000 chars):\n${content.substring(0, 2000)}`);
+    console.error(`[Orchestrator] Content ends with (last 500 chars):\n${content.substring(content.length - 500)}`);
+    
+    return {
+      world_bible: { personajes: [], lugares: [], reglas_lore: [] },
+      escaleta_capitulos: [],
+    };
   }
 
   private convertCharacters(data: ParsedWorldBible): Character[] {
