@@ -47,13 +47,52 @@ function calculateCost(inputTokens: number, outputTokens: number, thinkingTokens
   return inputCost + outputCost + thinkingCost;
 }
 
+function getChapterDisplayName(chapterNumber: number, title: string | null | undefined): string {
+  if (chapterNumber === 0) return title || "Prólogo";
+  if (chapterNumber === -1) return title || "Epílogo";
+  if (chapterNumber === -2) return title || "Nota del Autor";
+  return title || `Capítulo ${chapterNumber}`;
+}
+
+function getChapterBadge(chapterNumber: number): string {
+  if (chapterNumber === 0) return "P";
+  if (chapterNumber === -1) return "E";
+  if (chapterNumber === -2) return "N";
+  return String(chapterNumber);
+}
+
 function parseChaptersFromText(text: string): { chapterNumber: number; title: string | null; content: string }[] {
   const chapterPatterns = [
     /(?:^|\n)(Capítulo|Chapter|Chapitre|Kapitel|Capitolo|Capítol)\s+(\d+)[:\.\s]*([^\n]*)/gi,
     /(?:^|\n)(Cap\.?)\s+(\d+)[:\.\s]*([^\n]*)/gi,
   ];
+
+  const prologuePatterns = [
+    /(?:^|\n)(Prólogo|Prologue|Prolog|Prologo|Pròleg|Prefacio|Preface|Préface|Vorwort|Prefazione|Prefaci|Avant-propos)[:\.\s]*([^\n]*)/gi,
+  ];
+
+  const epiloguePatterns = [
+    /(?:^|\n)(Epílogo|Epilogue|Épilogue|Epilog|Epilogo|Epíleg)[:\.\s]*([^\n]*)/gi,
+  ];
+
+  const authorNotePatterns = [
+    /(?:^|\n)(Nota del Autor|Nota de l'Autor|Author'?s? Note|Note de l'auteur|Nachwort|Nota dell'autore|Nota final|Notas? finales?|Posfacio|Postfacio|Afterword|Postface|Palabras del Autor|Agradecimientos|Acknowledgments?|Remerciements|Ringraziamenti|Danksagung)[:\.\s]*([^\n]*)/gi,
+  ];
   
   const chapters: { chapterNumber: number; title: string | null; content: string; startIndex: number }[] = [];
+
+  for (const pattern of prologuePatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const title = match[2]?.trim() || match[1];
+      chapters.push({
+        chapterNumber: 0,
+        title: title || "Prólogo",
+        content: "",
+        startIndex: match.index,
+      });
+    }
+  }
   
   for (const pattern of chapterPatterns) {
     let match;
@@ -63,6 +102,32 @@ function parseChaptersFromText(text: string): { chapterNumber: number; title: st
       chapters.push({
         chapterNumber,
         title,
+        content: "",
+        startIndex: match.index,
+      });
+    }
+  }
+
+  for (const pattern of epiloguePatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const title = match[2]?.trim() || match[1];
+      chapters.push({
+        chapterNumber: -1,
+        title: title || "Epílogo",
+        content: "",
+        startIndex: match.index,
+      });
+    }
+  }
+
+  for (const pattern of authorNotePatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const title = match[2]?.trim() || match[1];
+      chapters.push({
+        chapterNumber: -2,
+        title: title || "Nota del Autor",
         content: "",
         startIndex: match.index,
       });
@@ -302,9 +367,9 @@ function ManuscriptDetail({ manuscriptId, onBack }: { manuscriptId: number; onBa
                     onClick={() => setSelectedChapter(chapter)}
                     data-testid={`button-chapter-${chapter.id}`}
                   >
-                    <span className="font-mono text-xs">{chapter.chapterNumber}</span>
+                    <span className="font-mono text-xs">{getChapterBadge(chapter.chapterNumber)}</span>
                     <span className="truncate flex-1 text-left">
-                      {chapter.title || `Capítulo ${chapter.chapterNumber}`}
+                      {getChapterDisplayName(chapter.chapterNumber, chapter.title)}
                     </span>
                     {chapter.status === "completed" && <CheckCircle className="h-3 w-3 text-green-500" />}
                     {chapter.status === "processing" && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -319,7 +384,7 @@ function ManuscriptDetail({ manuscriptId, onBack }: { manuscriptId: number; onBa
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">
               {selectedChapter 
-                ? selectedChapter.title || `Capítulo ${selectedChapter.chapterNumber}`
+                ? getChapterDisplayName(selectedChapter.chapterNumber, selectedChapter.title)
                 : "Selecciona un capítulo"
               }
             </CardTitle>
@@ -602,8 +667,8 @@ export default function ImportPage() {
                       <ul className="space-y-1 text-sm">
                         {uploadState.parsedChapters.map((ch, i) => (
                           <li key={i} className="flex items-center gap-2">
-                            <Badge variant="outline">{ch.chapterNumber}</Badge>
-                            <span className="truncate">{ch.title || `Capítulo ${ch.chapterNumber}`}</span>
+                            <Badge variant="outline">{getChapterBadge(ch.chapterNumber)}</Badge>
+                            <span className="truncate">{getChapterDisplayName(ch.chapterNumber, ch.title)}</span>
                             <span className="text-muted-foreground ml-auto text-xs">
                               {ch.content.split(/\s+/).length} palabras
                             </span>
