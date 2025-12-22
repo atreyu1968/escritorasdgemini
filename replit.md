@@ -34,7 +34,8 @@ Preferred communication style: Simple, everyday language.
 - **Agent System**: Modular agent classes extending a BaseAgent abstract class
   - Each agent has specialized system prompts optimized for Gemini 3's reasoning mode
   - Orchestrator manages the pipeline flow between agents
-  - Refinement loops allow the Editor agent to reject and trigger rewrites
+  - Refinement loops (max 3 attempts) allow the Editor agent to reject and trigger rewrites
+  - **Critical**: Editor feedback (continuity errors, verisimilitude problems, missing beats, repeated phrases, style violations) is explicitly passed to Ghostwriter during rewrites via `buildRefinementInstructions()`
 
 ### Data Storage
 - **Database**: PostgreSQL with Drizzle ORM
