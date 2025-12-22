@@ -1052,14 +1052,26 @@ export class Orchestrator {
   }
 
   private convertCharacters(data: ParsedWorldBible): Character[] {
-    return (data.world_bible?.personajes || []).map((p: any) => ({
-      name: p.nombre || p.name || "",
-      role: p.rol || p.role || "",
-      psychologicalProfile: p.perfil_psicologico || p.psychologicalProfile || "",
-      arc: p.arco || p.arc || "",
-      relationships: p.relaciones || p.relationships || [],
-      isAlive: p.vivo !== false && p.isAlive !== false,
-    }));
+    return (data.world_bible?.personajes || []).map((p: any) => {
+      // Extraer apariencia inmutable del formato del Architect
+      const aparienciaRaw = p.apariencia_inmutable || p.aparienciaInmutable || {};
+      return {
+        name: p.nombre || p.name || "",
+        role: p.rol || p.role || "",
+        psychologicalProfile: p.perfil_psicologico || p.psychologicalProfile || "",
+        arc: p.arco || p.arc || "",
+        relationships: p.relaciones || p.relationships || [],
+        isAlive: p.vivo !== false && p.isAlive !== false,
+        // CRÍTICO: Preservar apariencia física para continuidad
+        aparienciaInmutable: {
+          ojos: aparienciaRaw.ojos || aparienciaRaw.color_ojos || "",
+          cabello: aparienciaRaw.cabello || aparienciaRaw.color_cabello || "",
+          rasgosDistintivos: aparienciaRaw.rasgos_distintivos || aparienciaRaw.rasgosDistintivos || [],
+          altura: aparienciaRaw.altura || aparienciaRaw.estatura || "",
+          edad: aparienciaRaw.edad || aparienciaRaw.edad_aparente || "",
+        },
+      };
+    });
   }
 
   private convertWorldRules(data: ParsedWorldBible): WorldRule[] {

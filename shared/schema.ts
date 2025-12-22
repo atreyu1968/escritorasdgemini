@@ -258,6 +258,14 @@ export const characterSchema = z.object({
   relationships: z.array(z.string()).optional(),
   arc: z.string().optional(),
   isAlive: z.boolean().default(true),
+  // Apariencia física inmutable - crítico para continuidad
+  aparienciaInmutable: z.object({
+    ojos: z.string().optional(),
+    cabello: z.string().optional(),
+    rasgosDistintivos: z.array(z.string()).optional(),
+    altura: z.string().optional(),
+    edad: z.string().optional(),
+  }).optional(),
 });
 
 export const timelineEventSchema = z.object({
