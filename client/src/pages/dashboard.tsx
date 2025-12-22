@@ -24,6 +24,18 @@ const agentNames: Record<AgentRole, string> = {
   "final-reviewer": "El Revisor Final",
 };
 
+function calculateCost(inputTokens: number, outputTokens: number, thinkingTokens: number): number {
+  const INPUT_PRICE_PER_MILLION = 1.25;
+  const OUTPUT_PRICE_PER_MILLION = 10.0;
+  const THINKING_PRICE_PER_MILLION = 3.0;
+  
+  const inputCost = (inputTokens / 1_000_000) * INPUT_PRICE_PER_MILLION;
+  const outputCost = (outputTokens / 1_000_000) * OUTPUT_PRICE_PER_MILLION;
+  const thinkingCost = (thinkingTokens / 1_000_000) * THINKING_PRICE_PER_MILLION;
+  
+  return inputCost + outputCost + thinkingCost;
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -460,6 +472,31 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
+                
+                {currentProject.status === "completed" && (currentProject.totalInputTokens || currentProject.totalOutputTokens) && (
+                  <div className="mt-4 p-4 rounded-md bg-muted/30 border border-border">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Coste de Generación</p>
+                        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                          <span>Tokens entrada: {(currentProject.totalInputTokens || 0).toLocaleString()}</span>
+                          <span>Tokens salida: {(currentProject.totalOutputTokens || 0).toLocaleString()}</span>
+                          <span>Tokens razonamiento: {(currentProject.totalThinkingTokens || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-primary" data-testid="text-total-cost">
+                          ${calculateCost(
+                            currentProject.totalInputTokens || 0,
+                            currentProject.totalOutputTokens || 0,
+                            currentProject.totalThinkingTokens || 0
+                          ).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">USD estimado</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

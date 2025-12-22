@@ -511,6 +511,12 @@ export class Orchestrator {
 
   async runFinalReviewOnly(project: Project): Promise<void> {
     try {
+      this.cumulativeTokens = {
+        inputTokens: project.totalInputTokens || 0,
+        outputTokens: project.totalOutputTokens || 0,
+        thinkingTokens: project.totalThinkingTokens || 0,
+      };
+      
       let styleGuideContent = "";
       let authorName = "";
       
