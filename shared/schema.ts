@@ -35,6 +35,16 @@ export const styleGuides = pgTable("style_guides", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const extendedGuides = pgTable("extended_guides", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  originalFileName: text("original_file_name").notNull(),
+  content: text("content").notNull(),
+  wordCount: integer("word_count").default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const series = pgTable("series", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -56,6 +66,7 @@ export const projects = pgTable("projects", {
   hasAuthorNote: boolean("has_author_note").notNull().default(false),
   pseudonymId: integer("pseudonym_id").references(() => pseudonyms.id, { onDelete: "set null" }),
   styleGuideId: integer("style_guide_id").references(() => styleGuides.id, { onDelete: "set null" }),
+  extendedGuideId: integer("extended_guide_id").references(() => extendedGuides.id, { onDelete: "set null" }),
   workType: text("work_type").notNull().default("standalone"),
   seriesId: integer("series_id").references(() => series.id, { onDelete: "set null" }),
   seriesOrder: integer("series_order"),
@@ -167,6 +178,11 @@ export const insertStyleGuideSchema = createInsertSchema(styleGuides).omit({
   createdAt: true,
 });
 
+export const insertExtendedGuideSchema = createInsertSchema(extendedGuides).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertSeriesSchema = createInsertSchema(series).omit({
   id: true,
   createdAt: true,
@@ -225,6 +241,9 @@ export type InsertPseudonym = z.infer<typeof insertPseudonymSchema>;
 
 export type StyleGuide = typeof styleGuides.$inferSelect;
 export type InsertStyleGuide = z.infer<typeof insertStyleGuideSchema>;
+
+export type ExtendedGuide = typeof extendedGuides.$inferSelect;
+export type InsertExtendedGuide = z.infer<typeof insertExtendedGuideSchema>;
 
 export type Series = typeof series.$inferSelect;
 export type InsertSeries = z.infer<typeof insertSeriesSchema>;
