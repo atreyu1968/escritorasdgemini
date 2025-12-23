@@ -128,6 +128,7 @@ export class Orchestrator {
 
       let styleGuideContent = "";
       let authorName = "";
+      let extendedGuideContent = "";
       
       if (project.styleGuideId) {
         const styleGuide = await storage.getStyleGuide(project.styleGuideId);
@@ -143,11 +144,23 @@ export class Orchestrator {
         }
       }
 
+      if ((project as any).extendedGuideId) {
+        const extendedGuide = await storage.getExtendedGuide((project as any).extendedGuideId);
+        if (extendedGuide) {
+          extendedGuideContent = extendedGuide.content;
+          console.log(`[Orchestrator] Using extended guide: "${extendedGuide.title}" (${extendedGuide.wordCount} words)`);
+        }
+      }
+
+      const effectivePremise = extendedGuideContent 
+        ? `${project.premise || ""}\n\n--- GUÍA DE ESCRITURA EXTENDIDA ---\n${extendedGuideContent}`
+        : (project.premise || "");
+
       this.callbacks.onAgentStatus("architect", "thinking", "El Arquitecto está diseñando la estructura narrativa...");
       
       const architectResult = await this.architect.execute({
         title: project.title,
-        premise: project.premise || "",
+        premise: effectivePremise,
         genre: project.genre,
         tone: project.tone,
         chapterCount: project.chapterCount,
