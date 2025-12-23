@@ -38,6 +38,20 @@ const updateSeriesSchema = z.object({
 
 const activeStreams = new Map<number, Set<Response>>();
 
+async function persistActivityLog(projectId: number | null, level: string, message: string, agentRole?: string | null, metadata?: any) {
+  try {
+    await storage.createActivityLog({
+      projectId,
+      level,
+      message,
+      agentRole: agentRole ?? null,
+      metadata: metadata ?? null,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] Failed to persist log:", e);
+  }
+}
+
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -386,21 +400,26 @@ export async function registerRoutes(
         onAgentStatus: async (role, status, message) => {
           await storage.updateAgentStatus(id, role, { status, currentTask: message });
           sendToStreams({ type: "agent_status", role, status, message });
+          if (message) await persistActivityLog(id, "info", message, role);
         },
-        onChapterComplete: (chapterNumber, wordCount, chapterTitle) => {
+        onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
+          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} completado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
         },
-        onChapterRewrite: (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
+        onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "editor");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
         },
-        onProjectComplete: () => {
+        onProjectComplete: async () => {
           sendToStreams({ type: "project_complete" });
+          await persistActivityLog(id, "success", "Novela completada exitosamente", "orchestrator");
         },
-        onError: (error) => {
+        onError: async (error) => {
           sendToStreams({ type: "error", message: error });
+          await persistActivityLog(id, "error", error, "orchestrator");
         },
       });
 
@@ -468,21 +487,26 @@ export async function registerRoutes(
         onAgentStatus: async (role, status, message) => {
           await storage.updateAgentStatus(id, role, { status, currentTask: message });
           sendToStreams({ type: "agent_status", role, status, message });
+          if (message) await persistActivityLog(id, "info", message, role);
         },
-        onChapterComplete: (chapterNumber, wordCount, chapterTitle) => {
+        onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
+          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} completado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
         },
-        onChapterRewrite: (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
+        onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "editor");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
         },
-        onProjectComplete: () => {
+        onProjectComplete: async () => {
           sendToStreams({ type: "project_complete" });
+          await persistActivityLog(id, "success", "Novela completada exitosamente", "orchestrator");
         },
-        onError: (error) => {
+        onError: async (error) => {
           sendToStreams({ type: "error", message: error });
+          await persistActivityLog(id, "error", error, "orchestrator");
         },
       });
 
@@ -533,21 +557,26 @@ export async function registerRoutes(
         onAgentStatus: async (role, status, message) => {
           await storage.updateAgentStatus(id, role, { status, currentTask: message });
           sendToStreams({ type: "agent_status", role, status, message });
+          if (message) await persistActivityLog(id, "info", message, role);
         },
-        onChapterComplete: (chapterNumber, wordCount, chapterTitle) => {
+        onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
+          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} completado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
         },
-        onChapterRewrite: (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
+        onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "editor");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
         },
-        onProjectComplete: () => {
+        onProjectComplete: async () => {
           sendToStreams({ type: "project_complete" });
+          await persistActivityLog(id, "success", "Revisión final completada", "final-reviewer");
         },
-        onError: (error) => {
+        onError: async (error) => {
           sendToStreams({ type: "error", message: error });
+          await persistActivityLog(id, "error", error, "orchestrator");
         },
       });
 
@@ -615,6 +644,18 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching thought logs:", error);
       res.status(500).json({ error: "Failed to fetch thought logs" });
+    }
+  });
+
+  app.get("/api/projects/:id/activity-logs", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const limit = parseInt(req.query.limit as string) || 500;
+      const logs = await storage.getActivityLogsByProject(id, limit);
+      res.json(logs.reverse());
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      res.status(500).json({ error: "Failed to fetch activity logs" });
     }
   });
 

@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { 
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
-  series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides,
+  series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides, activityLogs,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
@@ -9,9 +9,10 @@ import {
   type ContinuitySnapshot, type InsertContinuitySnapshot,
   type ImportedManuscript, type InsertImportedManuscript,
   type ImportedChapter, type InsertImportedChapter,
-  type ExtendedGuide, type InsertExtendedGuide
+  type ExtendedGuide, type InsertExtendedGuide,
+  type ActivityLog, type InsertActivityLog
 } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, lt, isNull, or } from "drizzle-orm";
 
 export interface IStorage {
   createPseudonym(data: InsertPseudonym): Promise<Pseudonym>;
@@ -75,6 +76,10 @@ export interface IStorage {
   getAllExtendedGuides(): Promise<ExtendedGuide[]>;
   updateExtendedGuide(id: number, data: Partial<ExtendedGuide>): Promise<ExtendedGuide | undefined>;
   deleteExtendedGuide(id: number): Promise<void>;
+
+  createActivityLog(data: InsertActivityLog): Promise<ActivityLog>;
+  getActivityLogsByProject(projectId: number | null, limit?: number): Promise<ActivityLog[]>;
+  cleanupOldActivityLogs(projectId: number | null, keepCount: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -342,6 +347,42 @@ export class DatabaseStorage implements IStorage {
 
   async deleteExtendedGuide(id: number): Promise<void> {
     await db.delete(extendedGuides).where(eq(extendedGuides.id, id));
+  }
+
+  async createActivityLog(data: InsertActivityLog): Promise<ActivityLog> {
+    const [log] = await db.insert(activityLogs).values(data).returning();
+    return log;
+  }
+
+  async getActivityLogsByProject(projectId: number | null, limit: number = 500): Promise<ActivityLog[]> {
+    if (projectId === null) {
+      return db.select().from(activityLogs)
+        .where(isNull(activityLogs.projectId))
+        .orderBy(desc(activityLogs.createdAt))
+        .limit(limit);
+    }
+    return db.select().from(activityLogs)
+      .where(or(eq(activityLogs.projectId, projectId), isNull(activityLogs.projectId)))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
+  }
+
+  async cleanupOldActivityLogs(projectId: number | null, keepCount: number = 1000): Promise<void> {
+    const condition = projectId === null 
+      ? isNull(activityLogs.projectId)
+      : eq(activityLogs.projectId, projectId);
+    
+    const logs = await db.select({ id: activityLogs.id }).from(activityLogs)
+      .where(condition)
+      .orderBy(desc(activityLogs.createdAt))
+      .offset(keepCount);
+    
+    if (logs.length > 0) {
+      const idsToDelete = logs.map(l => l.id);
+      for (const id of idsToDelete) {
+        await db.delete(activityLogs).where(eq(activityLogs.id, id));
+      }
+    }
   }
 }
 

@@ -61,6 +61,30 @@ export default function Dashboard() {
     enabled: !!currentProject?.id,
   });
 
+  useEffect(() => {
+    if (currentProject?.id) {
+      fetch(`/api/projects/${currentProject.id}/activity-logs?limit=200`)
+        .then(res => res.json())
+        .then((historicalLogs: Array<{ id: number; level: string; message: string; agentRole?: string; createdAt: string }>) => {
+          const levelToType: Record<string, LogEntry["type"]> = {
+            info: "info",
+            success: "success",
+            warning: "editing",
+            error: "error",
+          };
+          const mapped: LogEntry[] = historicalLogs.map(log => ({
+            id: String(log.id),
+            type: levelToType[log.level] || "info",
+            message: log.message,
+            timestamp: new Date(log.createdAt),
+            agent: log.agentRole,
+          }));
+          setLogs(mapped);
+        })
+        .catch(console.error);
+    }
+  }, [currentProject?.id]);
+
   const startGenerationMutation = useMutation({
     mutationFn: async (projectId: number) => {
       const response = await apiRequest("POST", `/api/projects/${projectId}/generate`);

@@ -348,4 +348,18 @@ export const continuityStateSchema = z.object({
 
 export type ContinuityState = z.infer<typeof continuityStateSchema>;
 
+export const activityLogs = pgTable("activity_logs", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  level: text("level").notNull().default("info"),
+  agentRole: text("agent_role"),
+  message: text("message").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, createdAt: true });
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type ActivityLog = typeof activityLogs.$inferSelect;
+
 export * from "./models/chat";
