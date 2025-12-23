@@ -1197,5 +1197,138 @@ export async function registerRoutes(
     }
   });
 
+  // Endpoint to rewrite a specific chapter with improvement instructions
+  const rewriteChapterSchema = z.object({
+    instructions: z.string().min(10, "Instructions must be at least 10 characters"),
+    newTitle: z.string().optional(),
+  });
+
+  app.post("/api/projects/:projectId/chapters/:chapterNumber/rewrite", async (req: Request, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const chapterNumber = parseInt(req.params.chapterNumber);
+      
+      const validation = rewriteChapterSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: validation.error.errors });
+      }
+      
+      const { instructions, newTitle } = validation.data;
+      
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      
+      if (project.status === "generating") {
+        return res.status(400).json({ error: "Cannot rewrite while project is generating" });
+      }
+      
+      const chapters = await storage.getChaptersByProject(projectId);
+      const chapter = chapters.find(c => c.chapterNumber === chapterNumber);
+      if (!chapter) {
+        return res.status(404).json({ error: "Chapter not found" });
+      }
+      
+      const worldBible = await storage.getWorldBibleByProject(projectId);
+      
+      // Get adjacent chapters for context
+      const prevChapter = chapters.find(c => c.chapterNumber === chapterNumber - 1);
+      const nextChapter = chapters.find(c => c.chapterNumber === chapterNumber + 1);
+      
+      res.json({ 
+        message: "Rewrite started", 
+        projectId, 
+        chapterNumber,
+        originalWordCount: chapter.wordCount 
+      });
+      
+      // Import Ghostwriter dynamically to avoid circular deps
+      const { GhostwriterAgent } = await import("./agents/ghostwriter");
+      const ghostwriter = new GhostwriterAgent();
+      
+      // Build minimal chapter data for rewrite
+      const chapterData = {
+        numero: chapterNumber,
+        titulo: newTitle || chapter.title || `Capítulo ${chapterNumber}`,
+        cronologia: "Mantener cronología del capítulo original",
+        ubicacion: "Mantener ubicación del capítulo original",
+        elenco_presente: [],
+        objetivo_narrativo: "Mejorar según instrucciones",
+        beats: ["Reescribir capítulo completo según instrucciones de mejora"],
+      };
+      
+      const styleGuide = project.styleGuideId 
+        ? await storage.getStyleGuide(project.styleGuideId)
+        : null;
+      
+      // Build world bible object from separate fields
+      const worldBibleContent = worldBible ? {
+        characters: worldBible.characters,
+        timeline: worldBible.timeline,
+        worldRules: worldBible.worldRules,
+        plotOutline: worldBible.plotOutline,
+      } : {};
+      
+      const result = await ghostwriter.execute({
+        chapterNumber,
+        chapterData,
+        worldBible: worldBibleContent,
+        guiaEstilo: styleGuide?.content || "Estilo literario de calidad bestseller",
+        previousContinuity: prevChapter?.continuityState ? JSON.stringify(prevChapter.continuityState) : undefined,
+        refinementInstructions: `
+INSTRUCCIONES DE REESCRITURA:
+${instructions}
+
+CONTENIDO ORIGINAL A MEJORAR:
+${chapter.content}
+
+IMPORTANTE:
+- Mantén la esencia de la trama y los personajes
+- Aplica las mejoras indicadas
+- Expande el texto si es necesario (mínimo 2000 palabras)
+- Mantén coherencia con capítulos anteriores y posteriores
+- El nuevo título debe ser: "${newTitle || chapter.title}"
+`,
+        isRewrite: true,
+      });
+      
+      if (result.content) {
+        const { cleanContent, continuityState } = ghostwriter.extractContinuityState(result.content);
+        const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
+        
+        await storage.updateChapter(chapter.id, {
+          content: cleanContent,
+          title: newTitle || chapter.title,
+          wordCount,
+          continuityState: continuityState || chapter.continuityState,
+        });
+        
+        // Log rewrite
+        await storage.createThoughtLog({
+          projectId,
+          chapterId: chapter.id,
+          agentName: "Ghostwriter Rewrite",
+          agentRole: "ghostwriter-rewrite",
+          thoughtContent: `Rewrite instructions: ${instructions.substring(0, 200)}... | Tokens: ${JSON.stringify(result.tokenUsage || {})}`,
+        });
+        
+        // Update project token totals
+        const updatedProject = await storage.getProject(projectId);
+        if (updatedProject) {
+          await storage.updateProject(projectId, {
+            totalInputTokens: (updatedProject.totalInputTokens || 0) + (result.tokenUsage?.inputTokens || 0),
+            totalOutputTokens: (updatedProject.totalOutputTokens || 0) + (result.tokenUsage?.outputTokens || 0),
+            totalThinkingTokens: (updatedProject.totalThinkingTokens || 0) + (result.tokenUsage?.thinkingTokens || 0),
+          });
+        }
+        
+        console.log(`[Rewrite] Chapter ${chapterNumber} rewritten: ${chapter.wordCount} -> ${wordCount} words`);
+      }
+    } catch (error) {
+      console.error("Error rewriting chapter:", error);
+    }
+  });
+
   return httpServer;
 }
