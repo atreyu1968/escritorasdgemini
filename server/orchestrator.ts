@@ -1694,6 +1694,35 @@ ${contextParts.join("\n")}
     return parts.join("\n");
   }
 
+  private sanitizeChapterTitles(data: ParsedWorldBible): ParsedWorldBible {
+    if (!data.escaleta_capitulos) return data;
+    
+    data.escaleta_capitulos = data.escaleta_capitulos.map((cap: any) => {
+      const numero = cap.numero;
+      let titulo = cap.titulo || "";
+      
+      if (numero > 0) {
+        if (titulo.toLowerCase().startsWith("prólogo:") || titulo.toLowerCase().startsWith("prologo:")) {
+          const newTitle = titulo.replace(/^pr[oó]logo:\s*/i, "").trim();
+          console.log(`[Orchestrator] FIXED title for chapter ${numero}: "${titulo}" → "${newTitle}"`);
+          titulo = newTitle;
+        }
+      }
+      
+      if (numero !== -1) {
+        if (titulo.toLowerCase().startsWith("epílogo:") || titulo.toLowerCase().startsWith("epilogo:")) {
+          const newTitle = titulo.replace(/^ep[ií]logo:\s*/i, "").trim();
+          console.log(`[Orchestrator] FIXED title for chapter ${numero}: "${titulo}" → "${newTitle}"`);
+          titulo = newTitle;
+        }
+      }
+      
+      return { ...cap, titulo };
+    });
+    
+    return data;
+  }
+
   private parseArchitectOutput(content: string): ParsedWorldBible {
     console.log(`[Orchestrator] Parsing architect output, length: ${content.length}`);
     
@@ -1701,7 +1730,7 @@ ${contextParts.join("\n")}
     try {
       const parsed = JSON.parse(content);
       console.log(`[Orchestrator] Direct JSON parse SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
-      return parsed;
+      return this.sanitizeChapterTitles(parsed);
     } catch (e1) {
       console.log(`[Orchestrator] Direct parse failed: ${(e1 as Error).message}`);
     }
@@ -1732,7 +1761,7 @@ ${contextParts.join("\n")}
             const jsonStr = content.substring(braceStart, jsonEnd);
             const parsed = JSON.parse(jsonStr);
             console.log(`[Orchestrator] Extracted JSON SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
-            return parsed;
+            return this.sanitizeChapterTitles(parsed);
           }
         }
       }
@@ -1749,7 +1778,7 @@ ${contextParts.join("\n")}
         const jsonStr = content.substring(firstBrace, lastBrace + 1);
         const parsed = JSON.parse(jsonStr);
         console.log(`[Orchestrator] Fallback JSON parse SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
-        return parsed;
+        return this.sanitizeChapterTitles(parsed);
       }
     } catch (e3) {
       console.log(`[Orchestrator] Fallback parse failed: ${(e3 as Error).message}`);

@@ -283,14 +283,25 @@ INSTRUCCIONES CRÍTICAS PARA EVITAR REPETICIONES
 5. Las "prohibiciones_este_capitulo" deben actualizarse acumulativamente
 
 ═══════════════════════════════════════════════════════════════════
-NOMENCLATURA DE CAPÍTULOS - REGLAS ABSOLUTAS
+NOMENCLATURA DE CAPÍTULOS - REGLAS ABSOLUTAS (CRÍTICO)
 ═══════════════════════════════════════════════════════════════════
+⛔ ERRORES FATALES QUE DEBES EVITAR:
 1. La palabra "Prólogo" SOLO puede aparecer en el capítulo número 0. NUNCA en capítulos 1, 2, 3...
 2. La palabra "Epílogo" SOLO puede aparecer en el capítulo número -1. NUNCA en otros capítulos.
 3. Los capítulos regulares (1 a N) deben tener títulos EVOCADORES y LITERARIOS, no estructurales.
 4. PROHIBIDO: "Prólogo: [subtítulo]" para capítulos que no sean el 0.
 5. PROHIBIDO: "Epílogo: [subtítulo]" para capítulos que no sean el -1.
 6. El capítulo 1 SIEMPRE es el PRIMER capítulo de la historia, NO un prólogo adicional.
+
+EJEMPLOS DE TÍTULOS INCORRECTOS (NUNCA USES):
+- "Prólogo: El Sabor del Oro" para capítulo 1 → INCORRECTO
+- "Epílogo: Despedida" para capítulo 30 → INCORRECTO
+
+EJEMPLOS DE TÍTULOS CORRECTOS:
+- Capítulo 0: "Prólogo" (sin subtítulo adicional)
+- Capítulo 1: "El Sabor del Oro" (título literario, SIN la palabra prólogo)
+- Capítulo 30: "La Última Danza"
+- Capítulo -1: "Epílogo" (sin subtítulo adicional)
 `;
 
 export class ArchitectAgent extends BaseAgent {
