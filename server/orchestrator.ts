@@ -208,6 +208,55 @@ export class Orchestrator {
     };
   }
 
+  private buildSlidingContextWindow(
+    completedChapters: Chapter[],
+    currentChapterIndex: number,
+    allSections: SectionData[]
+  ): string {
+    if (completedChapters.length === 0) return "";
+
+    const sortedChapters = [...completedChapters]
+      .filter(c => c.status === "completed" && c.content)
+      .sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+    if (sortedChapters.length === 0) return "";
+
+    const contextParts: string[] = [];
+    const FULL_CONTEXT_CHAPTERS = 2;
+    const SUMMARY_CONTEXT_CHAPTERS = 5;
+
+    for (let i = sortedChapters.length - 1; i >= 0; i--) {
+      const chapter = sortedChapters[i];
+      const distanceFromCurrent = sortedChapters.length - 1 - i;
+
+      if (distanceFromCurrent < FULL_CONTEXT_CHAPTERS) {
+        const continuityState = chapter.continuityState 
+          ? JSON.stringify(chapter.continuityState)
+          : "";
+        contextParts.unshift(`
+[CAPÍTULO ${chapter.chapterNumber} - ${chapter.title}] (COMPLETO)
+Estado de continuidad: ${continuityState || "No disponible"}
+`);
+      } else if (distanceFromCurrent < FULL_CONTEXT_CHAPTERS + SUMMARY_CONTEXT_CHAPTERS) {
+        const section = allSections.find(s => s.numero === chapter.chapterNumber);
+        const summary = section 
+          ? `Objetivo: ${section.objetivo_narrativo || "N/A"}. Ubicación: ${section.ubicacion || "N/A"}. Elenco: ${section.elenco_presente?.join(", ") || "N/A"}.`
+          : "Resumen no disponible";
+        
+        contextParts.unshift(`[Cap ${chapter.chapterNumber}: ${chapter.title}] ${summary}`);
+      } else {
+        contextParts.unshift(`[Cap ${chapter.chapterNumber}: ${chapter.title}]`);
+      }
+    }
+
+    return `
+═══════════════════════════════════════════════════════════════════
+CONTEXTO DE CAPÍTULOS ANTERIORES (SLIDING WINDOW):
+═══════════════════════════════════════════════════════════════════
+${contextParts.join("\n")}
+═══════════════════════════════════════════════════════════════════`;
+  }
+
   async generateNovel(project: Project): Promise<void> {
     try {
       this.resetTokenTracking();
@@ -328,13 +377,16 @@ export class Orchestrator {
             ? `${baseStyleGuide}\n\n--- GUÍA DE ESTILO DEL AUTOR ---\n${styleGuideContent}`
             : baseStyleGuide;
 
+          const slidingContext = this.buildSlidingContextWindow(chapters, i, allSections);
+          const optimizedContinuity = slidingContext || previousContinuity;
+
           const isRewrite = refinementAttempts > 0;
           const writerResult = await this.ghostwriter.execute({
             chapterNumber: sectionData.numero,
             chapterData: sectionData,
             worldBible: worldBibleData.world_bible,
             guiaEstilo: fullStyleGuide,
-            previousContinuity,
+            previousContinuity: optimizedContinuity,
             refinementInstructions,
             authorName,
             isRewrite,

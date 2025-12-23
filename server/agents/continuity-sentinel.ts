@@ -111,6 +111,8 @@ export class ContinuitySentinelAgent extends BaseAgent {
       name: "El Centinela",
       role: "continuity-sentinel",
       systemPrompt: SYSTEM_PROMPT,
+      model: "gemini-2.0-flash",
+      useThinking: false,
     });
   }
 

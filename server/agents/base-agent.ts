@@ -22,10 +22,14 @@ export interface AgentResponse {
   error?: string;
 }
 
+export type GeminiModel = "gemini-3-pro-preview" | "gemini-2.0-flash";
+
 export interface AgentConfig {
   name: string;
   role: string;
   systemPrompt: string;
+  model?: GeminiModel;
+  useThinking?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -117,8 +121,11 @@ export abstract class BaseAgent {
       }
       
       try {
+        const modelToUse = this.config.model || "gemini-3-pro-preview";
+        const useThinking = this.config.useThinking !== false;
+        
         const generatePromise = this.ai.models.generateContent({
-          model: "gemini-3-pro-preview",
+          model: modelToUse,
           contents: [
             { role: "user", parts: [{ text: this.config.systemPrompt }] },
             { role: "model", parts: [{ text: "Entendido. Estoy listo para cumplir mi rol." }] },
@@ -127,10 +134,12 @@ export abstract class BaseAgent {
           config: {
             temperature,
             topP: 0.95,
-            thinkingConfig: {
-              thinkingBudget: 8192,
-              includeThoughts: true,
-            },
+            ...(useThinking && modelToUse === "gemini-3-pro-preview" ? {
+              thinkingConfig: {
+                thinkingBudget: 8192,
+                includeThoughts: true,
+              },
+            } : {}),
           },
         });
 
