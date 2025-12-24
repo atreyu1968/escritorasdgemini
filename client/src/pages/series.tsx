@@ -26,7 +26,6 @@ export default function SeriesPage() {
   const [newWorkType, setNewWorkType] = useState<"trilogy" | "series">("trilogy");
   const [newTotalBooks, setNewTotalBooks] = useState(3);
   const [deleteSeriesId, setDeleteSeriesId] = useState<number | null>(null);
-  const [editingPseudonymId, setEditingPseudonymId] = useState<number | null>(null);
 
   const { data: registry = [], isLoading } = useQuery<SeriesWithDetails[]>({
     queryKey: ["/api/series/registry"],
@@ -63,7 +62,6 @@ export default function SeriesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/series/registry"] });
       queryClient.invalidateQueries({ queryKey: ["/api/series"] });
-      setEditingPseudonymId(null);
       toast({ title: "Serie actualizada" });
     },
     onError: () => {

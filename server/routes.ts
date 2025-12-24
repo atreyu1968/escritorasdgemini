@@ -34,6 +34,7 @@ const updateSeriesSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   workType: z.enum(["series", "trilogy"]).optional(),
   totalPlannedBooks: z.number().min(2).max(20).optional(),
+  pseudonymId: z.number().nullable().optional(),
 });
 
 const activeStreams = new Map<number, Set<Response>>();
