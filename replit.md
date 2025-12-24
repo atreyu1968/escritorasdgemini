@@ -49,7 +49,7 @@ Preferred communication style: Simple, everyday language.
   - `worldBibles`: JSON storage for characters, timeline, rules, and plot outlines
   - `thoughtLogs`: AI reasoning signatures for each agent action
   - `agentStatuses`: Real-time status tracking for dashboard display
-  - `series`: Groups projects into series/trilogies for continuity
+  - `series`: Groups projects into series/trilogies for continuity (includes `seriesGuide` for uploaded Word documents with series-wide plot guidance)
   - `continuitySnapshots`: Stores summaries of completed works for AI continuity (8-12k tokens)
   - `importedManuscripts`: External manuscript uploads with language and status tracking
   - `importedChapters`: Chapters parsed from uploaded manuscripts with original/edited content and token usage
