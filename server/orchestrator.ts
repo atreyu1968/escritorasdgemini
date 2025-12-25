@@ -347,6 +347,24 @@ Eventos clave: ${JSON.stringify(snapshot.keyEvents)}
 
       await this.trackTokenUsage(project.id, architectResult.tokenUsage);
 
+      if (architectResult.error || architectResult.timedOut) {
+        const errorMsg = architectResult.error || "Timeout durante la generación del World Bible";
+        console.error(`[Orchestrator] Architect failed: ${errorMsg}`);
+        this.callbacks.onAgentStatus("architect", "error", errorMsg);
+        this.callbacks.onError(`Error del Arquitecto: ${errorMsg}`);
+        await storage.updateProject(project.id, { status: "failed" });
+        return;
+      }
+
+      if (!architectResult.content || architectResult.content.trim().length === 0) {
+        const errorMsg = "El Arquitecto no generó contenido válido";
+        console.error(`[Orchestrator] Architect returned empty content`);
+        this.callbacks.onAgentStatus("architect", "error", errorMsg);
+        this.callbacks.onError(errorMsg);
+        await storage.updateProject(project.id, { status: "failed" });
+        return;
+      }
+
       if (architectResult.thoughtSignature) {
         await storage.createThoughtLog({
           projectId: project.id,

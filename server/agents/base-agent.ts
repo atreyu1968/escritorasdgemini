@@ -32,7 +32,7 @@ export interface AgentConfig {
   useThinking?: boolean;
 }
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 12 * 60 * 1000;
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 5000;
 
