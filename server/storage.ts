@@ -431,9 +431,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(projectQueue.position))
       .limit(1);
     const maxPosition = items.length > 0 ? items[0].position : 0;
+    // Use maxPosition + 1 if position is 0, null, or undefined
+    const newPosition = (data.position && data.position > 0) ? data.position : maxPosition + 1;
     const [item] = await db.insert(projectQueue).values({
       ...data,
-      position: data.position ?? maxPosition + 1
+      position: newPosition
     }).returning();
     return item;
   }
