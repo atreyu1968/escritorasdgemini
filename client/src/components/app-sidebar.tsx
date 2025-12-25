@@ -20,7 +20,8 @@ import {
   Feather,
   User,
   Upload,
-  Library
+  Library,
+  ListOrdered
 } from "lucide-react";
 
 const mainNavItems = [
@@ -37,6 +38,7 @@ const translationsNavItems = [
 const settingsNavItems = [
   { title: "Pseudónimos", url: "/pseudonyms", icon: User },
   { title: "Series", url: "/series", icon: Library },
+  { title: "Cola de Proyectos", url: "/queue", icon: ListOrdered },
   { title: "Configuración", url: "/config", icon: Settings },
 ];
 
