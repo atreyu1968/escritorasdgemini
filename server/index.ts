@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { queueManager } from "./queue-manager";
 
 const app = express();
 const httpServer = createServer(app);
@@ -92,8 +93,16 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      
+      // Initialize queue manager to restore state from previous session
+      try {
+        await queueManager.initialize();
+        log("Queue manager initialized", "queue");
+      } catch (error) {
+        log(`Queue manager initialization error: ${error}`, "queue");
+      }
     },
   );
 })();

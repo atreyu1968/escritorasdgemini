@@ -21,6 +21,61 @@ export class QueueManager {
 
   constructor() {}
 
+  async initialize(): Promise<void> {
+    const state = await storage.getQueueState();
+    if (!state) return;
+
+    // If the server crashed while running, clean up and optionally restart
+    if (state.status === "running" && state.currentProjectId) {
+      console.log("[QueueManager] Detected incomplete queue state from previous session");
+      
+      // Check if the project was actually completed
+      const project = await storage.getProject(state.currentProjectId);
+      if (project?.status === "completed") {
+        // Project finished but queue didn't advance - clean up and continue
+        const queueItem = await storage.getQueueItemByProject(state.currentProjectId);
+        if (queueItem && queueItem.status === "processing") {
+          await storage.updateQueueItem(queueItem.id, {
+            status: "completed",
+            completedAt: new Date(),
+          });
+        }
+        await storage.updateQueueState({ currentProjectId: null });
+        console.log("[QueueManager] Cleaned up completed project, resuming queue");
+        
+        // Auto-resume the queue
+        this.isRunning = true;
+        this.isPaused = false;
+        setTimeout(() => this.processQueue(), 2000);
+      } else {
+        // Project was in progress - reset it to allow re-processing
+        const queueItem = await storage.getQueueItemByProject(state.currentProjectId);
+        if (queueItem && queueItem.status === "processing") {
+          await storage.updateQueueItem(queueItem.id, {
+            status: "waiting",
+            startedAt: null,
+          });
+        }
+        await storage.updateQueueState({ currentProjectId: null });
+        console.log("[QueueManager] Reset incomplete project, queue ready to resume");
+        
+        // Auto-resume the queue
+        this.isRunning = true;
+        this.isPaused = false;
+        setTimeout(() => this.processQueue(), 2000);
+      }
+    } else if (state.status === "running") {
+      // Queue was running with no current project - just resume
+      console.log("[QueueManager] Resuming queue from previous session");
+      this.isRunning = true;
+      this.isPaused = false;
+      setTimeout(() => this.processQueue(), 2000);
+    } else if (state.status === "paused") {
+      this.isPaused = true;
+      console.log("[QueueManager] Queue is paused, waiting for manual resume");
+    }
+  }
+
   addListener(callback: QueueEventCallback) {
     this.eventCallbacks.add(callback);
     return () => this.eventCallbacks.delete(callback);
