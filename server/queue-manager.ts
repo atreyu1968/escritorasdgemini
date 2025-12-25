@@ -58,7 +58,21 @@ export class QueueManager {
   async stop(): Promise<void> {
     this.isRunning = false;
     this.isPaused = false;
+    
+    // Reset any item currently in "processing" status back to "waiting"
+    const state = await storage.getQueueState();
+    if (state?.currentProjectId) {
+      const queueItem = await storage.getQueueItemByProject(state.currentProjectId);
+      if (queueItem && queueItem.status === "processing") {
+        await storage.updateQueueItem(queueItem.id, {
+          status: "waiting",
+          startedAt: null,
+        });
+      }
+    }
+    
     await storage.updateQueueState({ status: "stopped", currentProjectId: null });
+    this.currentOrchestrator = null;
     this.emit({ type: "queue_stopped", message: "Queue processing stopped" });
     
     if (this.checkInterval) {
