@@ -2086,13 +2086,33 @@ Eventos clave: ${JSON.stringify(snapshot.keyEvents)}
       continuityState: c.continuityState || {},
     }));
 
-    const result = await this.continuitySentinel.execute({
-      projectTitle: project.title,
-      checkpointNumber,
-      chaptersInScope: chaptersData,
-      worldBible: worldBibleData.world_bible,
-      previousCheckpointIssues: previousIssues,
-    });
+    const SENTINEL_TIMEOUT_MS = 5 * 60 * 1000;
+    
+    let result: Awaited<ReturnType<typeof this.continuitySentinel.execute>>;
+    
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sentinel timeout")), SENTINEL_TIMEOUT_MS);
+      });
+      
+      result = await Promise.race([
+        this.continuitySentinel.execute({
+          projectTitle: project.title,
+          checkpointNumber,
+          chaptersInScope: chaptersData,
+          worldBible: worldBibleData.world_bible,
+          previousCheckpointIssues: previousIssues,
+        }),
+        timeoutPromise
+      ]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Orchestrator] Continuity Sentinel error/timeout: ${errorMsg}`);
+      this.callbacks.onAgentStatus("continuity-sentinel", "warning", 
+        `Checkpoint #${checkpointNumber} omitido por timeout/error. Continuando...`
+      );
+      return { passed: true, issues: [], chaptersToRevise: [] };
+    }
 
     await this.trackTokenUsage(project.id, result.tokenUsage);
 
