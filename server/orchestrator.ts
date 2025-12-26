@@ -1719,6 +1719,136 @@ Eventos clave: ${JSON.stringify(snapshot.keyEvents)}
     }
   }
 
+  async regenerateTruncatedChapters(project: Project, minWordCount: number = 100): Promise<void> {
+    try {
+      this.cumulativeTokens = {
+        inputTokens: project.totalInputTokens || 0,
+        outputTokens: project.totalOutputTokens || 0,
+        thinkingTokens: project.totalThinkingTokens || 0,
+      };
+      this.currentProjectGenre = project.genre;
+
+      const worldBible = await storage.getWorldBibleByProject(project.id);
+      if (!worldBible) {
+        this.callbacks.onError("No se encontró la biblia del mundo para este proyecto");
+        return;
+      }
+
+      const worldBibleData: ParsedWorldBible = {
+        world_bible: {
+          personajes: worldBible.characters as any[] || [],
+          lugares: [],
+          reglas_lore: worldBible.worldRules as any[] || [],
+        },
+        escaleta_capitulos: worldBible.plotOutline as any[] || [],
+      };
+
+      let styleGuideContent = "";
+      if (project.styleGuideId) {
+        const styleGuide = await storage.getStyleGuide(project.styleGuideId);
+        if (styleGuide) {
+          styleGuideContent = styleGuide.content;
+        }
+      }
+
+      const chapters = await storage.getChaptersByProject(project.id);
+      const allSections = this.buildSectionsListFromChapters(chapters, worldBibleData);
+      const guiaEstilo = `Género: ${project.genre}, Tono: ${project.tone}. ${styleGuideContent}`;
+
+      const truncatedChapters = chapters.filter(ch => {
+        const wordCount = ch.content ? ch.content.split(/\s+/).length : 0;
+        return wordCount < minWordCount;
+      });
+
+      if (truncatedChapters.length === 0) {
+        this.callbacks.onAgentStatus("ghostwriter", "completed", 
+          "No se encontraron capítulos truncados"
+        );
+        await storage.updateProject(project.id, { status: "completed" });
+        this.callbacks.onProjectComplete();
+        return;
+      }
+
+      this.callbacks.onAgentStatus("ghostwriter", "writing", 
+        `Regenerando ${truncatedChapters.length} capítulos truncados: ${truncatedChapters.map(c => c.chapterNumber).join(", ")}`
+      );
+
+      for (let i = 0; i < truncatedChapters.length; i++) {
+        const chapter = truncatedChapters[i];
+        const sectionData = allSections.find(s => s.numero === chapter.chapterNumber);
+
+        if (!sectionData) {
+          console.error(`No section data found for chapter ${chapter.chapterNumber}`);
+          continue;
+        }
+
+        this.callbacks.onChapterRewrite(
+          chapter.chapterNumber,
+          chapter.title || `Capítulo ${chapter.chapterNumber}`,
+          i + 1,
+          truncatedChapters.length,
+          "Regeneración de capítulo truncado"
+        );
+
+        const previousChapters = chapters
+          .filter(c => c.chapterNumber < chapter.chapterNumber)
+          .sort((a, b) => a.chapterNumber - b.chapterNumber);
+        
+        const lastThreeChapters = previousChapters.slice(-3).map(c => ({
+          numero: c.chapterNumber,
+          titulo: c.title,
+          contenido: c.content
+        }));
+
+        this.callbacks.onAgentStatus("ghostwriter", "writing", 
+          `Escribiendo Capítulo ${chapter.chapterNumber}: "${sectionData.titulo}"`
+        );
+
+        const previousContinuity = lastThreeChapters.length > 0 
+          ? `Resumen de capítulos anteriores:\n${lastThreeChapters.map(c => `Cap ${c.numero} "${c.titulo}": ${c.contenido?.slice(0, 500)}...`).join("\n\n")}`
+          : "";
+
+        const writerResult = await this.ghostwriter.execute({
+          chapterNumber: chapter.chapterNumber,
+          chapterData: sectionData,
+          worldBible: worldBibleData.world_bible,
+          guiaEstilo,
+          previousContinuity,
+          refinementInstructions: "",
+          authorName: "",
+          isRewrite: false,
+        });
+
+        await this.trackTokenUsage(project.id, writerResult.tokenUsage);
+
+        const { cleanContent } = this.ghostwriter.extractContinuityState(writerResult.content);
+        const wordCount = cleanContent.split(/\s+/).length;
+
+        await storage.updateChapter(chapter.id, {
+          content: cleanContent,
+          status: "completed"
+        });
+
+        this.callbacks.onChapterComplete(
+          chapter.chapterNumber,
+          wordCount,
+          sectionData.titulo
+        );
+      }
+
+      this.callbacks.onAgentStatus("ghostwriter", "completed", 
+        `Regeneración completada para ${truncatedChapters.length} capítulos`
+      );
+
+      await storage.updateProject(project.id, { status: "completed" });
+      this.callbacks.onProjectComplete();
+    } catch (error) {
+      console.error("Regenerate truncated chapters error:", error);
+      this.callbacks.onError(`Error regenerando capítulos: ${error instanceof Error ? error.message : "Error desconocido"}`);
+      await storage.updateProject(project.id, { status: "error" });
+    }
+  }
+
   private buildSectionsListFromChapters(chapters: Chapter[], worldBibleData: ParsedWorldBible): SectionData[] {
     return chapters.map((chapter, index) => {
       const chapterData = worldBibleData.escaleta_capitulos?.[index] || {};

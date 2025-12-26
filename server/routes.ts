@@ -656,6 +656,73 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/projects/:id/regenerate-truncated", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const minWordCount = parseInt(req.body.minWordCount) || 100;
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      if (project.status === "generating") {
+        return res.status(400).json({ error: "El proyecto ya está siendo procesado" });
+      }
+
+      await storage.updateProject(id, { status: "generating" });
+
+      res.json({ message: "Regeneración de capítulos truncados iniciada", projectId: id, minWordCount });
+
+      const sendToStreams = (data: any) => {
+        const streams = activeStreams.get(id);
+        if (streams) {
+          const message = `data: ${JSON.stringify(data)}\n\n`;
+          streams.forEach(stream => {
+            try {
+              stream.write(message);
+            } catch (e) {
+              console.error("Error writing to stream:", e);
+            }
+          });
+        }
+      };
+
+      const orchestrator = new Orchestrator({
+        onAgentStatus: async (role, status, message) => {
+          await storage.updateAgentStatus(id, role, { status, currentTask: message });
+          sendToStreams({ type: "agent_status", role, status, message });
+          if (message) await persistActivityLog(id, "info", message, role);
+        },
+        onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
+          sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
+          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} regenerado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
+        },
+        onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
+          sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
+          await persistActivityLog(id, "warning", `Regenerando ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "ghostwriter");
+        },
+        onChapterStatusChange: (chapterNumber, status) => {
+          sendToStreams({ type: "chapter_status_change", chapterNumber, status });
+        },
+        onProjectComplete: async () => {
+          sendToStreams({ type: "project_complete" });
+          await persistActivityLog(id, "success", "Regeneración de capítulos truncados completada", "ghostwriter");
+        },
+        onError: async (error) => {
+          sendToStreams({ type: "error", message: error });
+          await persistActivityLog(id, "error", error, "ghostwriter");
+        },
+      });
+
+      orchestrator.regenerateTruncatedChapters(project, minWordCount).catch(console.error);
+
+    } catch (error) {
+      console.error("Error starting truncated chapters regeneration:", error);
+      res.status(500).json({ error: "Failed to start truncated chapters regeneration" });
+    }
+  });
+
   app.get("/api/projects/:id/stream", (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
 
