@@ -2532,19 +2532,25 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         return res.status(400).json({ error: "No data provided. Send { data: {...} } or { sourceUrl: '...' }" });
       }
 
-      // Helper to convert date strings to Date objects and remove id/createdAt
+      // Helper to remove id/createdAt before insert
       const prepareForInsert = (item: any) => {
         const { id, createdAt, ...rest } = item;
         return rest;
       };
 
       const results: any = { imported: {}, errors: [] };
+      
+      // ID mappings: oldId -> newId
+      const pseudonymIdMap = new Map<number, number>();
+      const seriesIdMap = new Map<number, number>();
 
       // Import in order of dependencies
       if (importData.pseudonyms?.length) {
         for (const item of importData.pseudonyms) {
           try {
-            await storage.createPseudonym(prepareForInsert(item));
+            const oldId = item.id;
+            const created = await storage.createPseudonym(prepareForInsert(item));
+            pseudonymIdMap.set(oldId, created.id);
             results.imported.pseudonyms = (results.imported.pseudonyms || 0) + 1;
           } catch (e: any) {
             if (!e.message?.includes('duplicate')) {
@@ -2584,7 +2590,14 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
       if (importData.series?.length) {
         for (const item of importData.series) {
           try {
-            await storage.createSeries(prepareForInsert(item));
+            const oldId = item.id;
+            // Map pseudonymId to new ID
+            const data = prepareForInsert(item);
+            if (data.pseudonymId && pseudonymIdMap.has(data.pseudonymId)) {
+              data.pseudonymId = pseudonymIdMap.get(data.pseudonymId);
+            }
+            const created = await storage.createSeries(data);
+            seriesIdMap.set(oldId, created.id);
             results.imported.series = (results.imported.series || 0) + 1;
           } catch (e: any) {
             if (!e.message?.includes('duplicate')) {
@@ -2594,10 +2607,22 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         }
       }
 
+      const projectIdMap = new Map<number, number>();
+      
       if (importData.projects?.length) {
         for (const item of importData.projects) {
           try {
-            await storage.createProject(prepareForInsert(item));
+            const oldId = item.id;
+            const data = prepareForInsert(item);
+            // Map seriesId and pseudonymId to new IDs
+            if (data.seriesId && seriesIdMap.has(data.seriesId)) {
+              data.seriesId = seriesIdMap.get(data.seriesId);
+            }
+            if (data.pseudonymId && pseudonymIdMap.has(data.pseudonymId)) {
+              data.pseudonymId = pseudonymIdMap.get(data.pseudonymId);
+            }
+            const created = await storage.createProject(data);
+            projectIdMap.set(oldId, created.id);
             results.imported.projects = (results.imported.projects || 0) + 1;
           } catch (e: any) {
             if (!e.message?.includes('duplicate')) {
@@ -2610,7 +2635,12 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
       if (importData.chapters?.length) {
         for (const item of importData.chapters) {
           try {
-            await storage.createChapter(prepareForInsert(item));
+            const data = prepareForInsert(item);
+            // Map projectId to new ID
+            if (data.projectId && projectIdMap.has(data.projectId)) {
+              data.projectId = projectIdMap.get(data.projectId);
+            }
+            await storage.createChapter(data);
             results.imported.chapters = (results.imported.chapters || 0) + 1;
           } catch (e: any) {
             if (!e.message?.includes('duplicate')) {
@@ -2623,7 +2653,12 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
       if (importData.worldBibles?.length) {
         for (const item of importData.worldBibles) {
           try {
-            await storage.createWorldBible(prepareForInsert(item));
+            const data = prepareForInsert(item);
+            // Map projectId to new ID
+            if (data.projectId && projectIdMap.has(data.projectId)) {
+              data.projectId = projectIdMap.get(data.projectId);
+            }
+            await storage.createWorldBible(data);
             results.imported.worldBibles = (results.imported.worldBibles || 0) + 1;
           } catch (e: any) {
             if (!e.message?.includes('duplicate')) {
