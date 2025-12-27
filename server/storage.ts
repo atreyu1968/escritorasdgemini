@@ -30,6 +30,7 @@ export interface IStorage {
   createStyleGuide(data: InsertStyleGuide): Promise<StyleGuide>;
   getStyleGuide(id: number): Promise<StyleGuide | undefined>;
   getStyleGuidesByPseudonym(pseudonymId: number): Promise<StyleGuide[]>;
+  getAllStyleGuides(): Promise<StyleGuide[]>;
   updateStyleGuide(id: number, data: Partial<StyleGuide>): Promise<StyleGuide | undefined>;
   deleteStyleGuide(id: number): Promise<void>;
 
@@ -41,14 +42,17 @@ export interface IStorage {
 
   createChapter(data: InsertChapter): Promise<Chapter>;
   getChaptersByProject(projectId: number): Promise<Chapter[]>;
+  getAllChapters(): Promise<Chapter[]>;
   updateChapter(id: number, data: Partial<Chapter>): Promise<Chapter | undefined>;
 
   createWorldBible(data: InsertWorldBible): Promise<WorldBible>;
   getWorldBibleByProject(projectId: number): Promise<WorldBible | undefined>;
+  getAllWorldBibles(): Promise<WorldBible[]>;
   updateWorldBible(id: number, data: Partial<WorldBible>): Promise<WorldBible | undefined>;
 
   createThoughtLog(data: InsertThoughtLog): Promise<ThoughtLog>;
   getThoughtLogsByProject(projectId: number): Promise<ThoughtLog[]>;
+  getAllThoughtLogs(): Promise<ThoughtLog[]>;
 
   createAgentStatus(data: InsertAgentStatus): Promise<AgentStatus>;
   getAgentStatusesByProject(projectId: number): Promise<AgentStatus[]>;
@@ -65,6 +69,7 @@ export interface IStorage {
   getContinuitySnapshotByProject(projectId: number): Promise<ContinuitySnapshot | undefined>;
   updateContinuitySnapshot(id: number, data: Partial<ContinuitySnapshot>): Promise<ContinuitySnapshot | undefined>;
   getSeriesContinuitySnapshots(seriesId: number): Promise<ContinuitySnapshot[]>;
+  getAllContinuitySnapshots(): Promise<ContinuitySnapshot[]>;
 
   createImportedManuscript(data: InsertImportedManuscript): Promise<ImportedManuscript>;
   getImportedManuscript(id: number): Promise<ImportedManuscript | undefined>;
@@ -158,6 +163,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(styleGuides).where(eq(styleGuides.pseudonymId, pseudonymId)).orderBy(desc(styleGuides.createdAt));
   }
 
+  async getAllStyleGuides(): Promise<StyleGuide[]> {
+    return db.select().from(styleGuides).orderBy(desc(styleGuides.createdAt));
+  }
+
   async updateStyleGuide(id: number, data: Partial<StyleGuide>): Promise<StyleGuide | undefined> {
     const [updated] = await db.update(styleGuides).set(data).where(eq(styleGuides.id, id)).returning();
     return updated;
@@ -199,6 +208,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(chapters).where(eq(chapters.projectId, projectId)).orderBy(chapters.chapterNumber);
   }
 
+  async getAllChapters(): Promise<Chapter[]> {
+    return db.select().from(chapters).orderBy(chapters.projectId, chapters.chapterNumber);
+  }
+
   async updateChapter(id: number, data: Partial<Chapter>): Promise<Chapter | undefined> {
     const [updated] = await db.update(chapters).set(data).where(eq(chapters.id, id)).returning();
     return updated;
@@ -212,6 +225,10 @@ export class DatabaseStorage implements IStorage {
   async getWorldBibleByProject(projectId: number): Promise<WorldBible | undefined> {
     const [worldBible] = await db.select().from(worldBibles).where(eq(worldBibles.projectId, projectId));
     return worldBible;
+  }
+
+  async getAllWorldBibles(): Promise<WorldBible[]> {
+    return db.select().from(worldBibles);
   }
 
   async updateWorldBible(id: number, data: Partial<WorldBible>): Promise<WorldBible | undefined> {
@@ -229,6 +246,10 @@ export class DatabaseStorage implements IStorage {
 
   async getThoughtLogsByProject(projectId: number): Promise<ThoughtLog[]> {
     return db.select().from(thoughtLogs).where(eq(thoughtLogs.projectId, projectId)).orderBy(desc(thoughtLogs.createdAt));
+  }
+
+  async getAllThoughtLogs(): Promise<ThoughtLog[]> {
+    return db.select().from(thoughtLogs).orderBy(desc(thoughtLogs.createdAt));
   }
 
   async createAgentStatus(data: InsertAgentStatus): Promise<AgentStatus> {
@@ -318,6 +339,10 @@ export class DatabaseStorage implements IStorage {
       if (snapshot) snapshots.push(snapshot);
     }
     return snapshots;
+  }
+
+  async getAllContinuitySnapshots(): Promise<ContinuitySnapshot[]> {
+    return db.select().from(continuitySnapshots);
   }
 
   async createImportedManuscript(data: InsertImportedManuscript): Promise<ImportedManuscript> {

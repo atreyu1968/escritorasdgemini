@@ -2467,5 +2467,182 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
     }
   });
 
+  // Data Migration Endpoints
+  app.get("/api/data-export", async (req: Request, res: Response) => {
+    try {
+      const [
+        projects,
+        chapters,
+        worldBibles,
+        pseudonyms,
+        styleGuides,
+        extendedGuides,
+        series,
+        continuitySnapshots,
+        thoughtLogs,
+      ] = await Promise.all([
+        storage.getAllProjects(),
+        storage.getAllChapters(),
+        storage.getAllWorldBibles(),
+        storage.getAllPseudonyms(),
+        storage.getAllStyleGuides(),
+        storage.getAllExtendedGuides(),
+        storage.getAllSeries(),
+        storage.getAllContinuitySnapshots(),
+        storage.getAllThoughtLogs(),
+      ]);
+
+      res.json({
+        exportedAt: new Date().toISOString(),
+        data: {
+          pseudonyms,
+          styleGuides,
+          extendedGuides,
+          series,
+          projects,
+          chapters,
+          worldBibles,
+          continuitySnapshots,
+          thoughtLogs,
+        }
+      });
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      res.status(500).json({ error: "Failed to export data" });
+    }
+  });
+
+  app.post("/api/data-import", async (req: Request, res: Response) => {
+    try {
+      const { data, sourceUrl } = req.body;
+      
+      let importData = data;
+      
+      // If sourceUrl provided, fetch from that URL
+      if (sourceUrl && !data) {
+        const response = await fetch(sourceUrl);
+        if (!response.ok) {
+          return res.status(400).json({ error: "Failed to fetch from source URL" });
+        }
+        const fetched = await response.json();
+        importData = fetched.data;
+      }
+
+      if (!importData) {
+        return res.status(400).json({ error: "No data provided. Send { data: {...} } or { sourceUrl: '...' }" });
+      }
+
+      const results: any = { imported: {}, errors: [] };
+
+      // Import in order of dependencies
+      if (importData.pseudonyms?.length) {
+        for (const item of importData.pseudonyms) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createPseudonym(rest);
+            results.imported.pseudonyms = (results.imported.pseudonyms || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'pseudonyms', error: e.message });
+            }
+          }
+        }
+      }
+
+      if (importData.styleGuides?.length) {
+        for (const item of importData.styleGuides) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createStyleGuide(rest);
+            results.imported.styleGuides = (results.imported.styleGuides || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'styleGuides', error: e.message });
+            }
+          }
+        }
+      }
+
+      if (importData.extendedGuides?.length) {
+        for (const item of importData.extendedGuides) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createExtendedGuide(rest);
+            results.imported.extendedGuides = (results.imported.extendedGuides || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'extendedGuides', error: e.message });
+            }
+          }
+        }
+      }
+
+      if (importData.series?.length) {
+        for (const item of importData.series) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createSeries(rest);
+            results.imported.series = (results.imported.series || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'series', error: e.message });
+            }
+          }
+        }
+      }
+
+      if (importData.projects?.length) {
+        for (const item of importData.projects) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createProject(rest);
+            results.imported.projects = (results.imported.projects || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'projects', error: e.message });
+            }
+          }
+        }
+      }
+
+      if (importData.chapters?.length) {
+        for (const item of importData.chapters) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createChapter(rest);
+            results.imported.chapters = (results.imported.chapters || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'chapters', error: e.message });
+            }
+          }
+        }
+      }
+
+      if (importData.worldBibles?.length) {
+        for (const item of importData.worldBibles) {
+          try {
+            const { id, ...rest } = item;
+            await storage.createWorldBible(rest);
+            results.imported.worldBibles = (results.imported.worldBibles || 0) + 1;
+          } catch (e: any) {
+            if (!e.message?.includes('duplicate')) {
+              results.errors.push({ table: 'worldBibles', error: e.message });
+            }
+          }
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        message: "Import completed",
+        results 
+      });
+    } catch (error) {
+      console.error("Error importing data:", error);
+      res.status(500).json({ error: "Failed to import data" });
+    }
+  });
+
   return httpServer;
 }
