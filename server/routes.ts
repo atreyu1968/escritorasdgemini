@@ -1193,7 +1193,7 @@ ${series.seriesGuide.substring(0, 50000)}`;
           attempts++;
           console.log(`[ExtractMilestones] Attempt ${attempts}/${maxAttempts}`);
           response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-3-pro-preview",
             contents: [{ role: "user", parts: [{ text: extractionPrompt }] }],
             config: { temperature: 0.3 },
           });
