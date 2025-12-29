@@ -22,15 +22,39 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   const activeProjects = projects.filter(p => p.status !== "archived");
   
+  const getDefaultProject = () => {
+    if (activeProjects.length === 0) return undefined;
+    
+    const generatingProject = activeProjects.find(p => p.status === "generating");
+    if (generatingProject) return generatingProject;
+    
+    return activeProjects.reduce((latest, p) => 
+      p.id > latest.id ? p : latest
+    , activeProjects[0]);
+  };
+  
   const currentProject = selectedProjectId 
     ? projects.find(p => p.id === selectedProjectId)
-    : activeProjects[0];
+    : getDefaultProject();
 
   useEffect(() => {
     if (!selectedProjectId && activeProjects.length > 0) {
-      setSelectedProjectId(activeProjects[0].id);
+      const defaultProject = getDefaultProject();
+      if (defaultProject) {
+        setSelectedProjectId(defaultProject.id);
+      }
     }
   }, [activeProjects, selectedProjectId]);
+  
+  useEffect(() => {
+    const generatingProject = activeProjects.find(p => p.status === "generating");
+    if (generatingProject && selectedProjectId !== generatingProject.id) {
+      const currentSelected = projects.find(p => p.id === selectedProjectId);
+      if (!currentSelected || currentSelected.status !== "generating") {
+        setSelectedProjectId(generatingProject.id);
+      }
+    }
+  }, [activeProjects, selectedProjectId, projects]);
 
   return (
     <ProjectContext.Provider value={{
