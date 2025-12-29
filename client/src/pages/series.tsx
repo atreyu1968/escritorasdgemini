@@ -249,7 +249,25 @@ export default function SeriesPage() {
           details = data.error || details;
         }
       } catch { /* ignore */ }
-      toast({ title: "Error", description: details, variant: "destructive" });
+      if (!details.includes("cancelled")) {
+        toast({ title: "Error", description: details, variant: "destructive" });
+      }
+    },
+  });
+  
+  const cancelAnalysisMutation = useMutation({
+    mutationFn: async (manuscriptId: number) => {
+      const response = await apiRequest("POST", `/api/imported-manuscripts/${manuscriptId}/cancel-analysis`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      setAnalyzingManuscriptId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/series/registry"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/imported-manuscripts"] });
+      toast({ title: "Análisis cancelado" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "No se pudo cancelar el análisis", variant: "destructive" });
     },
   });
 
@@ -722,10 +740,16 @@ export default function SeriesPage() {
                                     Continuidad
                                   </Badge>
                                 ) : vol.continuityAnalysisStatus === "analyzing" || analyzingManuscriptId === vol.id ? (
-                                  <Badge variant="secondary">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => cancelAnalysisMutation.mutate(vol.id)}
+                                    disabled={cancelAnalysisMutation.isPending}
+                                    data-testid={`button-cancel-analysis-${vol.id}`}
+                                  >
                                     <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                    Analizando...
-                                  </Badge>
+                                    Cancelar
+                                  </Button>
                                 ) : (
                                   <Button
                                     variant="ghost"

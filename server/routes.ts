@@ -39,6 +39,7 @@ const updateSeriesSchema = z.object({
 });
 
 const activeStreams = new Map<number, Set<Response>>();
+const activeManuscriptAnalysis = new Map<number, AbortController>();
 
 async function persistActivityLog(projectId: number | null, level: string, message: string, agentRole?: string | null, metadata?: any) {
   try {
@@ -1143,8 +1144,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/imported-manuscripts/:id/analyze-continuity", async (req: Request, res: Response) => {
+    const manuscriptId = parseInt(req.params.id);
+    
     try {
-      const manuscriptId = parseInt(req.params.id);
       const manuscript = await storage.getImportedManuscript(manuscriptId);
       
       if (!manuscript) {
@@ -1155,10 +1157,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Manuscript must be linked to a series before analysis" });
       }
       
+      if (activeManuscriptAnalysis.has(manuscriptId)) {
+        return res.status(409).json({ error: "Analysis already in progress" });
+      }
+      
       const series = await storage.getSeries(manuscript.seriesId);
       if (!series) {
         return res.status(404).json({ error: "Series not found" });
       }
+      
+      const abortController = new AbortController();
+      activeManuscriptAnalysis.set(manuscriptId, abortController);
       
       await storage.updateImportedManuscript(manuscriptId, {
         continuityAnalysisStatus: "analyzing",
@@ -1167,6 +1176,7 @@ export async function registerRoutes(
       const chapters = await storage.getImportedChaptersByManuscript(manuscriptId);
       
       if (chapters.length === 0) {
+        activeManuscriptAnalysis.delete(manuscriptId);
         await storage.updateImportedManuscript(manuscriptId, {
           continuityAnalysisStatus: "error",
         });
@@ -1189,6 +1199,14 @@ export async function registerRoutes(
         }).join("\n\n");
       }
       
+      if (abortController.signal.aborted) {
+        activeManuscriptAnalysis.delete(manuscriptId);
+        await storage.updateImportedManuscript(manuscriptId, {
+          continuityAnalysisStatus: "pending",
+        });
+        return res.status(499).json({ error: "Analysis cancelled" });
+      }
+      
       const analyzerResult = await analyzer.analyze({
         manuscriptTitle: manuscript.title,
         seriesTitle: series.title,
@@ -1200,6 +1218,15 @@ export async function registerRoutes(
         })),
         previousVolumesContext: previousContext || undefined,
       });
+      
+      activeManuscriptAnalysis.delete(manuscriptId);
+      
+      if (abortController.signal.aborted) {
+        await storage.updateImportedManuscript(manuscriptId, {
+          continuityAnalysisStatus: "pending",
+        });
+        return res.status(499).json({ error: "Analysis cancelled" });
+      }
       
       const tokenUpdate: any = {
         totalInputTokens: (manuscript.totalInputTokens || 0) + (analyzerResult.tokenUsage.inputTokens || 0),
@@ -1226,8 +1253,30 @@ export async function registerRoutes(
         res.status(500).json({ error: "Failed to analyze manuscript continuity" });
       }
     } catch (error) {
+      activeManuscriptAnalysis.delete(manuscriptId);
       console.error("Error analyzing manuscript continuity:", error);
       res.status(500).json({ error: "Failed to analyze manuscript continuity" });
+    }
+  });
+  
+  app.post("/api/imported-manuscripts/:id/cancel-analysis", async (req: Request, res: Response) => {
+    try {
+      const manuscriptId = parseInt(req.params.id);
+      const controller = activeManuscriptAnalysis.get(manuscriptId);
+      
+      if (controller) {
+        controller.abort();
+        activeManuscriptAnalysis.delete(manuscriptId);
+      }
+      
+      await storage.updateImportedManuscript(manuscriptId, {
+        continuityAnalysisStatus: "pending",
+      });
+      
+      res.json({ success: true, message: "Analysis cancelled" });
+    } catch (error) {
+      console.error("Error cancelling manuscript analysis:", error);
+      res.status(500).json({ error: "Failed to cancel analysis" });
     }
   });
 
