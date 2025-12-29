@@ -81,10 +81,10 @@ Responde SIEMPRE en formato JSON válido con esta estructura exacta:
   "keyEvents": [...],
   "seriesHooks": [...]
 }`,
-      model: "gemini-2.5-flash",
-      useThinking: true,
+      model: "gemini-2.0-flash",
+      useThinking: false,
     });
-    this.timeoutMs = 10 * 60 * 1000;
+    this.timeoutMs = 4 * 60 * 1000;
   }
 
   async execute(input: any): Promise<AgentResponse> {
@@ -98,10 +98,10 @@ Responde SIEMPRE en formato JSON válido con esta estructura exacta:
 
   async analyze(input: AnalyzerInput): Promise<AnalyzerResult> {
     const chaptersSummary = input.chapters.map(ch => {
-      const preview = ch.content.length > 8000 
-        ? ch.content.substring(0, 4000) + "\n\n[...contenido intermedio omitido...]\n\n" + ch.content.substring(ch.content.length - 4000)
+      const preview = ch.content.length > 3000 
+        ? ch.content.substring(0, 1500) + "\n\n[...]\n\n" + ch.content.substring(ch.content.length - 1500)
         : ch.content;
-      return `### Capítulo ${ch.chapterNumber}${ch.title ? `: ${ch.title}` : ""}\n${preview}`;
+      return `### Cap ${ch.chapterNumber}${ch.title ? `: ${ch.title}` : ""}\n${preview}`;
     }).join("\n\n---\n\n");
 
     const prompt = `Analiza el siguiente manuscrito para extraer información de continuidad.
