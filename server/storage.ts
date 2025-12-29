@@ -74,6 +74,7 @@ export interface IStorage {
   createImportedManuscript(data: InsertImportedManuscript): Promise<ImportedManuscript>;
   getImportedManuscript(id: number): Promise<ImportedManuscript | undefined>;
   getAllImportedManuscripts(): Promise<ImportedManuscript[]>;
+  getImportedManuscriptsBySeries(seriesId: number): Promise<ImportedManuscript[]>;
   updateImportedManuscript(id: number, data: Partial<ImportedManuscript>): Promise<ImportedManuscript | undefined>;
   deleteImportedManuscript(id: number): Promise<void>;
 
@@ -357,6 +358,12 @@ export class DatabaseStorage implements IStorage {
 
   async getAllImportedManuscripts(): Promise<ImportedManuscript[]> {
     return db.select().from(importedManuscripts).orderBy(desc(importedManuscripts.createdAt));
+  }
+
+  async getImportedManuscriptsBySeries(seriesId: number): Promise<ImportedManuscript[]> {
+    return db.select().from(importedManuscripts)
+      .where(eq(importedManuscripts.seriesId, seriesId))
+      .orderBy(importedManuscripts.seriesOrder);
   }
 
   async updateImportedManuscript(id: number, data: Partial<ImportedManuscript>): Promise<ImportedManuscript | undefined> {
