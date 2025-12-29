@@ -43,8 +43,8 @@ function getLanguageName(code: string | null | undefined): string {
   return lang ? lang.name : code.toUpperCase();
 }
 
-const INPUT_PRICE_PER_MILLION = 1.25;
-const OUTPUT_PRICE_PER_MILLION = 10.0;
+const INPUT_PRICE_PER_MILLION = 0.80;
+const OUTPUT_PRICE_PER_MILLION = 6.50;
 const THINKING_PRICE_PER_MILLION = 3.0;
 
 function calculateCost(inputTokens: number, outputTokens: number, thinkingTokens: number) {

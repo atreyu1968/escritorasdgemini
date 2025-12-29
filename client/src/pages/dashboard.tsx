@@ -9,7 +9,8 @@ import { ConsoleOutput, type LogEntry } from "@/components/console-output";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Play, FileText, Clock, CheckCircle, Download, Archive, Copy, Trash2, ClipboardCheck, RefreshCw, Ban, CheckCheck, Plus, Upload, Database } from "lucide-react";
+import { Play, FileText, Clock, CheckCircle, Download, Archive, Copy, Trash2, ClipboardCheck, RefreshCw, Ban, CheckCheck, Plus, Upload, Database, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useProject } from "@/lib/project-context";
 import { Link } from "wouter";
 import type { Project, AgentStatus, Chapter } from "@shared/schema";
@@ -36,8 +37,8 @@ function sortChaptersForDisplay(chapters: Chapter[]): Chapter[] {
 }
 
 function calculateCost(inputTokens: number, outputTokens: number, thinkingTokens: number): number {
-  const INPUT_PRICE_PER_MILLION = 1.25;
-  const OUTPUT_PRICE_PER_MILLION = 10.0;
+  const INPUT_PRICE_PER_MILLION = 0.80;
+  const OUTPUT_PRICE_PER_MILLION = 6.50;
   const THINKING_PRICE_PER_MILLION = 3.0;
   
   const inputCost = (inputTokens / 1_000_000) * INPUT_PRICE_PER_MILLION;
@@ -46,6 +47,13 @@ function calculateCost(inputTokens: number, outputTokens: number, thinkingTokens
   
   return inputCost + outputCost + thinkingCost;
 }
+
+const MODEL_PRICING_INFO = `Modelos usados:
+• gemini-3-pro-preview (Arquitecto, Narrador, Revisor): $1.25/$10.0/M + thinking $3.0/M
+• gemini-3-flash (Editor): $0.50/$3.0/M
+• gemini-2.5-flash (QA: Centinela, Auditor, Detector, Estilista): $0.30/$2.5/M
+
+Precios promedio ponderados: Input $0.80/M, Output $6.50/M, Thinking $3.0/M`;
 
 type ConfirmType = "cancel" | "forceComplete" | "resume" | "delete" | null;
 
@@ -689,7 +697,17 @@ export default function Dashboard() {
                             currentProject.totalThinkingTokens || 0
                           ).toFixed(2)}
                         </p>
-                        <p className="text-xs text-muted-foreground">USD estimado</p>
+                        <div className="flex items-center justify-end gap-1">
+                          <p className="text-xs text-muted-foreground">USD estimado</p>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-xs whitespace-pre-line text-xs">
+                              {MODEL_PRICING_INFO}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                   </div>

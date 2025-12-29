@@ -1883,8 +1883,8 @@ ${series.seriesGuide.substring(0, 50000)}`;
         return res.status(404).json({ error: "Manuscript not found" });
       }
 
-      const INPUT_PRICE_PER_MILLION = 1.25;
-      const OUTPUT_PRICE_PER_MILLION = 10.0;
+      const INPUT_PRICE_PER_MILLION = 0.80;
+      const OUTPUT_PRICE_PER_MILLION = 6.50;
       const THINKING_PRICE_PER_MILLION = 3.0;
 
       const inputCost = ((manuscript.totalInputTokens || 0) / 1_000_000) * INPUT_PRICE_PER_MILLION;
