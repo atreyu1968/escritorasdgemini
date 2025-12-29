@@ -41,6 +41,13 @@ const updateSeriesSchema = z.object({
 const activeStreams = new Map<number, Set<Response>>();
 const activeManuscriptAnalysis = new Map<number, AbortController>();
 
+function getSectionLabel(chapterNumber: number, title?: string | null): string {
+  if (chapterNumber === 0) return title || "el Prólogo";
+  if (chapterNumber === -1) return title || "el Epílogo";
+  if (chapterNumber === -2) return title || "la Nota del Autor";
+  return `el Capítulo ${chapterNumber}`;
+}
+
 async function persistActivityLog(projectId: number | null, level: string, message: string, agentRole?: string | null, metadata?: any) {
   try {
     await storage.createActivityLog({
@@ -407,11 +414,13 @@ export async function registerRoutes(
         },
         onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
-          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} completado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "success", `${label} completado (${wordCount} palabras)`, "ghostwriter");
         },
         onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
-          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "editor");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: ${label} - ${reason}`, "editor");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
@@ -494,11 +503,13 @@ export async function registerRoutes(
         },
         onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
-          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} completado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "success", `${label} completado (${wordCount} palabras)`, "ghostwriter");
         },
         onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
-          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "editor");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: ${label} - ${reason}`, "editor");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
@@ -564,11 +575,13 @@ export async function registerRoutes(
         },
         onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
-          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} completado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "success", `${label} completado (${wordCount} palabras)`, "ghostwriter");
         },
         onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
-          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "editor");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: ${label} - ${reason}`, "editor");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
@@ -630,11 +643,13 @@ export async function registerRoutes(
         },
         onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
-          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} corregido (${wordCount} palabras)`, "ghostwriter");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "success", `${label} corregido (${wordCount} palabras)`, "ghostwriter");
         },
         onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
-          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "continuity-sentinel");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: ${label} - ${reason}`, "continuity-sentinel");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
@@ -697,11 +712,13 @@ export async function registerRoutes(
         },
         onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
           sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
-          await persistActivityLog(id, "success", `Capítulo ${chapterNumber} regenerado: "${chapterTitle}" (${wordCount} palabras)`, "ghostwriter");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "success", `${label} regenerado (${wordCount} palabras)`, "ghostwriter");
         },
         onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
           sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
-          await persistActivityLog(id, "warning", `Regenerando ${currentIndex}/${totalToRewrite}: Cap. ${chapterNumber} - ${reason}`, "ghostwriter");
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "warning", `Regenerando ${currentIndex}/${totalToRewrite}: ${label} - ${reason}`, "ghostwriter");
         },
         onChapterStatusChange: (chapterNumber, status) => {
           sendToStreams({ type: "chapter_status_change", chapterNumber, status });
@@ -836,15 +853,17 @@ export async function registerRoutes(
       const { cleanContent } = ghostwriter.extractContinuityState(result.content);
       const wordCount = cleanContent.split(/\s+/).filter((w: string) => w.length > 0).length;
 
+      const sectionLabel = getSectionLabel(chapterNumber, chapter.title);
+      
       if (wordCount < 500) {
         await storage.updateAgentStatus(projectId, "ghostwriter", { 
           status: "error", 
-          currentTask: `Capítulo ${chapterNumber} truncado (${wordCount} palabras)` 
+          currentTask: `${sectionLabel} truncado (${wordCount} palabras)` 
         });
         return res.status(400).json({ 
           error: "Chapter still truncated", 
           wordCount,
-          message: `El capítulo solo tiene ${wordCount} palabras. Intenta de nuevo más tarde.`
+          message: `${sectionLabel} solo tiene ${wordCount} palabras. Intenta de nuevo más tarde.`
         });
       }
 
@@ -855,14 +874,14 @@ export async function registerRoutes(
 
       await storage.updateAgentStatus(projectId, "ghostwriter", { 
         status: "idle", 
-        currentTask: `Capítulo ${chapterNumber} regenerado (${wordCount} palabras)` 
+        currentTask: `${sectionLabel} regenerado (${wordCount} palabras)` 
       });
 
       res.json({ 
         success: true, 
         chapterNumber, 
         wordCount,
-        message: `Capítulo ${chapterNumber} regenerado exitosamente con ${wordCount} palabras`
+        message: `${sectionLabel} regenerado exitosamente con ${wordCount} palabras`
       });
 
     } catch (error) {
