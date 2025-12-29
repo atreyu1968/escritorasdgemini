@@ -150,7 +150,7 @@ export abstract class BaseAgent {
             topP: 0.95,
             ...(useThinking && modelToUse === "gemini-3-pro-preview" ? {
               thinkingConfig: {
-                thinkingBudget: 4096,
+                thinkingBudget: 2048,
                 includeThoughts: true,
               },
             } : {}),

@@ -156,6 +156,8 @@ export class EditorAgent extends BaseAgent {
       name: "El Editor",
       role: "editor",
       systemPrompt: SYSTEM_PROMPT,
+      model: "gemini-2.5-flash",
+      useThinking: false,
     });
   }
 
