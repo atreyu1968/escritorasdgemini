@@ -83,11 +83,14 @@ function getChapterColor(chapterNum: number): string {
 }
 
 export function ConsoleOutput({ logs }: ConsoleOutputProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    if (scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]");
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [logs]);
 
@@ -106,7 +109,7 @@ export function ConsoleOutput({ logs }: ConsoleOutputProps) {
           <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
         </div>
       </div>
-      <ScrollArea className="h-64">
+      <ScrollArea className="h-64" ref={scrollAreaRef}>
         <div className="p-4 space-y-1.5">
           {logs.length === 0 ? (
             <p className="text-muted-foreground/50 text-xs">
@@ -142,7 +145,6 @@ export function ConsoleOutput({ logs }: ConsoleOutputProps) {
               );
             })
           )}
-          <div ref={bottomRef} />
         </div>
       </ScrollArea>
     </div>
