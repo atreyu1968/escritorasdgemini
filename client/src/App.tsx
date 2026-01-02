@@ -17,6 +17,7 @@ import ThoughtLogsPage from "@/pages/thought-logs";
 import ConfigPage from "@/pages/config";
 import PseudonymsPage from "@/pages/pseudonyms";
 import ImportPage from "@/pages/import";
+import ExportPage from "@/pages/export";
 import SeriesPage from "@/pages/series";
 import QueuePage from "@/pages/queue";
 import asdLogo from "@assets/ASD_1766442257801.png";
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/manuscript" component={ManuscriptPage} />
       <Route path="/translations" component={ImportPage} />
+      <Route path="/export" component={ExportPage} />
       <Route path="/world-bible" component={WorldBiblePage} />
       <Route path="/thought-logs" component={ThoughtLogsPage} />
       <Route path="/pseudonyms" component={PseudonymsPage} />

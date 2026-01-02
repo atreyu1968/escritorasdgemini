@@ -3156,7 +3156,7 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         return orderA - orderB;
       });
       
-      const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.length > 50);
+      const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
       
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();

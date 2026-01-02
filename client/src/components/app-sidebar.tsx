@@ -20,6 +20,7 @@ import {
   Feather,
   User,
   Upload,
+  Download,
   Library,
   ListOrdered
 } from "lucide-react";
@@ -33,6 +34,7 @@ const mainNavItems = [
 
 const translationsNavItems = [
   { title: "Importar Libros", url: "/translations", icon: Upload },
+  { title: "Exportar y Traducir", url: "/export", icon: Download },
 ];
 
 const settingsNavItems = [
