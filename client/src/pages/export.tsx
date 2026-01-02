@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { 
   Download, 
   Languages,
@@ -19,6 +20,15 @@ import {
   Trash2,
   Library,
 } from "lucide-react";
+
+interface TranslationProgress {
+  isTranslating: boolean;
+  currentChapter: number;
+  totalChapters: number;
+  chapterTitle: string;
+  inputTokens: number;
+  outputTokens: number;
+}
 
 const SUPPORTED_LANGUAGES = [
   { code: "es", name: "Español" },
@@ -95,6 +105,14 @@ export default function ExportPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [sourceLanguage, setSourceLanguage] = useState("es");
   const [targetLanguage, setTargetLanguage] = useState("en");
+  const [translationProgress, setTranslationProgress] = useState<TranslationProgress>({
+    isTranslating: false,
+    currentChapter: 0,
+    totalChapters: 0,
+    chapterTitle: "",
+    inputTokens: 0,
+    outputTokens: 0,
+  });
 
   const { data: completedProjects = [], isLoading } = useQuery<CompletedProject[]>({
     queryKey: ["/api/projects/completed"],
@@ -103,6 +121,115 @@ export default function ExportPage() {
   const { data: savedTranslations = [], isLoading: isLoadingTranslations } = useQuery<SavedTranslation[]>({
     queryKey: ["/api/translations"],
   });
+
+  const startTranslation = useCallback((projectId: number, srcLang: string, tgtLang: string) => {
+    setTranslationProgress({
+      isTranslating: true,
+      currentChapter: 0,
+      totalChapters: 0,
+      chapterTitle: "Iniciando...",
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+
+    const eventSource = new EventSource(
+      `/api/projects/${projectId}/translate-stream?sourceLanguage=${srcLang}&targetLanguage=${tgtLang}`
+    );
+
+    eventSource.addEventListener("start", (event) => {
+      const data = JSON.parse(event.data);
+      setTranslationProgress(prev => ({
+        ...prev,
+        totalChapters: data.totalChapters,
+        chapterTitle: `Preparando ${data.totalChapters} capítulos...`,
+      }));
+    });
+
+    eventSource.addEventListener("progress", (event) => {
+      const data = JSON.parse(event.data);
+      setTranslationProgress(prev => ({
+        ...prev,
+        currentChapter: data.current,
+        totalChapters: data.total,
+        chapterTitle: data.chapterTitle,
+        inputTokens: data.inputTokens || prev.inputTokens,
+        outputTokens: data.outputTokens || prev.outputTokens,
+      }));
+    });
+
+    eventSource.addEventListener("saving", () => {
+      setTranslationProgress(prev => ({
+        ...prev,
+        chapterTitle: "Guardando traducción...",
+      }));
+    });
+
+    eventSource.addEventListener("complete", (event) => {
+      const data = JSON.parse(event.data);
+      eventSource.close();
+      
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+
+      const safeFilename = data.title.replace(/[^a-zA-Z0-9\u00C0-\u024F\s]/g, "").replace(/\s+/g, "_");
+      downloadMarkdown(`${safeFilename}_${tgtLang.toUpperCase()}.md`, data.markdown);
+
+      toast({
+        title: data.warning ? "Traducción completada con advertencia" : "Traducción completada",
+        description: data.warning || `${data.chaptersTranslated} capítulos traducidos y guardados`,
+      });
+    });
+
+    eventSource.addEventListener("error", (event) => {
+      let errorMessage = "Error en la traducción";
+      try {
+        const data = JSON.parse((event as MessageEvent).data);
+        errorMessage = data.error || errorMessage;
+      } catch {}
+      
+      eventSource.close();
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    });
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+
+      toast({
+        title: "Conexión perdida",
+        description: "Se perdió la conexión con el servidor. Intenta de nuevo.",
+        variant: "destructive",
+      });
+    };
+  }, [toast]);
 
   const exportMutation = useMutation({
     mutationFn: async (projectId: number) => {
@@ -121,27 +248,6 @@ export default function ExportPage() {
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const translateMutation = useMutation({
-    mutationFn: async ({ projectId, sourceLanguage, targetLanguage }: { projectId: number; sourceLanguage: string; targetLanguage: string }) => {
-      const response = await apiRequest("POST", `/api/projects/${projectId}/translate`, { sourceLanguage, targetLanguage });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
-      toast({
-        title: "Traducción guardada",
-        description: "La traducción se ha guardado en el repositorio. Puedes descargarla cuando quieras.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error de traducción",
         description: error.message,
         variant: "destructive",
       });
@@ -359,30 +465,57 @@ export default function ExportPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-sm">
-                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                      <DollarSign className="h-4 w-4" />
-                      <span className="font-medium">Coste estimado</span>
+                  {!translationProgress.isTranslating && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-sm">
+                      <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                        <DollarSign className="h-4 w-4" />
+                        <span className="font-medium">Coste estimado</span>
+                      </div>
+                      <p className="text-muted-foreground mt-1">
+                        ~${((selectedProject.totalWords * 1.5 / 1_000_000) * (INPUT_PRICE_PER_MILLION + OUTPUT_PRICE_PER_MILLION * 1.2)).toFixed(2)} - ${((selectedProject.totalWords * 2 / 1_000_000) * (INPUT_PRICE_PER_MILLION + OUTPUT_PRICE_PER_MILLION * 1.5)).toFixed(2)}
+                      </p>
                     </div>
-                    <p className="text-muted-foreground mt-1">
-                      ~${((selectedProject.totalWords * 1.5 / 1_000_000) * (INPUT_PRICE_PER_MILLION + OUTPUT_PRICE_PER_MILLION * 1.2)).toFixed(2)} - ${((selectedProject.totalWords * 2 / 1_000_000) * (INPUT_PRICE_PER_MILLION + OUTPUT_PRICE_PER_MILLION * 1.5)).toFixed(2)}
-                    </p>
-                  </div>
+                  )}
+
+                  {translationProgress.isTranslating && (
+                    <div className="space-y-3 p-3 bg-muted rounded-md">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium">Traduciendo...</span>
+                        <span className="text-muted-foreground">
+                          {translationProgress.currentChapter}/{translationProgress.totalChapters}
+                        </span>
+                      </div>
+                      <Progress 
+                        value={translationProgress.totalChapters > 0 
+                          ? (translationProgress.currentChapter / translationProgress.totalChapters) * 100 
+                          : 0
+                        } 
+                        className="h-2"
+                      />
+                      <p className="text-xs text-muted-foreground truncate">
+                        {translationProgress.chapterTitle}
+                      </p>
+                      {translationProgress.inputTokens > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <DollarSign className="h-3 w-3" />
+                          <span>
+                            Coste actual: ${calculateCost(translationProgress.inputTokens, translationProgress.outputTokens).toFixed(3)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <Button
-                    onClick={() => translateMutation.mutate({ 
-                      projectId: selectedProject.id, 
-                      sourceLanguage, 
-                      targetLanguage 
-                    })}
-                    disabled={translateMutation.isPending || sourceLanguage === targetLanguage}
+                    onClick={() => startTranslation(selectedProject.id, sourceLanguage, targetLanguage)}
+                    disabled={translationProgress.isTranslating || sourceLanguage === targetLanguage}
                     className="w-full"
                     data-testid="button-translate-project"
                   >
-                    {translateMutation.isPending ? (
+                    {translationProgress.isTranslating ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Traduciendo...
+                        Traduciendo {translationProgress.currentChapter}/{translationProgress.totalChapters}...
                       </>
                     ) : (
                       <>

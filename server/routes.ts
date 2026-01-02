@@ -3158,24 +3158,40 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
     }
   });
 
-  // Translate a project to another language
-  app.post("/api/projects/:id/translate", async (req: Request, res: Response) => {
+  // Translate a project to another language with SSE progress
+  app.get("/api/projects/:id/translate-stream", async (req: Request, res: Response) => {
+    const projectId = parseInt(req.params.id);
+    const targetLanguage = req.query.targetLanguage as string;
+    const sourceLanguage = (req.query.sourceLanguage as string) || "es";
+    
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    
+    const sendEvent = (event: string, data: any) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    
     try {
-      const projectId = parseInt(req.params.id);
-      const { targetLanguage, sourceLanguage = "es" } = req.body;
-      
       if (!targetLanguage) {
-        return res.status(400).json({ error: "targetLanguage is required" });
+        sendEvent("error", { error: "targetLanguage is required" });
+        res.end();
+        return;
       }
       
       const project = await storage.getProject(projectId);
       if (!project) {
-        return res.status(404).json({ error: "Project not found" });
+        sendEvent("error", { error: "Project not found" });
+        res.end();
+        return;
       }
       
       const chapters = await storage.getChaptersByProject(projectId);
       if (chapters.length === 0) {
-        return res.status(400).json({ error: "No chapters found in project" });
+        sendEvent("error", { error: "No chapters found in project" });
+        res.end();
+        return;
       }
       
       const sortedChapters = [...chapters].sort((a, b) => {
@@ -3185,6 +3201,14 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
       });
       
       const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
+      const totalChapters = chaptersWithContent.length;
+      
+      sendEvent("start", { 
+        projectTitle: project.title,
+        totalChapters,
+        sourceLanguage,
+        targetLanguage
+      });
       
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
@@ -3198,9 +3222,23 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
       
       let totalInputTokens = 0;
       let totalOutputTokens = 0;
+      let completedCount = 0;
       
       for (const chapter of chaptersWithContent) {
-        console.log(`[Translate] Translating chapter ${chapter.chapterNumber}: ${chapter.title}`);
+        const chapterLabel = chapter.chapterNumber === 0 ? "Prólogo" :
+                            chapter.chapterNumber === -1 ? "Epílogo" :
+                            chapter.chapterNumber === -2 ? "Nota del Autor" :
+                            `Capítulo ${chapter.chapterNumber}`;
+        
+        sendEvent("progress", {
+          current: completedCount + 1,
+          total: totalChapters,
+          chapterNumber: chapter.chapterNumber,
+          chapterTitle: chapter.title || chapterLabel,
+          status: "translating"
+        });
+        
+        console.log(`[Translate] Translating ${chapterLabel}: ${chapter.title}`);
         
         const result = await translator.execute({
           content: chapter.content || "",
@@ -3213,7 +3251,7 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         if (result.result) {
           translatedChapters.push({
             chapterNumber: chapter.chapterNumber,
-            title: chapter.title || `Chapter ${chapter.chapterNumber}`,
+            title: chapter.title || chapterLabel,
             translatedContent: result.result.translated_text,
             notes: result.result.notes,
           });
@@ -3221,6 +3259,17 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         
         totalInputTokens += (result as any).inputTokens || 0;
         totalOutputTokens += (result as any).outputTokens || 0;
+        completedCount++;
+        
+        sendEvent("progress", {
+          current: completedCount,
+          total: totalChapters,
+          chapterNumber: chapter.chapterNumber,
+          chapterTitle: chapter.title || chapterLabel,
+          status: "completed",
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens
+        });
       }
       
       const lines: string[] = [];
@@ -3253,34 +3302,59 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
       
       const totalWords = markdown.split(/\s+/).filter(w => w.length > 0).length;
       
-      const savedTranslation = await storage.createTranslation({
-        projectId,
-        projectTitle: project.title,
-        sourceLanguage,
-        targetLanguage,
-        chaptersTranslated: translatedChapters.length,
-        totalWords,
-        markdown,
-        inputTokens: totalInputTokens,
-        outputTokens: totalOutputTokens,
-      });
+      sendEvent("saving", { message: "Guardando traducción..." });
       
-      res.json({
-        id: savedTranslation.id,
-        projectId,
-        title: project.title,
-        sourceLanguage,
-        targetLanguage,
-        chaptersTranslated: translatedChapters.length,
-        markdown,
-        tokensUsed: {
-          input: totalInputTokens,
-          output: totalOutputTokens,
-        },
-      });
+      try {
+        const savedTranslation = await storage.createTranslation({
+          projectId,
+          projectTitle: project.title,
+          sourceLanguage,
+          targetLanguage,
+          chaptersTranslated: translatedChapters.length,
+          totalWords,
+          markdown,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+        });
+        
+        sendEvent("complete", {
+          id: savedTranslation.id,
+          projectId,
+          title: project.title,
+          sourceLanguage,
+          targetLanguage,
+          chaptersTranslated: translatedChapters.length,
+          totalWords,
+          markdown,
+          tokensUsed: {
+            input: totalInputTokens,
+            output: totalOutputTokens,
+          },
+        });
+      } catch (saveError) {
+        console.error("Error saving translation to DB:", saveError);
+        sendEvent("complete", {
+          id: null,
+          projectId,
+          title: project.title,
+          sourceLanguage,
+          targetLanguage,
+          chaptersTranslated: translatedChapters.length,
+          totalWords,
+          markdown,
+          tokensUsed: {
+            input: totalInputTokens,
+            output: totalOutputTokens,
+          },
+          warning: "Translation completed but could not save to database. Download available.",
+        });
+      }
+      
+      res.end();
     } catch (error) {
       console.error("Error translating project:", error);
-      res.status(500).json({ error: "Failed to translate project" });
+      sendEvent("error", { error: "Failed to translate project" });
+      res.end();
     }
   });
 
