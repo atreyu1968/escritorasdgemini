@@ -95,7 +95,7 @@ export async function registerRoutes(
 
   app.get("/api/projects/completed", async (_req: Request, res: Response) => {
     try {
-      const allProjects = await storage.getProjects();
+      const allProjects = await storage.getAllProjects();
       const completedProjects = allProjects.filter(p => p.status === "completed");
       
       const projectsWithStats = await Promise.all(
