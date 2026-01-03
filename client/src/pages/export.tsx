@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { 
   Download, 
   Languages,
@@ -20,6 +21,7 @@ import {
   Trash2,
   Library,
   X,
+  Search,
 } from "lucide-react";
 
 interface TranslationProgress {
@@ -146,6 +148,8 @@ export default function ExportPage() {
   const [sourceLanguage, setSourceLanguage] = useState("es");
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [eventSourceRef, setEventSourceRef] = useState<EventSource | null>(null);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [translationSearch, setTranslationSearch] = useState("");
   
   const savedState = loadTranslationState();
   const [translationProgress, setTranslationProgress] = useState<TranslationProgress>({
@@ -411,6 +415,16 @@ export default function ExportPage() {
 
   const selectedProject = completedProjects.find(p => p.id === selectedProjectId);
 
+  const filteredProjects = completedProjects.filter(p => 
+    p.title.toLowerCase().includes(projectSearch.toLowerCase()) ||
+    p.genre.toLowerCase().includes(projectSearch.toLowerCase())
+  );
+
+  const filteredTranslations = savedTranslations.filter(t =>
+    t.projectTitle.toLowerCase().includes(translationSearch.toLowerCase()) ||
+    getLangName(t.targetLanguage).toLowerCase().includes(translationSearch.toLowerCase())
+  );
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div>
@@ -431,12 +445,22 @@ export default function ExportPage() {
               {completedProjects.length} proyecto(s) disponible(s) para exportar
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar proyectos..."
+                value={projectSearch}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-projects"
+              />
+            </div>
             {isLoading ? (
               <div className="flex items-center justify-center h-32">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : completedProjects.length === 0 ? (
+            ) : filteredProjects.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No hay proyectos completados</p>
@@ -445,7 +469,7 @@ export default function ExportPage() {
             ) : (
               <ScrollArea className="h-[300px]">
                 <div className="space-y-3 pr-4">
-                  {completedProjects.map((project) => (
+                  {filteredProjects.map((project) => (
                     <Card
                       key={project.id}
                       className={`hover-elevate cursor-pointer transition-all ${
@@ -668,12 +692,22 @@ export default function ExportPage() {
             Traducciones guardadas listas para descargar
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar traducciones..."
+              value={translationSearch}
+              onChange={(e) => setTranslationSearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-translations"
+            />
+          </div>
           {isLoadingTranslations ? (
             <div className="flex items-center justify-center h-24">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : savedTranslations.length === 0 ? (
+          ) : filteredTranslations.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Library className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No hay traducciones guardadas</p>
@@ -681,7 +715,7 @@ export default function ExportPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {savedTranslations.map((translation) => (
+              {filteredTranslations.map((translation) => (
                 <div
                   key={translation.id}
                   className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-md"
