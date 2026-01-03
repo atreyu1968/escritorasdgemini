@@ -3115,6 +3115,14 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         return orderA - orderB;
       });
       
+      // Helper function to strip chapter title headers from content
+      const stripChapterHeaders = (content: string): string => {
+        let cleaned = content.trim();
+        // Remove markdown headers at the start that contain chapter/prólogo/epílogo info
+        cleaned = cleaned.replace(/^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|Prólogo|Prologue|Epílogo|Epilogue|Nota del Autor|Author'?s? Note)[^\n]*\n+/i, '');
+        return cleaned.trim();
+      };
+      
       const lines: string[] = [];
       lines.push(`# ${project.title}`);
       lines.push("");
@@ -3137,7 +3145,7 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         
         lines.push(`## ${heading}`);
         lines.push("");
-        lines.push(chapter.content.trim());
+        lines.push(stripChapterHeaders(chapter.content));
         lines.push("");
         lines.push("---");
         lines.push("");
@@ -3272,6 +3280,14 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         });
       }
       
+      // Helper function to strip chapter title headers from content
+      const stripChapterHeaders = (content: string): string => {
+        let cleaned = content.trim();
+        // Remove markdown headers at the start that contain chapter/prólogo/epílogo info
+        cleaned = cleaned.replace(/^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|Prólogo|Prologue|Epílogo|Epilogue|Nota del Autor|Author'?s? Note)[^\n]*\n+/i, '');
+        return cleaned.trim();
+      };
+      
       const lines: string[] = [];
       lines.push(`# ${project.title}`);
       lines.push("");
@@ -3292,7 +3308,7 @@ El capítulo debe incorporar el elemento indicado mientras mantiene la coherenci
         
         lines.push(`## ${heading}`);
         lines.push("");
-        lines.push(chapter.translatedContent.trim());
+        lines.push(stripChapterHeaders(chapter.translatedContent));
         lines.push("");
         lines.push("---");
         lines.push("");

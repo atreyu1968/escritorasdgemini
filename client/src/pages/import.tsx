@@ -76,6 +76,13 @@ function sortChaptersForDisplay<T extends { chapterNumber: number }>(chapters: T
   });
 }
 
+function stripChapterHeaders(content: string): string {
+  let cleaned = content.trim();
+  // Remove markdown headers at the start that contain chapter/prólogo/epílogo info
+  cleaned = cleaned.replace(/^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|Prólogo|Prologue|Epílogo|Epilogue|Nota del Autor|Author'?s? Note)[^\n]*\n+/i, '');
+  return cleaned.trim();
+}
+
 function generateMarkdownExport(
   manuscript: ImportedManuscript,
   chapters: ImportedChapter[]
@@ -105,7 +112,7 @@ function generateMarkdownExport(
     
     lines.push(`## ${heading}`);
     lines.push("");
-    lines.push(content.trim());
+    lines.push(stripChapterHeaders(content));
     lines.push("");
     lines.push("---");
     lines.push("");
