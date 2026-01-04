@@ -798,6 +798,26 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`DATE(${aiUsageEvents.createdAt}) DESC`)
       .limit(30);
   }
+
+  async getAiUsageByModel(): Promise<Array<{
+    model: string;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalThinkingTokens: number;
+    totalCostUsd: number;
+    eventCount: number;
+  }>> {
+    return db.select({
+      model: aiUsageEvents.model,
+      totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.inputTokens}), 0)`,
+      totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.outputTokens}), 0)`,
+      totalThinkingTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.thinkingTokens}), 0)`,
+      totalCostUsd: sql<number>`COALESCE(SUM(CAST(${aiUsageEvents.totalCostUsd} AS numeric)), 0)`,
+      eventCount: sql<number>`COUNT(*)`,
+    }).from(aiUsageEvents)
+      .groupBy(aiUsageEvents.model)
+      .orderBy(sql`SUM(CAST(${aiUsageEvents.totalCostUsd} AS numeric)) DESC`);
+  }
 }
 
 export const storage = new DatabaseStorage();

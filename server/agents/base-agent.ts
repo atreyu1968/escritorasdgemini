@@ -1,4 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
+import { calculateRealCost, formatCostForStorage } from "../cost-calculator";
+import { storage } from "../storage";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
@@ -194,6 +196,33 @@ export abstract class BaseAgent {
           outputTokens: usageMetadata?.candidatesTokenCount || 0,
           thinkingTokens: usageMetadata?.thoughtsTokenCount || 0,
         };
+
+        // Track AI usage event with real costs
+        if (projectId && (tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0)) {
+          const costs = calculateRealCost(
+            modelToUse,
+            tokenUsage.inputTokens,
+            tokenUsage.outputTokens,
+            tokenUsage.thinkingTokens
+          );
+          
+          try {
+            await storage.createAiUsageEvent({
+              projectId,
+              agentName: this.config.name,
+              model: modelToUse,
+              inputTokens: tokenUsage.inputTokens,
+              outputTokens: tokenUsage.outputTokens,
+              thinkingTokens: tokenUsage.thinkingTokens,
+              inputCostUsd: formatCostForStorage(costs.inputCost),
+              outputCostUsd: formatCostForStorage(costs.outputCost + costs.thinkingCost),
+              totalCostUsd: formatCostForStorage(costs.totalCost),
+              operation: "generate",
+            });
+          } catch (err) {
+            console.error(`[${this.config.name}] Failed to log AI usage event:`, err);
+          }
+        }
 
         return { content, thoughtSignature, tokenUsage };
       } catch (error) {

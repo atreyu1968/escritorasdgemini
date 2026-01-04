@@ -6,10 +6,11 @@ import {
   DollarSign, 
   TrendingUp, 
   Cpu, 
-  FileText,
   Calendar,
   Bot,
-  Info
+  Info,
+  Layers,
+  Zap
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -21,15 +22,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface ProjectSummary {
-  id: number;
-  title: string;
-  status: string;
+interface UsageSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalThinkingTokens: number;
-  estimatedCostUsd: number;
-  createdAt: string;
+  totalCostUsd: number;
+  eventCount: number;
 }
 
 interface UsageByDay {
@@ -48,13 +46,27 @@ interface UsageByAgent {
   eventCount: number;
 }
 
-const PRICING_INFO = `Precios de Gemini 2.5 Pro (por millón de tokens):
-• Input: $1.25/M tokens (contexto ≤200K)
-• Output: $10.00/M tokens (contexto ≤200K)
-• Thinking: se cuenta como output
+interface UsageByModel {
+  model: string;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalThinkingTokens: number;
+  totalCostUsd: number;
+  eventCount: number;
+}
 
-El costo real puede variar según el modelo específico usado.
-Replit puede aplicar un markup sobre estos precios.`;
+const PRICING_INFO = `Precios reales por modelo (por millón de tokens):
+
+gemini-3-pro-preview:
+  Input: $1.25/M, Output: $10.00/M, Thinking: $3.00/M
+
+gemini-3-flash:
+  Input: $0.50/M, Output: $3.00/M, Thinking: $1.50/M
+
+gemini-2.5-flash:
+  Input: $0.30/M, Output: $2.50/M, Thinking: $1.00/M
+
+Los costos se calculan según el modelo usado por cada agente.`;
 
 function formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
@@ -63,34 +75,32 @@ function formatNumber(num: number): string {
 }
 
 function formatCurrency(amount: number): string {
-  return `$${amount.toFixed(2)}`;
+  return `$${amount.toFixed(4)}`;
 }
 
-function getStatusBadge(status: string) {
-  const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    completed: "default",
-    generating: "secondary",
-    failed: "destructive",
-    paused: "outline",
-    idle: "outline",
+function getModelBadge(model: string) {
+  const colors: Record<string, "default" | "secondary" | "outline"> = {
+    "gemini-3-pro-preview": "default",
+    "gemini-3-flash": "secondary",
+    "gemini-2.5-flash": "outline",
+    "gemini-2.0-flash": "outline",
   };
-  const labels: Record<string, string> = {
-    completed: "Completado",
-    generating: "Generando",
-    failed: "Fallido",
-    paused: "Pausado",
-    idle: "Inactivo",
+  const shortNames: Record<string, string> = {
+    "gemini-3-pro-preview": "3 Pro",
+    "gemini-3-flash": "3 Flash",
+    "gemini-2.5-flash": "2.5 Flash",
+    "gemini-2.0-flash": "2.0 Flash",
   };
   return (
-    <Badge variant={variants[status] || "outline"} className="text-xs">
-      {labels[status] || status}
+    <Badge variant={colors[model] || "outline"} className="text-xs font-mono">
+      {shortNames[model] || model}
     </Badge>
   );
 }
 
 export default function CostsPage() {
-  const { data: projectsSummary, isLoading: loadingProjects } = useQuery<ProjectSummary[]>({
-    queryKey: ["/api/ai-usage/projects-summary"],
+  const { data: usageSummary, isLoading: loadingSummary } = useQuery<UsageSummary>({
+    queryKey: ["/api/ai-usage/summary"],
   });
 
   const { data: usageByDay, isLoading: loadingByDay } = useQuery<UsageByDay[]>({
@@ -101,11 +111,15 @@ export default function CostsPage() {
     queryKey: ["/api/ai-usage/by-agent"],
   });
 
-  const totalEstimatedCost = projectsSummary?.reduce((sum, p) => sum + p.estimatedCostUsd, 0) || 0;
-  const totalInputTokens = projectsSummary?.reduce((sum, p) => sum + p.totalInputTokens, 0) || 0;
-  const totalOutputTokens = projectsSummary?.reduce((sum, p) => sum + p.totalOutputTokens, 0) || 0;
-  const totalThinkingTokens = projectsSummary?.reduce((sum, p) => sum + p.totalThinkingTokens, 0) || 0;
-  const projectCount = projectsSummary?.length || 0;
+  const { data: usageByModel, isLoading: loadingByModel } = useQuery<UsageByModel[]>({
+    queryKey: ["/api/ai-usage/by-model"],
+  });
+
+  const totalCost = Number(usageSummary?.totalCostUsd || 0);
+  const totalInputTokens = usageSummary?.totalInputTokens || 0;
+  const totalOutputTokens = usageSummary?.totalOutputTokens || 0;
+  const totalThinkingTokens = usageSummary?.totalThinkingTokens || 0;
+  const eventCount = usageSummary?.eventCount || 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -113,7 +127,7 @@ export default function CostsPage() {
         <div>
           <h1 className="text-2xl font-bold">Control de Costos API</h1>
           <p className="text-muted-foreground">
-            Monitoreo del uso de tokens y estimación de costos de Google Gemini
+            Costos reales basados en el modelo usado por cada agente
           </p>
         </div>
         <Tooltip>
@@ -132,17 +146,17 @@ export default function CostsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-sm font-medium">Costo Total Estimado</CardTitle>
+            <CardTitle className="text-sm font-medium">Costo Total Real</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingProjects ? (
+            {loadingSummary ? (
               <Skeleton className="h-8 w-24" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{formatCurrency(totalEstimatedCost)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(totalCost)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Basado en precios de Gemini 2.5 Pro
+                  {eventCount} llamadas a la API
                 </p>
               </>
             )}
@@ -155,13 +169,13 @@ export default function CostsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingProjects ? (
+            {loadingSummary ? (
               <Skeleton className="h-8 w-24" />
             ) : (
               <>
                 <div className="text-2xl font-bold">{formatNumber(totalInputTokens)}</div>
                 <p className="text-xs text-muted-foreground">
-                  ~{formatCurrency((totalInputTokens / 1_000_000) * 1.25)} a $1.25/M
+                  Prompts enviados
                 </p>
               </>
             )}
@@ -174,7 +188,7 @@ export default function CostsPage() {
             <Cpu className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingProjects ? (
+            {loadingSummary ? (
               <Skeleton className="h-8 w-24" />
             ) : (
               <>
@@ -189,17 +203,19 @@ export default function CostsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-sm font-medium">Proyectos</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Costo Promedio</CardTitle>
+            <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loadingProjects ? (
+            {loadingSummary ? (
               <Skeleton className="h-8 w-24" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{projectCount}</div>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(totalCost / Math.max(eventCount, 1))}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Promedio: {formatCurrency(totalEstimatedCost / Math.max(projectCount, 1))}/proyecto
+                  Por llamada a la API
                 </p>
               </>
             )}
@@ -211,52 +227,49 @@ export default function CostsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Costos por Proyecto
+              <Layers className="h-5 w-5" />
+              Costos por Modelo
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {loadingProjects ? (
+            {loadingByModel ? (
               <div className="space-y-2">
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
               </div>
-            ) : !projectsSummary?.length ? (
+            ) : !usageByModel?.length ? (
               <p className="text-muted-foreground text-center py-8">
-                No hay proyectos con uso registrado
+                No hay datos de uso registrados
               </p>
             ) : (
               <div className="max-h-96 overflow-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Proyecto</TableHead>
-                      <TableHead>Estado</TableHead>
+                      <TableHead>Modelo</TableHead>
                       <TableHead className="text-right">Input</TableHead>
                       <TableHead className="text-right">Output</TableHead>
+                      <TableHead className="text-right">Thinking</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {projectsSummary
-                      .filter(p => p.totalInputTokens > 0 || p.totalOutputTokens > 0)
-                      .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
-                      .map((project) => (
-                        <TableRow key={project.id}>
-                          <TableCell className="font-medium max-w-48 truncate" title={project.title}>
-                            {project.title}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(project.status)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {formatNumber(project.totalInputTokens)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {formatNumber(project.totalOutputTokens)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm font-semibold">
-                            {formatCurrency(project.estimatedCostUsd)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                    {usageByModel.map((row) => (
+                      <TableRow key={row.model}>
+                        <TableCell>{getModelBadge(row.model)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {formatNumber(row.totalInputTokens)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {formatNumber(row.totalOutputTokens)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                          {formatNumber(row.totalThinkingTokens)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold">
+                          {formatCurrency(Number(row.totalCostUsd))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -289,7 +302,7 @@ export default function CostsPage() {
                       <TableHead className="text-right">Input</TableHead>
                       <TableHead className="text-right">Output</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
-                      <TableHead className="text-right">Eventos</TableHead>
+                      <TableHead className="text-right">Llamadas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -373,12 +386,12 @@ export default function CostsPage() {
             <Info className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
             <div className="text-sm text-muted-foreground space-y-2">
               <p>
-                <strong>Nota sobre los costos:</strong> Las estimaciones están basadas en los precios 
-                públicos de Gemini 2.5 Pro. Replit puede aplicar su propio markup sobre estos precios.
+                <strong>Costos reales:</strong> Los costos se calculan usando los precios oficiales de cada modelo 
+                de Gemini y el conteo real de tokens de cada llamada a la API.
               </p>
               <p>
-                Los costos mostrados son solo estimaciones basadas en el conteo de tokens registrado. 
-                Para ver los costos reales facturados, consulta tu panel de facturación de Replit.
+                El tracking de costos se activa automáticamente para nuevas generaciones. 
+                Los datos anteriores sin tracking mostrarán $0.00.
               </p>
             </div>
           </div>

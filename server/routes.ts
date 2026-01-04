@@ -4011,6 +4011,16 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  app.get("/api/ai-usage/by-model", async (_req: Request, res: Response) => {
+    try {
+      const byModel = await storage.getAiUsageByModel();
+      res.json(byModel);
+    } catch (error) {
+      console.error("Error fetching AI usage by model:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage by model" });
+    }
+  });
+
   app.get("/api/ai-usage/events", async (_req: Request, res: Response) => {
     try {
       const events = await storage.getAllAiUsageEvents();
