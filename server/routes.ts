@@ -3789,6 +3789,14 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           chapterTitle: chapter.title || chapterLabel,
           status: "translating"
         });
+
+        // Update the database record with partial progress so the UI sees it
+        if (translationRecordId) {
+          await storage.updateTranslation(translationRecordId, {
+            chaptersTranslated: completedCount,
+            status: "translating"
+          }).catch(err => console.error("[Translation] Progress DB update failed:", err));
+        }
         
         console.log(`[Translate] Translating ${chapterLabel}: ${chapter.title}`);
         
@@ -3962,7 +3970,24 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
   app.get("/api/translations", async (_req: Request, res: Response) => {
     try {
       const allTranslations = await storage.getAllTranslations();
-      const translationsWithoutMarkdown = allTranslations.map(t => ({
+      
+      // Safety check: Mark any "translating" record older than 15 minutes as "error"
+      // to prevent permanent "Procesando..." status if a worker crashed
+      const now = new Date();
+      const translations = await Promise.all(allTranslations.map(async t => {
+        if (t.status === "translating") {
+          const createdAt = new Date(t.createdAt);
+          const diffMinutes = (now.getTime() - createdAt.getTime()) / 1000 / 60;
+          if (diffMinutes > 15) {
+            console.log(`[Cleanup] Marking stale translation ID ${t.id} as error`);
+            const updated = await storage.updateTranslation(t.id, { status: "error" });
+            return updated || t;
+          }
+        }
+        return t;
+      }));
+
+      const translationsWithoutMarkdown = translations.map(t => ({
         id: t.id,
         projectId: t.projectId,
         projectTitle: t.projectTitle,
