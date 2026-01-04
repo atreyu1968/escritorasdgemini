@@ -267,6 +267,8 @@ export default function ExportPage() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+      // Invalidate specifically the current translations to catch the status change
+      queryClient.refetchQueries({ queryKey: ["/api/translations"] });
 
       const safeFilename = data.title.replace(/[^a-zA-Z0-9\u00C0-\u024F\s]/g, "").replace(/\s+/g, "_");
       downloadMarkdown(`${safeFilename}_${tgtLang.toUpperCase()}.md`, data.markdown);

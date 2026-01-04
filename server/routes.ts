@@ -3704,6 +3704,13 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
+    const project = await storage.getProject(projectId);
+    if (!project) {
+      sendEvent("error", { error: "Project not found" });
+      res.end();
+      return;
+    }
+
     // Create initial translation record in repository
     let translationRecordId: number | null = null;
     try {
@@ -3728,13 +3735,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     try {
       if (!targetLanguage) {
         sendEvent("error", { error: "targetLanguage is required" });
-        res.end();
-        return;
-      }
-      
-      const project = await storage.getProject(projectId);
-      if (!project) {
-        sendEvent("error", { error: "Project not found" });
         res.end();
         return;
       }
@@ -3972,7 +3972,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         totalWords: t.totalWords,
         inputTokens: t.inputTokens,
         outputTokens: t.outputTokens,
-        status: t.status || "completed",
+        status: t.status,
         createdAt: t.createdAt,
       }));
       res.json(translationsWithoutMarkdown);
