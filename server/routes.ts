@@ -3792,10 +3792,15 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
         // Update the database record with partial progress so the UI sees it
         if (translationRecordId) {
-          await storage.updateTranslation(translationRecordId, {
-            chaptersTranslated: completedCount,
-            status: "translating"
-          }).catch(err => console.error("[Translation] Progress DB update failed:", err));
+          try {
+            await storage.updateTranslation(translationRecordId, {
+              chaptersTranslated: completedCount,
+              status: "translating"
+            });
+            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${completedCount}/${totalChapters}`);
+          } catch (err) {
+            console.error("[Translation] Progress DB update failed:", err);
+          }
         }
         
         console.log(`[Translate] Translating ${chapterLabel}: ${chapter.title}`);
@@ -3971,15 +3976,16 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     try {
       const allTranslations = await storage.getAllTranslations();
       
-      // Safety check: Mark any "translating" record older than 15 minutes as "error"
-      // to prevent permanent "Procesando..." status if a worker crashed
       const now = new Date();
       const translations = await Promise.all(allTranslations.map(async t => {
+        // Only mark as error if it's REALLY old (1 hour) to be safe
+        // AND its updatedAt (if it had one) hasn't changed.
+        // For now, let's use a 60 minute threshold for automatic error marking.
         if (t.status === "translating") {
           const createdAt = new Date(t.createdAt);
           const diffMinutes = (now.getTime() - createdAt.getTime()) / 1000 / 60;
-          if (diffMinutes > 15) {
-            console.log(`[Cleanup] Marking stale translation ID ${t.id} as error`);
+          if (diffMinutes > 60) { 
+            console.log(`[Cleanup] Marking stale translation ID ${t.id} as error (60min timeout)`);
             const updated = await storage.updateTranslation(t.id, { status: "error" });
             return updated || t;
           }
@@ -3993,7 +3999,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         projectTitle: t.projectTitle,
         sourceLanguage: t.sourceLanguage,
         targetLanguage: t.targetLanguage,
-        chaptersTranslated: t.chaptersTranslated,
+        chaptersTranslated: t.chaptersTranslated || 0,
         totalWords: t.totalWords,
         inputTokens: t.inputTokens,
         outputTokens: t.outputTokens,

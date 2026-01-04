@@ -229,6 +229,10 @@ export default function ExportPage() {
 
     eventSource.addEventListener("progress", (event) => {
       const data = JSON.parse(event.data);
+      
+      // Force refresh on every progress event to update the repository line
+      queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+
       setTranslationProgress(prev => {
         const newState = {
           ...prev,
