@@ -3703,6 +3703,27 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     const sendEvent = (event: string, data: any) => {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
+
+    // Create initial translation record in repository
+    let translationRecordId: number | null = null;
+    try {
+      const translation = await storage.createTranslation({
+        projectId,
+        projectTitle: project.title,
+        sourceLanguage,
+        targetLanguage,
+        status: "translating",
+        chaptersTranslated: 0,
+        totalWords: 0,
+        markdown: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      translationRecordId = translation.id;
+      console.log(`[Translation] Initialized repository record ID ${translationRecordId}`);
+    } catch (dbError) {
+      console.error("Error creating initial translation record:", dbError);
+    }
     
     try {
       if (!targetLanguage) {
@@ -3853,36 +3874,44 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       sendEvent("saving", { message: "Guardando traducción..." });
       
       try {
-        // Check if translation already exists for this project+language
-        const existingTranslation = await storage.findExistingTranslation(projectId, targetLanguage);
-        
         let savedTranslation;
-        if (existingTranslation) {
-          // Update existing translation instead of creating duplicate
-          savedTranslation = await storage.updateTranslation(existingTranslation.id, {
-            projectTitle: project.title,
-            sourceLanguage,
-            chaptersTranslated: translatedChapters.length,
-            totalWords,
-            markdown,
-            inputTokens: (existingTranslation.inputTokens || 0) + totalInputTokens,
-            outputTokens: (existingTranslation.outputTokens || 0) + totalOutputTokens,
-          });
-          console.log(`[Translation] Updated existing translation ID ${existingTranslation.id}`);
-        } else {
-          // Create new translation
-          savedTranslation = await storage.createTranslation({
-            projectId,
-            projectTitle: project.title,
-            sourceLanguage,
-            targetLanguage,
+        if (translationRecordId) {
+          // Update the record we created at the start
+          savedTranslation = await storage.updateTranslation(translationRecordId, {
+            status: "completed",
             chaptersTranslated: translatedChapters.length,
             totalWords,
             markdown,
             inputTokens: totalInputTokens,
             outputTokens: totalOutputTokens,
           });
-          console.log(`[Translation] Created new translation ID ${savedTranslation.id}`);
+          console.log(`[Translation] Finalized repository record ID ${translationRecordId}`);
+        } else {
+          // Fallback: check if one already exists or create new
+          const existingTranslation = await storage.findExistingTranslation(projectId, targetLanguage);
+          if (existingTranslation) {
+            savedTranslation = await storage.updateTranslation(existingTranslation.id, {
+              status: "completed",
+              chaptersTranslated: translatedChapters.length,
+              totalWords,
+              markdown,
+              inputTokens: (existingTranslation.inputTokens || 0) + totalInputTokens,
+              outputTokens: (existingTranslation.outputTokens || 0) + totalOutputTokens,
+            });
+          } else {
+            savedTranslation = await storage.createTranslation({
+              projectId,
+              projectTitle: project.title,
+              sourceLanguage,
+              targetLanguage,
+              status: "completed",
+              chaptersTranslated: translatedChapters.length,
+              totalWords,
+              markdown,
+              inputTokens: totalInputTokens,
+              outputTokens: totalOutputTokens,
+            });
+          }
         }
         
         sendEvent("complete", {
@@ -3898,10 +3927,13 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
             input: totalInputTokens,
             output: totalOutputTokens,
           },
-          updated: !!existingTranslation,
+          updated: !!translationRecordId,
         });
       } catch (saveError) {
         console.error("Error saving translation to DB:", saveError);
+        if (translationRecordId) {
+          await storage.updateTranslation(translationRecordId, { status: "error" }).catch(() => {});
+        }
         sendEvent("complete", {
           id: null,
           projectId,
@@ -3940,6 +3972,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         totalWords: t.totalWords,
         inputTokens: t.inputTokens,
         outputTokens: t.outputTokens,
+        status: t.status || "completed",
         createdAt: t.createdAt,
       }));
       res.json(translationsWithoutMarkdown);

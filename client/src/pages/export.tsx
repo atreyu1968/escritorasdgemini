@@ -63,6 +63,7 @@ interface SavedTranslation {
   totalWords: number;
   inputTokens: number;
   outputTokens: number;
+  status: "pending" | "translating" | "completed" | "error";
   createdAt: string;
 }
 
@@ -167,6 +168,11 @@ export default function ExportPage() {
 
   const { data: savedTranslations = [], isLoading: isLoadingTranslations } = useQuery<SavedTranslation[]>({
     queryKey: ["/api/translations"],
+    refetchInterval: (query) => {
+      // Poll if any translation is currently in progress
+      const hasInProgress = query.state.data?.some(t => t.status === "translating");
+      return hasInProgress ? 3000 : false;
+    }
   });
 
   const startTranslation = useCallback((projectId: number, srcLang: string, tgtLang: string, projectTitle?: string) => {
@@ -718,43 +724,74 @@ export default function ExportPage() {
               {filteredTranslations.map((translation) => (
                 <div
                   key={translation.id}
-                  className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-md"
+                  className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-md border border-border"
                   data-testid={`translation-${translation.id}`}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{translation.projectTitle}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium truncate">{translation.projectTitle}</p>
+                      {translation.status === "translating" ? (
+                        <Badge variant="outline" className="animate-pulse bg-blue-500/10 text-blue-600 border-blue-200">
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          Procesando...
+                        </Badge>
+                      ) : translation.status === "completed" ? (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Listo
+                        </Badge>
+                      ) : translation.status === "error" ? (
+                        <Badge variant="destructive">Error</Badge>
+                      ) : null}
+                    </div>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
                       <Badge variant="outline">
                         {getLangName(translation.sourceLanguage)} → {getLangName(translation.targetLanguage)}
                       </Badge>
                       <span>{translation.chaptersTranslated} cap.</span>
-                      <span>{formatNumber(translation.totalWords || 0)} palabras</span>
-                      <span className="text-xs">
-                        ${calculateCost(translation.inputTokens || 0, translation.outputTokens || 0).toFixed(4)}
-                      </span>
+                      {translation.totalWords > 0 && <span>{formatNumber(translation.totalWords)} palabras</span>}
+                      {translation.inputTokens > 0 && (
+                        <span className="text-xs">
+                          ${calculateCost(translation.inputTokens, translation.outputTokens).toFixed(4)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => downloadTranslationMutation.mutate(translation.id)}
-                      disabled={downloadTranslationMutation.isPending}
-                      data-testid={`button-download-translation-${translation.id}`}
-                    >
-                      {downloadTranslationMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                    </Button>
+                    {translation.status === "completed" ? (
+                      <Button
+                        size="sm"
+                        onClick={() => downloadTranslationMutation.mutate(translation.id)}
+                        disabled={downloadTranslationMutation.isPending}
+                        data-testid={`button-download-translation-${translation.id}`}
+                      >
+                        {downloadTranslationMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4 mr-2" />
+                        )}
+                        Descargar
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled
+                        className="opacity-50"
+                      >
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Traduciendo
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => deleteTranslationMutation.mutate(translation.id)}
                       disabled={deleteTranslationMutation.isPending}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       data-testid={`button-delete-translation-${translation.id}`}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

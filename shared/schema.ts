@@ -469,6 +469,7 @@ export const translations = pgTable("translations", {
   markdown: text("markdown").notNull(),
   inputTokens: integer("input_tokens").default(0),
   outputTokens: integer("output_tokens").default(0),
+  status: text("status").notNull().default("pending"), // pending, translating, completed, error
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

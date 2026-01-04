@@ -713,7 +713,7 @@ export class DatabaseStorage implements IStorage {
     return translation;
   }
 
-  async updateTranslation(id: number, data: Partial<InsertTranslation>): Promise<Translation | undefined> {
+  async updateTranslation(id: number, data: Partial<Translation>): Promise<Translation | undefined> {
     const [updated] = await db.update(translations).set(data).where(eq(translations.id, id)).returning();
     return updated;
   }
