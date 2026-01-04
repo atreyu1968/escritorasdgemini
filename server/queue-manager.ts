@@ -12,8 +12,8 @@ interface QueueEvent {
   error?: string;
 }
 
-const HEARTBEAT_TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes without activity = frozen
-const HEARTBEAT_CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
+const HEARTBEAT_TIMEOUT_MS = 4 * 60 * 1000; // 4 minutes without activity = frozen
+const HEARTBEAT_CHECK_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 
 export class QueueManager {
   private isRunning = false;
@@ -182,10 +182,10 @@ export class QueueManager {
       clearInterval(this.globalFrozenInterval);
     }
     
-    // Check every 2 minutes for frozen projects (uses DB, survives deploys)
+    // Check every 1 minute for frozen projects (uses DB, survives deploys)
     this.globalFrozenInterval = setInterval(async () => {
       await this.checkForFrozenProjects();
-    }, 2 * 60 * 1000);
+    }, 60 * 1000);
     
     console.log("[QueueManager] Global frozen project monitor started");
   }
@@ -235,15 +235,16 @@ export class QueueManager {
             }
             
             // Trigger resume after short delay
-            console.log(`[QueueManager] Restarting frozen project "${project.title}" in 10s...`);
+            console.log(`[QueueManager] Restarting frozen project "${project.title}" in 5s...`);
             setTimeout(async () => {
-              if (!this.isRunning) {
-                this.isRunning = true;
-                this.isPaused = false;
-                await storage.updateQueueState({ status: "running" });
-              }
+              // Force reset queue state to ensure clean restart
+              this.isRunning = true;
+              this.isPaused = false;
+              this.stopHeartbeatMonitor();
+              await storage.updateQueueState({ status: "running", currentProjectId: null });
+              console.log(`[QueueManager] Auto-recovery: Calling processQueue for "${project.title}"`);
               this.processQueue();
-            }, 10000);
+            }, 5000);
             
             break; // Handle one frozen project at a time
           }
