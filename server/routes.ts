@@ -3445,11 +3445,60 @@ ${chapter.content?.substring(0, 15000) || "Sin contenido previo"}
         return orderA - orderB;
       });
       
-      // Helper function to strip chapter title headers from content
-      const stripChapterHeaders = (content: string): string => {
+      // Robust function to clean chapter content for export
+      const cleanChapterContent = (content: string): string => {
         let cleaned = content.trim();
-        // Remove markdown headers at the start that contain chapter/prólogo/epílogo info
+        
+        // 1. Remove CONTINUITY_STATE blocks and everything after
+        const continuityMarker = "---CONTINUITY_STATE---";
+        if (cleaned.includes(continuityMarker)) {
+          cleaned = cleaned.split(continuityMarker)[0].trim();
+        }
+        
+        // 2. Remove any JSON blocks that might be in the content
+        cleaned = cleaned.replace(/\n*```json[\s\S]*?```\n*/g, '\n');
+        cleaned = cleaned.replace(/\n*\{[\s\S]*?"characterStates"[\s\S]*?\}\s*$/g, '');
+        
+        // 3. Remove markdown chapter/section headers at the start
         cleaned = cleaned.replace(/^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|Prólogo|Prologue|Epílogo|Epilogue|Nota del Autor|Author'?s? Note)[^\n]*\n+/i, '');
+        
+        // 4. Remove AI context/prompt artifacts that might leak into content
+        const promptPatterns = [
+          /CONTEXTO DEL MUNDO \(World Bible\):[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z])/gi,
+          /GUÍA DE ESTILO:[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z])/gi,
+          /═{10,}[\s\S]*?═{10,}/g,
+          /⛔[^\n]*\n/g,
+          /⚠️[^\n]*\n/g,
+          /ESTADO DE CONTINUIDAD[^\n]*:?[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z]|$)/gi,
+          /TAREA ACTUAL:[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z])/gi,
+          /DATOS BÁSICOS:[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z])/gi,
+          /BEATS NARRATIVOS[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z])/gi,
+          /INSTRUCCIONES DE REESCRITURA[\s\S]*?(?=\n\n[A-ZÁÉÍÓÚÑ]|\n\n[A-Z])/gi,
+        ];
+        
+        for (const pattern of promptPatterns) {
+          cleaned = cleaned.replace(pattern, '');
+        }
+        
+        // 5. Remove lines that look like instruction artifacts
+        const lines = cleaned.split('\n');
+        const filteredLines = lines.filter(line => {
+          const trimmed = line.trim();
+          // Skip empty lines check, we keep those
+          if (!trimmed) return true;
+          // Skip lines that are clearly AI instructions/metadata
+          if (trimmed.startsWith('- Cronología:')) return false;
+          if (trimmed.startsWith('- Ubicación:')) return false;
+          if (trimmed.startsWith('- Elenco:')) return false;
+          if (trimmed.match(/^Capítulo \d+ -/i) && lines.indexOf(line) < 5) return false;
+          if (trimmed.match(/^CAPÍTULO \d+ -/i) && lines.indexOf(line) < 5) return false;
+          return true;
+        });
+        cleaned = filteredLines.join('\n');
+        
+        // 6. Clean up excessive whitespace
+        cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+        
         return cleaned.trim();
       };
       
@@ -3473,7 +3522,7 @@ ${chapter.content?.substring(0, 15000) || "Sin contenido previo"}
         
         lines.push(`## ${heading}`);
         lines.push("");
-        lines.push(stripChapterHeaders(chapter.content));
+        lines.push(cleanChapterContent(chapter.content));
         lines.push("");
       }
       
