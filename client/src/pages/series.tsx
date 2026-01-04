@@ -51,6 +51,7 @@ export default function SeriesPage() {
   const [editTotalBooks, setEditTotalBooks] = useState(3);
   
   const [uploadingSeriesId, setUploadingSeriesId] = useState<number | null>(null);
+  const uploadingSeriesIdRef = useRef<number | null>(null);
   const seriesGuideInputRef = useRef<HTMLInputElement>(null);
   
   const [linkingSeriesId, setLinkingSeriesId] = useState<number | null>(null);
@@ -143,6 +144,7 @@ export default function SeriesPage() {
         description: `Se han cargado ${result.wordCount?.toLocaleString() || 0} palabras de la guia`,
       });
       setUploadingSeriesId(null);
+      uploadingSeriesIdRef.current = null;
       if (seriesGuideInputRef.current) {
         seriesGuideInputRef.current.value = "";
       }
@@ -153,6 +155,7 @@ export default function SeriesPage() {
         description: "No se pudo subir la guia de serie",
         variant: "destructive",
       });
+      uploadingSeriesIdRef.current = null;
       if (seriesGuideInputRef.current) {
         seriesGuideInputRef.current.value = "";
       }
@@ -351,7 +354,8 @@ export default function SeriesPage() {
 
   const handleSeriesGuideUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !uploadingSeriesId) return;
+    const seriesId = uploadingSeriesIdRef.current;
+    if (!file || !seriesId) return;
 
     if (!file.name.endsWith(".docx")) {
       toast({
@@ -365,7 +369,7 @@ export default function SeriesPage() {
       return;
     }
 
-    uploadSeriesGuideMutation.mutate({ seriesId: uploadingSeriesId, file });
+    uploadSeriesGuideMutation.mutate({ seriesId, file });
   };
 
   const statusLabels: Record<string, string> = {
@@ -640,6 +644,7 @@ export default function SeriesPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
+                        uploadingSeriesIdRef.current = s.id;
                         setUploadingSeriesId(s.id);
                         seriesGuideInputRef.current?.click();
                       }}
