@@ -282,13 +282,15 @@ export class QueueManager {
               agentRole: "system",
             });
             
+            // Force reset the running state so we can restart
+            this.isRunning = false;
+            this.processingLock = false;
+            
             // Small delay then restart
             setTimeout(async () => {
               try {
-                if (!this.isRunning) {
-                  console.log(`[QueueManager] Auto-starting queue to RETRY frozen project ${project.id}`);
-                  await this.start();
-                }
+                console.log(`[QueueManager] Auto-starting queue to RETRY frozen project ${project.id}`);
+                await this.start();
               } catch (e) {
                 console.error("[QueueManager] Failed to auto-restart after recovery:", e);
                 this.pendingRetryProjectId = null;
