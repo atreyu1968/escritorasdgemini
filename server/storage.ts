@@ -3,6 +3,7 @@ import {
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
   series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides, activityLogs,
   projectQueue, queueState, seriesArcMilestones, seriesPlotThreads, seriesArcVerifications,
+  aiUsageEvents,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
@@ -17,7 +18,8 @@ import {
   type SeriesArcMilestone, type InsertSeriesArcMilestone,
   type SeriesPlotThread, type InsertSeriesPlotThread,
   type SeriesArcVerification, type InsertSeriesArcVerification,
-  type Translation, type InsertTranslation, translations
+  type Translation, type InsertTranslation, translations,
+  type AiUsageEvent, type InsertAiUsageEvent
 } from "@shared/schema";
 import { eq, desc, asc, and, lt, isNull, or, sql } from "drizzle-orm";
 
@@ -709,6 +711,92 @@ export class DatabaseStorage implements IStorage {
   async updateTranslation(id: number, data: Partial<InsertTranslation>): Promise<Translation | undefined> {
     const [updated] = await db.update(translations).set(data).where(eq(translations.id, id)).returning();
     return updated;
+  }
+
+  // AI Usage Events for cost tracking
+  async createAiUsageEvent(data: InsertAiUsageEvent): Promise<AiUsageEvent> {
+    const [event] = await db.insert(aiUsageEvents).values(data).returning();
+    return event;
+  }
+
+  async getAllAiUsageEvents(): Promise<AiUsageEvent[]> {
+    return db.select().from(aiUsageEvents).orderBy(desc(aiUsageEvents.createdAt));
+  }
+
+  async getAiUsageEventsByProject(projectId: number): Promise<AiUsageEvent[]> {
+    return db.select().from(aiUsageEvents)
+      .where(eq(aiUsageEvents.projectId, projectId))
+      .orderBy(desc(aiUsageEvents.createdAt));
+  }
+
+  async getAiUsageEventsByDateRange(startDate: Date, endDate: Date): Promise<AiUsageEvent[]> {
+    return db.select().from(aiUsageEvents)
+      .where(and(
+        sql`${aiUsageEvents.createdAt} >= ${startDate}`,
+        sql`${aiUsageEvents.createdAt} <= ${endDate}`
+      ))
+      .orderBy(desc(aiUsageEvents.createdAt));
+  }
+
+  async getAiUsageSummary(): Promise<{
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalThinkingTokens: number;
+    totalCostUsd: number;
+    eventCount: number;
+  }> {
+    const result = await db.select({
+      totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.inputTokens}), 0)`,
+      totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.outputTokens}), 0)`,
+      totalThinkingTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.thinkingTokens}), 0)`,
+      totalCostUsd: sql<number>`COALESCE(SUM(CAST(${aiUsageEvents.totalCostUsd} AS DECIMAL)), 0)`,
+      eventCount: sql<number>`COUNT(*)`,
+    }).from(aiUsageEvents);
+    
+    return result[0] || {
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalThinkingTokens: 0,
+      totalCostUsd: 0,
+      eventCount: 0,
+    };
+  }
+
+  async getAiUsageByAgent(): Promise<Array<{
+    agentName: string;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostUsd: number;
+    eventCount: number;
+  }>> {
+    return db.select({
+      agentName: aiUsageEvents.agentName,
+      totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.inputTokens}), 0)`,
+      totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.outputTokens}), 0)`,
+      totalCostUsd: sql<number>`COALESCE(SUM(CAST(${aiUsageEvents.totalCostUsd} AS DECIMAL)), 0)`,
+      eventCount: sql<number>`COUNT(*)`,
+    }).from(aiUsageEvents)
+      .groupBy(aiUsageEvents.agentName)
+      .orderBy(sql`SUM(CAST(${aiUsageEvents.totalCostUsd} AS DECIMAL)) DESC`);
+  }
+
+  async getAiUsageByDay(): Promise<Array<{
+    date: string;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostUsd: number;
+    eventCount: number;
+  }>> {
+    return db.select({
+      date: sql<string>`DATE(${aiUsageEvents.createdAt})`,
+      totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.inputTokens}), 0)`,
+      totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageEvents.outputTokens}), 0)`,
+      totalCostUsd: sql<number>`COALESCE(SUM(CAST(${aiUsageEvents.totalCostUsd} AS DECIMAL)), 0)`,
+      eventCount: sql<number>`COUNT(*)`,
+    }).from(aiUsageEvents)
+      .groupBy(sql`DATE(${aiUsageEvents.createdAt})`)
+      .orderBy(sql`DATE(${aiUsageEvents.createdAt}) DESC`)
+      .limit(30);
   }
 }
 

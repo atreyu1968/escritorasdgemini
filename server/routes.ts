@@ -3980,5 +3980,84 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  // AI Usage / Cost Tracking endpoints
+  app.get("/api/ai-usage/summary", async (_req: Request, res: Response) => {
+    try {
+      const summary = await storage.getAiUsageSummary();
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching AI usage summary:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage summary" });
+    }
+  });
+
+  app.get("/api/ai-usage/by-agent", async (_req: Request, res: Response) => {
+    try {
+      const byAgent = await storage.getAiUsageByAgent();
+      res.json(byAgent);
+    } catch (error) {
+      console.error("Error fetching AI usage by agent:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage by agent" });
+    }
+  });
+
+  app.get("/api/ai-usage/by-day", async (_req: Request, res: Response) => {
+    try {
+      const byDay = await storage.getAiUsageByDay();
+      res.json(byDay);
+    } catch (error) {
+      console.error("Error fetching AI usage by day:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage by day" });
+    }
+  });
+
+  app.get("/api/ai-usage/events", async (_req: Request, res: Response) => {
+    try {
+      const events = await storage.getAllAiUsageEvents();
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching AI usage events:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage events" });
+    }
+  });
+
+  app.get("/api/ai-usage/projects-summary", async (_req: Request, res: Response) => {
+    try {
+      const allProjects = await storage.getAllProjects();
+      const projectsSummary = allProjects.map(p => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        totalInputTokens: p.totalInputTokens || 0,
+        totalOutputTokens: p.totalOutputTokens || 0,
+        totalThinkingTokens: p.totalThinkingTokens || 0,
+        estimatedCostUsd: calculateProjectCost(
+          p.totalInputTokens || 0,
+          p.totalOutputTokens || 0,
+          p.totalThinkingTokens || 0
+        ),
+        createdAt: p.createdAt,
+      }));
+      res.json(projectsSummary);
+    } catch (error) {
+      console.error("Error fetching projects summary:", error);
+      res.status(500).json({ error: "Failed to fetch projects summary" });
+    }
+  });
+
   return httpServer;
+}
+
+// Gemini 2.5 Pro pricing (per million tokens)
+// Input: $1.25/1M tokens (standard context <=200K)
+// Output: $10.00/1M tokens (standard context <=200K)
+// Thinking: counted as output tokens
+function calculateProjectCost(inputTokens: number, outputTokens: number, thinkingTokens: number): number {
+  const INPUT_COST_PER_MILLION = 1.25;
+  const OUTPUT_COST_PER_MILLION = 10.00;
+  
+  const inputCost = (inputTokens / 1_000_000) * INPUT_COST_PER_MILLION;
+  const outputCost = ((outputTokens + thinkingTokens) / 1_000_000) * OUTPUT_COST_PER_MILLION;
+  
+  return Math.round((inputCost + outputCost) * 100) / 100;
 }

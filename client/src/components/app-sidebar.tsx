@@ -22,7 +22,8 @@ import {
   Upload,
   Download,
   Library,
-  ListOrdered
+  ListOrdered,
+  DollarSign
 } from "lucide-react";
 
 const mainNavItems = [
@@ -41,6 +42,7 @@ const settingsNavItems = [
   { title: "Pseudónimos", url: "/pseudonyms", icon: User },
   { title: "Series", url: "/series", icon: Library },
   { title: "Cola de Proyectos", url: "/queue", icon: ListOrdered },
+  { title: "Control de Costos", url: "/costs", icon: DollarSign },
   { title: "Configuración", url: "/config", icon: Settings },
 ];
 

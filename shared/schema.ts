@@ -502,4 +502,29 @@ export type InsertSeriesPlotThread = z.infer<typeof insertSeriesPlotThreadSchema
 export type SeriesArcVerification = typeof seriesArcVerifications.$inferSelect;
 export type InsertSeriesArcVerification = z.infer<typeof insertSeriesArcVerificationSchema>;
 
+// AI Usage Events for cost tracking
+export const aiUsageEvents = pgTable("ai_usage_events", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  agentName: text("agent_name").notNull(),
+  model: text("model").notNull().default("gemini-2.5-pro"),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  thinkingTokens: integer("thinking_tokens").notNull().default(0),
+  inputCostUsd: text("input_cost_usd").notNull().default("0"),
+  outputCostUsd: text("output_cost_usd").notNull().default("0"),
+  totalCostUsd: text("total_cost_usd").notNull().default("0"),
+  chapterNumber: integer("chapter_number"),
+  operation: text("operation"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertAiUsageEventSchema = createInsertSchema(aiUsageEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AiUsageEvent = typeof aiUsageEvents.$inferSelect;
+export type InsertAiUsageEvent = z.infer<typeof insertAiUsageEventSchema>;
+
 export * from "./models/chat";
