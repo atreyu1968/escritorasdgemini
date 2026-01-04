@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { Orchestrator } from "./orchestrator";
+import { cancelProject } from "./agents";
 import type { Project, ProjectQueueItem, QueueState } from "@shared/schema";
 
 type QueueEventCallback = (event: QueueEvent) => void;
@@ -25,6 +26,8 @@ export class QueueManager {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private currentProjectId: number | null = null;
   private autoRecoveryCount = 0;
+  private processingLock = false; // Prevent parallel processing
+  private autoStartDisabled = true; // Disable auto-start by default
 
   constructor() {}
   
@@ -105,13 +108,9 @@ export class QueueManager {
     this.currentProjectId = null;
     this.stopHeartbeatMonitor();
     
-    // Wait a bit and restart
-    console.log(`[QueueManager] Waiting 30s before restarting project ${projectId}...`);
-    setTimeout(() => {
-      if (this.isRunning && !this.isPaused) {
-        this.processQueue();
-      }
-    }, 30000);
+    // Wait a bit and restart - but only if manually started
+    console.log(`[QueueManager] Project ${projectId} reset. Manual restart required.`);
+    // DO NOT auto-restart - user must manually start the queue
   }
 
   async initialize(): Promise<void> {
@@ -124,14 +123,14 @@ export class QueueManager {
     // Check for frozen projects first (based on activity logs, not memory)
     await this.checkForFrozenProjects();
 
-    // If the server crashed while running, clean up and optionally restart
+    // If the server crashed while running, clean up but DO NOT auto-restart
     if (state.status === "running" && state.currentProjectId) {
       console.log("[QueueManager] Detected incomplete queue state from previous session");
       
       // Check if the project was actually completed
       const project = await storage.getProject(state.currentProjectId);
       if (project?.status === "completed") {
-        // Project finished but queue didn't advance - clean up and continue
+        // Project finished but queue didn't advance - clean up
         const queueItem = await storage.getQueueItemByProject(state.currentProjectId);
         if (queueItem && queueItem.status === "processing") {
           await storage.updateQueueItem(queueItem.id, {
@@ -139,13 +138,8 @@ export class QueueManager {
             completedAt: new Date(),
           });
         }
-        await storage.updateQueueState({ currentProjectId: null });
-        console.log("[QueueManager] Cleaned up completed project, resuming queue");
-        
-        // Auto-resume the queue
-        this.isRunning = true;
-        this.isPaused = false;
-        setTimeout(() => this.processQueue(), 2000);
+        await storage.updateQueueState({ currentProjectId: null, status: "paused" });
+        console.log("[QueueManager] Cleaned up completed project. Queue PAUSED - manual start required.");
       } else {
         // Project was in progress - reset it to allow re-processing
         const queueItem = await storage.getQueueItemByProject(state.currentProjectId);
@@ -155,23 +149,27 @@ export class QueueManager {
             startedAt: null,
           });
         }
-        await storage.updateQueueState({ currentProjectId: null });
-        console.log("[QueueManager] Reset incomplete project, queue ready to resume");
-        
-        // Auto-resume the queue
-        this.isRunning = true;
-        this.isPaused = false;
-        setTimeout(() => this.processQueue(), 2000);
+        await storage.updateQueueState({ currentProjectId: null, status: "paused" });
+        console.log("[QueueManager] Reset incomplete project. Queue PAUSED - manual start required.");
       }
+      
+      // DO NOT auto-resume - require manual start
+      this.isRunning = false;
+      this.isPaused = true;
     } else if (state.status === "running") {
-      // Queue was running with no current project - just resume
-      console.log("[QueueManager] Resuming queue from previous session");
-      this.isRunning = true;
-      this.isPaused = false;
-      setTimeout(() => this.processQueue(), 2000);
+      // Queue was marked running but no current project - pause it
+      console.log("[QueueManager] Queue was running with no project. Setting to PAUSED.");
+      await storage.updateQueueState({ status: "paused" });
+      this.isRunning = false;
+      this.isPaused = true;
     } else if (state.status === "paused") {
       this.isPaused = true;
       console.log("[QueueManager] Queue is paused, waiting for manual resume");
+    } else {
+      // Stopped state
+      this.isRunning = false;
+      this.isPaused = false;
+      console.log("[QueueManager] Queue is stopped, waiting for manual start");
     }
   }
   
@@ -234,17 +232,8 @@ export class QueueManager {
               });
             }
             
-            // Trigger resume after short delay
-            console.log(`[QueueManager] Restarting frozen project "${project.title}" in 5s...`);
-            setTimeout(async () => {
-              // Force reset queue state to ensure clean restart
-              this.isRunning = true;
-              this.isPaused = false;
-              this.stopHeartbeatMonitor();
-              await storage.updateQueueState({ status: "running", currentProjectId: null });
-              console.log(`[QueueManager] Auto-recovery: Calling processQueue for "${project.title}"`);
-              this.processQueue();
-            }, 5000);
+            // DO NOT auto-restart - just log and pause
+            console.log(`[QueueManager] Frozen project "${project.title}" reset to paused. Manual restart required.`);
             
             break; // Handle one frozen project at a time
           }
@@ -290,31 +279,54 @@ export class QueueManager {
   }
 
   async stop(): Promise<void> {
+    console.log("[QueueManager] STOP requested - cancelling all processing");
+    
     this.isRunning = false;
     this.isPaused = false;
+    this.processingLock = false;
     this.stopHeartbeatMonitor();
-    this.currentProjectId = null;
     
-    // Reset any item currently in "processing" status back to "waiting"
+    // Cancel current project generation if one is active
     const state = await storage.getQueueState();
     if (state?.currentProjectId) {
+      console.log(`[QueueManager] Cancelling active project ${state.currentProjectId}`);
+      
+      // Cancel the AI generation using static import
+      try {
+        cancelProject(state.currentProjectId);
+        console.log(`[QueueManager] Cancelled project ${state.currentProjectId}`);
+      } catch (e) {
+        console.error("[QueueManager] Failed to cancel project:", e);
+      }
+      
       const queueItem = await storage.getQueueItemByProject(state.currentProjectId);
       if (queueItem && queueItem.status === "processing") {
         await storage.updateQueueItem(queueItem.id, {
           status: "waiting",
           startedAt: null,
+          errorMessage: "Detenido manualmente por el usuario",
         });
+      }
+      
+      // Reset project status to paused so it can be resumed
+      const project = await storage.getProject(state.currentProjectId);
+      if (project && project.status === "generating") {
+        await storage.updateProject(state.currentProjectId, { status: "paused" });
       }
     }
     
-    await storage.updateQueueState({ status: "stopped", currentProjectId: null });
+    this.currentProjectId = null;
     this.currentOrchestrator = null;
+    
+    await storage.updateQueueState({ status: "stopped", currentProjectId: null });
     this.emit({ type: "queue_stopped", message: "Queue processing stopped" });
     
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
+    
+    console.log("[QueueManager] STOP complete - queue is now stopped");
   }
 
   async pause(): Promise<void> {
@@ -364,37 +376,67 @@ export class QueueManager {
   }
 
   private async processQueue(): Promise<void> {
-    if (!this.isRunning || this.isPaused) return;
-
-    const state = await this.getState();
-
-    if (state.currentProjectId) {
+    // Guard: Check if queue should process
+    if (!this.isRunning || this.isPaused) {
+      console.log("[QueueManager] processQueue skipped - queue not running or paused");
       return;
     }
 
-    const nextItem = await storage.getNextInQueue();
-    
-    if (!nextItem) {
-      this.emit({ type: "queue_empty", message: "No projects in queue" });
-      
-      if (state.autoAdvance) {
-        this.checkInterval = setInterval(async () => {
-          if (!this.isRunning || this.isPaused) {
-            if (this.checkInterval) clearInterval(this.checkInterval);
-            return;
-          }
-          
-          const next = await storage.getNextInQueue();
-          if (next) {
-            if (this.checkInterval) clearInterval(this.checkInterval);
-            this.processQueue();
-          }
-        }, 10000);
+    // Guard: Prevent parallel processing - check if we're already processing a project
+    if (this.currentProjectId !== null) {
+      console.log("[QueueManager] processQueue skipped - project already in progress");
+      return;
+    }
+
+    // Guard: Lock to prevent race conditions
+    if (this.processingLock) {
+      console.log("[QueueManager] processQueue skipped - processing lock active");
+      return;
+    }
+
+    // Acquire lock BEFORE any async operations
+    this.processingLock = true;
+
+    try {
+      const state = await this.getState();
+
+      // Double-check currentProjectId after async call
+      if (state.currentProjectId) {
+        console.log("[QueueManager] processQueue skipped - DB shows project in progress");
+        return;
       }
-      return;
-    }
 
-    await this.processProject(nextItem);
+      const nextItem = await storage.getNextInQueue();
+      
+      if (!nextItem) {
+        this.emit({ type: "queue_empty", message: "No projects in queue" });
+        
+        if (state.autoAdvance) {
+          this.checkInterval = setInterval(async () => {
+            // Guard in interval callback
+            if (!this.isRunning || this.isPaused || this.currentProjectId !== null) {
+              if (this.checkInterval) clearInterval(this.checkInterval);
+              return;
+            }
+            
+            const next = await storage.getNextInQueue();
+            if (next) {
+              if (this.checkInterval) clearInterval(this.checkInterval);
+              this.processQueue();
+            }
+          }, 10000);
+        }
+        return;
+      }
+
+      // Process project - lock stays until project completes
+      await this.processProject(nextItem);
+    } finally {
+      // Only release lock when we're not processing a project
+      if (this.currentProjectId === null) {
+        this.processingLock = false;
+      }
+    }
   }
 
   private async processProject(queueItem: ProjectQueueItem): Promise<void> {
