@@ -810,36 +810,47 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         }
       }
 
-      const allCompletedChapters = await storage.getChaptersByProject(project.id);
-      const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
+      // QA: Voice & Rhythm Auditor - SKIP if already in final review phase to prevent cost inflation
+      const projectStateForVoice = await storage.getProject(project.id);
+      const skipVoiceAudit = (projectStateForVoice?.revisionCycle || 0) > 0;
       
-      if (completedForAnalysis.length >= 5) {
-        const trancheSize = 10;
-        const totalTranches = Math.ceil(completedForAnalysis.length / trancheSize);
+      if (skipVoiceAudit) {
+        this.callbacks.onAgentStatus("voice-auditor", "skipped", 
+          `Auditor de voz omitido - ya ejecutado previamente`
+        );
+        console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - already completed`);
+      } else {
+        const allCompletedChapters = await storage.getChaptersByProject(project.id);
+        const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
         
-        for (let t = 0; t < totalTranches; t++) {
-          const trancheChapters = completedForAnalysis.slice(t * trancheSize, (t + 1) * trancheSize);
-          if (trancheChapters.length > 0) {
-            const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
-            
-            if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
-              this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
-              );
+        if (completedForAnalysis.length >= 5) {
+          const trancheSize = 10;
+          const totalTranches = Math.ceil(completedForAnalysis.length / trancheSize);
+          
+          for (let t = 0; t < totalTranches; t++) {
+            const trancheChapters = completedForAnalysis.slice(t * trancheSize, (t + 1) * trancheSize);
+            if (trancheChapters.length > 0) {
+              const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
               
-              for (const chapterNum of voiceResult.chaptersToRevise) {
-                const chapterToPolish = trancheChapters.find(c => c.chapterNumber === chapterNum);
-                if (chapterToPolish) {
-                  const issuesForChapter = voiceResult.issues.filter(issue => 
-                    issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
-                  ).join("\n");
-                  
-                  await this.polishChapterForVoice(
-                    project,
-                    chapterToPolish,
-                    styleGuideContent,
-                    issuesForChapter || voiceResult.issues.join("\n")
-                  );
+              if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
+                this.callbacks.onAgentStatus("voice-auditor", "editing", 
+                  `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
+                );
+                
+                for (const chapterNum of voiceResult.chaptersToRevise) {
+                  const chapterToPolish = trancheChapters.find(c => c.chapterNumber === chapterNum);
+                  if (chapterToPolish) {
+                    const issuesForChapter = voiceResult.issues.filter(issue => 
+                      issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
+                    ).join("\n");
+                    
+                    await this.polishChapterForVoice(
+                      project,
+                      chapterToPolish,
+                      styleGuideContent,
+                      issuesForChapter || voiceResult.issues.join("\n")
+                    );
+                  }
                 }
               }
             }
@@ -869,8 +880,8 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             );
             
             for (const chapterNum of semanticResult.chaptersToRevise) {
-              const chapterToFix = completedForAnalysis.find(c => c.chapterNumber === chapterNum);
-              const sectionForFix = allSections.find(s => s.numero === chapterNum);
+              const chapterToFix = completedForSemanticAnalysis.find(c => c.chapterNumber === chapterNum);
+              const sectionForFix = allSections.find((s: any) => s.numero === chapterNum);
               
               if (chapterToFix && sectionForFix) {
                 const freshChapter = await storage.getChaptersByProject(project.id)
@@ -1229,37 +1240,47 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         }
       }
 
-      // QA: Voice & Rhythm Auditor after all chapters complete
-      const allCompletedChapters = await storage.getChaptersByProject(project.id);
-      const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
+      // QA: Voice & Rhythm Auditor after all chapters complete - SKIP if already in final review phase
+      const projectForVoiceCheck = await storage.getProject(project.id);
+      const skipVoiceAuditor = (projectForVoiceCheck?.revisionCycle || 0) > 0;
       
-      if (completedForAnalysis.length >= 5) {
-        const trancheSize = 10;
-        const totalTranches = Math.ceil(completedForAnalysis.length / trancheSize);
+      if (skipVoiceAuditor) {
+        this.callbacks.onAgentStatus("voice-auditor", "skipped", 
+          `Auditor de voz omitido - proyecto ya en fase de revisión final`
+        );
+        console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - already in final review phase`);
+      } else {
+        const allCompletedChapters = await storage.getChaptersByProject(project.id);
+        const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
         
-        for (let t = 0; t < totalTranches; t++) {
-          const trancheChapters = completedForAnalysis.slice(t * trancheSize, (t + 1) * trancheSize);
-          if (trancheChapters.length > 0) {
-            const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
-            
-            if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
-              this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
-              );
+        if (completedForAnalysis.length >= 5) {
+          const trancheSize = 10;
+          const totalTranches = Math.ceil(completedForAnalysis.length / trancheSize);
+          
+          for (let t = 0; t < totalTranches; t++) {
+            const trancheChapters = completedForAnalysis.slice(t * trancheSize, (t + 1) * trancheSize);
+            if (trancheChapters.length > 0) {
+              const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
               
-              for (const chapterNum of voiceResult.chaptersToRevise) {
-                const chapterToPolish = trancheChapters.find(c => c.chapterNumber === chapterNum);
-                if (chapterToPolish) {
-                  const issuesForChapter = voiceResult.issues.filter(issue => 
-                    issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
-                  ).join("\n");
-                  
-                  await this.polishChapterForVoice(
-                    project,
-                    chapterToPolish,
-                    styleGuideContent,
-                    issuesForChapter || voiceResult.issues.join("\n")
-                  );
+              if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
+                this.callbacks.onAgentStatus("voice-auditor", "editing", 
+                  `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
+                );
+                
+                for (const chapterNum of voiceResult.chaptersToRevise) {
+                  const chapterToPolish = trancheChapters.find(c => c.chapterNumber === chapterNum);
+                  if (chapterToPolish) {
+                    const issuesForChapter = voiceResult.issues.filter(issue => 
+                      issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
+                    ).join("\n");
+                    
+                    await this.polishChapterForVoice(
+                      project,
+                      chapterToPolish,
+                      styleGuideContent,
+                      issuesForChapter || voiceResult.issues.join("\n")
+                    );
+                  }
                 }
               }
             }
