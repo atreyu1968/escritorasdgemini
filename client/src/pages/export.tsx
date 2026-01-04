@@ -809,7 +809,7 @@ export default function ExportPage() {
                         )}
                         Descargar
                       </Button>
-                    ) : (
+                    ) : translation.status === "translating" ? (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -818,6 +818,21 @@ export default function ExportPage() {
                       >
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Traduciendo
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadTranslationMutation.mutate(translation.id)}
+                        disabled={downloadTranslationMutation.isPending}
+                        className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                      >
+                        {downloadTranslationMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4 mr-2" />
+                        )}
+                        Intentar Descarga
                       </Button>
                     )}
                     <Button

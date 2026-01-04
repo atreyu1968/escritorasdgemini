@@ -3793,11 +3793,12 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         // Update the database record with partial progress so the UI sees it
         if (translationRecordId) {
           try {
+            const currentCount = completedCount + 1;
             await storage.updateTranslation(translationRecordId, {
-              chaptersTranslated: completedCount,
+              chaptersTranslated: currentCount,
               status: "translating"
             });
-            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${completedCount}/${totalChapters}`);
+            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${currentCount}/${totalChapters}`);
           } catch (err) {
             console.error("[Translation] Progress DB update failed:", err);
           }
@@ -3991,18 +3992,19 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       
       const now = new Date();
       const translations = await Promise.all(allTranslations.map(async t => {
-        // Fallback for missing status or obvious completion
+        // Migration: If status is missing, assume it was completed successfully (old records)
         if (!t.status) {
           const updated = await storage.updateTranslation(t.id, { status: "completed" });
           return updated || t;
         }
 
+        // Only mark as error if it's REALLY stale (more than 30 minutes)
         if (t.status === "translating" || t.status === "pending") {
           const createdAt = new Date(t.createdAt);
           const diffMinutes = (now.getTime() - createdAt.getTime()) / 1000 / 60;
           
-          if (diffMinutes > 15) {
-            console.log(`[Cleanup] Marking stale/hung translation ID ${t.id} as error`);
+          if (diffMinutes > 30) {
+            console.log(`[Cleanup] Marking stale translation ID ${t.id} as error`);
             const updated = await storage.updateTranslation(t.id, { status: "error" });
             return updated || t;
           }
