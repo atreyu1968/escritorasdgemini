@@ -112,16 +112,15 @@ export function ConsoleOutput({ logs, projectId }: ConsoleOutputProps) {
           Consola de Agentes
         </span>
         <div className="flex items-center gap-3">
-          {projectId && logs.length > 0 && (
+          {projectId && (
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={handleExportLogs}
-              className="h-6 px-2 text-xs"
               data-testid="button-export-logs"
             >
-              <Download className="h-3 w-3 mr-1" />
-              PDF
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Exportar Logs
             </Button>
           )}
           <div className="flex items-center gap-1.5">
