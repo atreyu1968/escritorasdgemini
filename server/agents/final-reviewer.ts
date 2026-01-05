@@ -18,6 +18,7 @@ export interface FinalReviewIssue {
   categoria: "enganche" | "personajes" | "trama" | "atmosfera" | "ritmo" | "continuidad_fisica" | "timeline" | "ubicacion" | "repeticion_lexica" | "arco_incompleto" | "tension_insuficiente" | "giro_predecible" | "hook_debil" | "otro";
   descripcion: string;
   severidad: "critica" | "mayor" | "menor";
+  elementos_a_preservar: string;
   instrucciones_correccion: string;
 }
 
@@ -131,22 +132,33 @@ puede ser un 9 si engancha y emociona. Una novela técnicamente perfecta puede s
 un 6 si es aburrida o predecible.
 
 ═══════════════════════════════════════════════════════════════════
-CÓMO ELEVAR DE 8 A 9+ (INSTRUCCIONES PARA CORRECCIÓN)
+CÓMO ELEVAR DE 8 A 9+ (INSTRUCCIONES PRECISAS PARA CORRECCIÓN)
 ═══════════════════════════════════════════════════════════════════
 
-Si la puntuación es 8 o menos, DEBES proporcionar instrucciones ESPECÍFICAS
-para que el Ghostwriter eleve la novela a nivel bestseller:
+REGLA CRÍTICA: Cada issue DEBE incluir DOS partes obligatorias:
 
-- CAPÍTULOS SIN HOOK: Indica EXACTAMENTE cómo debe terminar cada uno
-- TENSIÓN PLANA: Señala dónde insertar complicaciones o amenazas
-- GIROS PREDECIBLES: Sugiere alternativas más sorprendentes
-- CLÍMAX DÉBIL: Describe cómo amplificar el enfrentamiento final
-- PERSONAJES PLANOS: Indica qué contradicciones o profundidad añadir
+1. **elementos_a_preservar**: Lista ESPECÍFICA de lo que funciona bien y NO debe cambiar
+   - Menciona escenas, diálogos, descripciones o momentos concretos del texto
+   - El Ghostwriter SOLO modificará lo indicado en instrucciones_correccion
+   
+2. **instrucciones_correccion**: Cambio QUIRÚRGICO y específico
+   - Indica EXACTAMENTE qué líneas/párrafos modificar
+   - Describe el cambio concreto, no conceptos vagos
+   - El resto del capítulo debe permanecer INTACTO
 
-Ejemplo de instrucción útil:
-"El capítulo 12 necesita terminar con un cliffhanger. Cuando María descubre 
-la carta, en lugar de procesarla emocionalmente, debería escuchar pasos 
-acercándose, creando urgencia para el siguiente capítulo."
+EJEMPLO MALO (vago, causa problemas nuevos):
+{
+  "elementos_a_preservar": "",
+  "instrucciones_correccion": "Mejorar el enganche del final"
+}
+
+EJEMPLO BUENO (preciso, evita daños colaterales):
+{
+  "elementos_a_preservar": "La escena del diálogo entre María y Pedro en la cocina es perfecta. La descripción del amanecer está muy bien lograda. El flashback de la infancia debe mantenerse exactamente igual.",
+  "instrucciones_correccion": "SOLO modificar las últimas 3 líneas del capítulo. Actualmente termina con María procesando la carta internamente. Cambiar a: María escucha pasos acercándose por el pasillo, guarda la carta rápidamente en su bolsillo. La puerta se abre. Cortar ahí."
+}
+
+CONSECUENCIA: Si das instrucciones vagas, el Ghostwriter reescribirá todo el capítulo y potencialmente introducirá NUEVOS problemas. Sé QUIRÚRGICO.
 
 ═══════════════════════════════════════════════════════════════════
 PROBLEMAS QUE SÍ AFECTAN LA EXPERIENCIA DEL LECTOR
@@ -215,7 +227,8 @@ SALIDA OBLIGATORIA (JSON):
       "categoria": "enganche" | "personajes" | "trama" | "atmosfera" | "ritmo" | "continuidad_fisica" | "timeline" | "repeticion_lexica" | "arco_incompleto" | "tension_insuficiente" | "giro_predecible" | "otro",
       "descripcion": "Lo que me sacó de la historia como lector",
       "severidad": "critica" | "mayor" | "menor",
-      "instrucciones_correccion": "Cómo mejorar la experiencia del lector"
+      "elementos_a_preservar": "Lista ESPECÍFICA de escenas, diálogos y elementos del capítulo que funcionan bien y NO deben modificarse",
+      "instrucciones_correccion": "Cambio QUIRÚRGICO: qué párrafos/líneas específicas modificar y cómo. El resto del capítulo permanece INTACTO"
     }
   ],
   "capitulos_para_reescribir": [2, 5]

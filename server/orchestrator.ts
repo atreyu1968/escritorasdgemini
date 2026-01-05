@@ -1714,6 +1714,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
               categoria: "enganche" as const,
               descripcion: result.analisis_bestseller.como_subir_a_9,
               severidad: "mayor" as const,
+              elementos_a_preservar: "Mantener la estructura general y personajes tal como están",
               instrucciones_correccion: result.analisis_bestseller.como_subir_a_9
             }]
           : result?.issues || [];
@@ -1795,9 +1796,12 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           i => i.capitulos_afectados.includes(chapterNum)
         ) || [];
         
-        const revisionInstructions = issuesForChapter.map(issue => 
-          `[${issue.categoria.toUpperCase()}] ${issue.descripcion}\nCORRECCIÓN: ${issue.instrucciones_correccion}`
-        ).join("\n\n");
+        const revisionInstructions = issuesForChapter.map(issue => {
+          const preservar = (issue as any).elementos_a_preservar 
+            ? `\n⚠️ PRESERVAR (NO MODIFICAR): ${(issue as any).elementos_a_preservar}` 
+            : "";
+          return `[${issue.categoria.toUpperCase()}] ${issue.descripcion}${preservar}\n✏️ CORRECCIÓN QUIRÚRGICA: ${issue.instrucciones_correccion}`;
+        }).join("\n\n");
 
         const issuesSummary = issuesForChapter.map(i => i.categoria).join(", ") || "correcciones generales";
 
