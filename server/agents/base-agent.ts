@@ -150,6 +150,7 @@ export abstract class BaseAgent {
           config: {
             temperature,
             topP: 0.95,
+            maxOutputTokens: 65536,
             ...(useThinking && modelToUse === "gemini-3-pro-preview" ? {
               thinkingConfig: {
                 thinkingBudget: 2048,
