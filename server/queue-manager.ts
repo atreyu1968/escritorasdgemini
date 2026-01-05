@@ -227,9 +227,10 @@ export class QueueManager {
   
   private async checkForFrozenProjects(): Promise<void> {
     try {
-      // Get all projects in "generating" status
+      // Get all projects in "generating" status OR projects that failed final review (they might need retry)
       const projects = await storage.getAllProjects();
-      const generatingProjects = projects.filter((p: Project) => p.status === "generating");
+      const monitoredStatuses = ["generating", "failed_final_review", "paused"];
+      const generatingProjects = projects.filter((p: Project) => monitoredStatuses.includes(p.status));
       
       for (const project of generatingProjects) {
         const lastActivity = await storage.getLastActivityLogTime(project.id);
@@ -259,13 +260,14 @@ export class QueueManager {
               this.currentProjectId = null;
             }
             
-            // Reset queue item to waiting
+            // Reset queue item to waiting (handle any status that's not already waiting)
             const queueItem = await storage.getQueueItemByProject(project.id);
-            if (queueItem && queueItem.status === "processing") {
+            if (queueItem && queueItem.status !== "waiting") {
               await storage.updateQueueItem(queueItem.id, {
                 status: "waiting",
                 startedAt: null,
-                errorMessage: `Auto-recovery after ${Math.round(timeSinceActivity / 60000)} min freeze`,
+                completedAt: null,
+                errorMessage: `Auto-recovery after ${Math.round(timeSinceActivity / 60000)} min (status was: ${project.status})`,
               });
             }
             
