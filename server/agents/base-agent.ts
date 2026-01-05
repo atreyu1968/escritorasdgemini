@@ -140,6 +140,9 @@ export abstract class BaseAgent {
         const modelToUse = this.config.model || "gemini-3-pro-preview";
         const useThinking = this.config.useThinking !== false;
         
+        const startTime = Date.now();
+        console.log(`[${this.config.name}] Starting API call (attempt ${attempt + 1})...`);
+        
         const generatePromise = this.ai.models.generateContent({
           model: modelToUse,
           contents: [
@@ -165,6 +168,9 @@ export abstract class BaseAgent {
           this.timeoutMs,
           `${this.config.name} AI generation`
         );
+        
+        const elapsedMs = Date.now() - startTime;
+        console.log(`[${this.config.name}] API call completed in ${Math.round(elapsedMs / 1000)}s`);
 
         const candidate = response.candidates?.[0];
         let content = "";
