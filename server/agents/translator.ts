@@ -167,7 +167,16 @@ RESPOND WITH JSON ONLY, no additional text.
     }
 
     try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      let contentToParse = response.content;
+      
+      // Strip markdown code block wrapper if present (```json ... ```)
+      const codeBlockMatch = contentToParse.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        contentToParse = codeBlockMatch[1].trim();
+        console.log(`[Translator] Stripped markdown code block from response`);
+      }
+      
+      const jsonMatch = contentToParse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]) as TranslatorResult;
         console.log(`[Translator] Successfully parsed translation result`);

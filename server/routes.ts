@@ -3975,9 +3975,28 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         }
       }
       
-      // Helper function to strip chapter title headers from content
+      // Helper function to strip chapter title headers and clean JSON artifacts from content
       const stripChapterHeaders = (content: string): string => {
         let cleaned = content.trim();
+        
+        // First, check if content is wrapped in markdown code block (```json ... ```)
+        const codeBlockMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/);
+        if (codeBlockMatch) {
+          cleaned = codeBlockMatch[1].trim();
+        }
+        
+        // Check if content is a JSON object with translated_text field
+        if (cleaned.startsWith('{') && cleaned.includes('"translated_text"')) {
+          try {
+            const parsed = JSON.parse(cleaned);
+            if (parsed.translated_text) {
+              cleaned = parsed.translated_text;
+            }
+          } catch {
+            // Not valid JSON, continue with original content
+          }
+        }
+        
         // Remove markdown headers at the start that contain chapter/prólogo/epílogo info
         cleaned = cleaned.replace(/^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|Prólogo|Prologue|Epílogo|Epilogue|Nota del Autor|Author'?s? Note)[^\n]*\n+/i, '');
         return cleaned.trim();
