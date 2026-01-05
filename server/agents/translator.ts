@@ -92,9 +92,18 @@ CRITICAL RULES:
 8. PRESERVE paragraph structure and dialogues.
 9. APPLY correct typographical rules for the target language (quotation marks, dialogue dashes, etc.).
 
+FORBIDDEN - DO NOT INCLUDE IN OUTPUT:
+- Style guides or writing guides of any kind
+- Meta-commentary about the author's style or techniques
+- Checklists, tips, or instructions about writing
+- Sections titled "Literary Style Guide", "Writing Guide", "Checklist", etc.
+- ANY instructional or educational content about writing techniques
+
+Your output must contain ONLY the translated narrative text, nothing else.
+
 REQUIRED OUTPUT (JSON):
 {
-  "translated_text": "The complete translated text in Markdown format - THIS MUST BE IN THE TARGET LANGUAGE",
+  "translated_text": "The complete translated text in Markdown format - THIS MUST BE IN THE TARGET LANGUAGE. NO STYLE GUIDES.",
   "source_language": "ISO code of source language",
   "target_language": "ISO code of target language",
   "notes": "Brief notes about important translation decisions"

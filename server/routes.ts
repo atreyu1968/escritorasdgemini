@@ -3975,6 +3975,41 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         }
       }
       
+      // Helper function to remove style guide contamination from AI output
+      const removeStyleGuideContamination = (content: string): string => {
+        let cleaned = content;
+        
+        // Pattern to match style guide sections (in multiple languages)
+        const styleGuidePatterns = [
+          // English patterns
+          /^#+ *Literary Style Guide[^\n]*\n[\s\S]*?(?=^#+ *(?:CHAPTER|Chapter|Prologue|Epilogue|Author['']?s? Note)\b|\n---\n|$)/gm,
+          /^#+ *Writing Guide[^\n]*\n[\s\S]*?(?=^#+ *(?:CHAPTER|Chapter|Prologue|Epilogue|Author['']?s? Note)\b|\n---\n|$)/gm,
+          /^#+ *The Master of[^\n]*\n[\s\S]*?(?=^#+ *(?:CHAPTER|Chapter|Prologue|Epilogue|Author['']?s? Note)\b|\n---\n|$)/gm,
+          // Spanish patterns
+          /^#+ *Guía de Estilo[^\n]*\n[\s\S]*?(?=^#+ *(?:CAPÍTULO|Capítulo|Prólogo|Epílogo|Nota del Autor)\b|\n---\n|$)/gmi,
+          /^#+ *Guía de Escritura[^\n]*\n[\s\S]*?(?=^#+ *(?:CAPÍTULO|Capítulo|Prólogo|Epílogo|Nota del Autor)\b|\n---\n|$)/gmi,
+          // Checklist patterns (any language)
+          /^###+ *Checklist[^\n]*\n[\s\S]*?(?=^#{1,2} *(?:CHAPTER|Chapter|CAPÍTULO|Capítulo|Prologue|Prólogo|Epilogue|Epílogo)\b|\n---\n|$)/gmi,
+          // Generic style guide block between --- separators
+          /\n---\n[\s\S]*?(?:Style Guide|Guía de Estilo|Writing Guide|Guía de Escritura)[\s\S]*?\n---\n/gi,
+        ];
+        
+        for (const pattern of styleGuidePatterns) {
+          cleaned = cleaned.replace(pattern, '');
+        }
+        
+        // Also remove any remaining meta-sections that shouldn't be in narrative
+        const metaSectionPatterns = [
+          /^#+ *\d+\. *(?:Narrative Architecture|Character Construction|Central Themes|Language and Stylistic|Tone and Atmosphere)[^\n]*\n[\s\S]*?(?=^#+ *(?:CHAPTER|Chapter|CAPÍTULO|Capítulo|Prologue|Prólogo)\b|$)/gmi,
+        ];
+        
+        for (const pattern of metaSectionPatterns) {
+          cleaned = cleaned.replace(pattern, '');
+        }
+        
+        return cleaned.trim();
+      };
+
       // Helper function to clean JSON artifacts and extract heading + body from content
       const parseTranslatedContent = (content: string): { heading: string | null; body: string } => {
         let cleaned = content.trim();
@@ -3996,6 +4031,9 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
             // Not valid JSON, continue with original content
           }
         }
+        
+        // Remove any style guide contamination from AI output
+        cleaned = removeStyleGuideContamination(cleaned);
         
         // Extract the first markdown heading if present (## or # at start)
         const headingMatch = cleaned.match(/^(#{1,2})\s*(.+?)\n+/);
