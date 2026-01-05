@@ -199,6 +199,38 @@ SALIDA OBLIGATORIA (JSON)
       "progressionIdea": "Cómo hacer progresar este hilo"
     }
   ],
+  "seriesPlotDecisions": [
+    {
+      "decision": "El villano principal es X (no Y como parecía en Vol 1)",
+      "volumen_establecido": 1,
+      "capitulo_establecido": 15,
+      "volumenes_afectados": [1, 2, 3],
+      "consistencia_actual": "inconsistente",
+      "problema": "Vol 1 Cap 15 establece que X es el villano, pero Vol 2 Cap 8 contradice esto sin explicación"
+    }
+  ],
+  "seriesPersistentInjuries": [
+    {
+      "personaje": "Protagonista",
+      "tipo_lesion": "Pierde mano izquierda en batalla",
+      "volumen_ocurre": 1,
+      "capitulo_ocurre": 42,
+      "efecto_esperado": "Debe aparecer manco o con prótesis en Vol 2 y 3",
+      "volumenes_verificados": [2, 3],
+      "consistencia": "ignorada",
+      "problema": "En Vol 2 Cap 5 usa ambas manos sin explicación de curación mágica"
+    }
+  ],
+  "seriesOrphanElements": [
+    {
+      "tipo": "personaje",
+      "nombre": "Mentor misterioso del Vol 1",
+      "volumen": 1,
+      "capitulo": 10,
+      "razon": "Introducido como figura importante pero nunca vuelve a aparecer en la saga",
+      "recomendacion": "Darle cierre en Vol 3 o eliminar de Vol 1"
+    }
+  ],
   "overallAssessment": "Evaluación general del estado de los hilos y hitos",
   "autoFixRecommendation": "safe_to_autofix|review_recommended|manual_intervention_required"
 }
