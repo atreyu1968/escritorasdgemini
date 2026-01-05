@@ -3975,8 +3975,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         }
       }
       
-      // Helper function to strip chapter title headers and clean JSON artifacts from content
-      const stripChapterHeaders = (content: string): string => {
+      // Helper function to clean JSON artifacts and extract heading + body from content
+      const parseTranslatedContent = (content: string): { heading: string | null; body: string } => {
         let cleaned = content.trim();
         
         // First, check if content is wrapped in markdown code block (```json ... ```)
@@ -3997,16 +3997,22 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           }
         }
         
-        // Remove markdown headers at the start that contain chapter/prólogo/epílogo info
-        cleaned = cleaned.replace(/^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|Prólogo|Prologue|Epílogo|Epilogue|Nota del Autor|Author'?s? Note)[^\n]*\n+/i, '');
-        return cleaned.trim();
+        // Extract the first markdown heading if present (## or # at start)
+        const headingMatch = cleaned.match(/^(#{1,2})\s*(.+?)\n+/);
+        if (headingMatch) {
+          const heading = headingMatch[2].trim();
+          const body = cleaned.slice(headingMatch[0].length).trim();
+          return { heading, body };
+        }
+        
+        return { heading: null, body: cleaned.trim() };
       };
       
       const lines: string[] = [];
       lines.push(`# ${project.title}`);
       lines.push("");
       
-      // Chapter labels by target language
+      // Chapter labels by target language (fallback only)
       const chapterLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
         es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
         en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
@@ -4019,20 +4025,29 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       const labels = chapterLabels[targetLanguage] || chapterLabels.en;
       
       for (const chapter of translatedChapters) {
+        const parsed = parseTranslatedContent(chapter.translatedContent);
+        
+        // Use the translated heading from the AI if available, otherwise generate a fallback
         let heading: string;
-        if (chapter.chapterNumber === 0) {
-          heading = `${labels.prologue}${chapter.title ? `: ${chapter.title}` : ''}`;
-        } else if (chapter.chapterNumber === -1) {
-          heading = `${labels.epilogue}${chapter.title ? `: ${chapter.title}` : ''}`;
-        } else if (chapter.chapterNumber === -2) {
-          heading = labels.authorNote;
+        if (parsed.heading) {
+          // AI provided a translated heading - use it directly
+          heading = parsed.heading;
         } else {
-          heading = `${labels.chapter} ${chapter.chapterNumber}${chapter.title ? `: ${chapter.title}` : ''}`;
+          // Fallback: generate heading from chapter metadata (may be in original language)
+          if (chapter.chapterNumber === 0) {
+            heading = `${labels.prologue}${chapter.title ? `: ${chapter.title}` : ''}`;
+          } else if (chapter.chapterNumber === -1) {
+            heading = `${labels.epilogue}${chapter.title ? `: ${chapter.title}` : ''}`;
+          } else if (chapter.chapterNumber === -2) {
+            heading = labels.authorNote;
+          } else {
+            heading = `${labels.chapter} ${chapter.chapterNumber}${chapter.title ? `: ${chapter.title}` : ''}`;
+          }
         }
         
         lines.push(`## ${heading}`);
         lines.push("");
-        lines.push(stripChapterHeaders(chapter.translatedContent));
+        lines.push(parsed.body);
         lines.push("");
       }
       
