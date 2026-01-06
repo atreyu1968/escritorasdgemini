@@ -551,6 +551,9 @@ export const reeditProjects = pgTable("reedit_projects", {
   totalWordCount: integer("total_word_count").default(0),
   status: text("status").notNull().default("pending"), // pending, processing, paused, completed, error
   errorMessage: text("error_message"),
+  heartbeatAt: timestamp("heartbeat_at"),
+  cancelRequested: boolean("cancel_requested").default(false),
+  lastCompletedChapter: integer("last_completed_chapter").default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
