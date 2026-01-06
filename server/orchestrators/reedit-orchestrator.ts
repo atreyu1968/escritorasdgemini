@@ -783,6 +783,28 @@ export class ReeditOrchestrator {
     console.log(`[ReeditOrchestrator] Token usage saved: ${this.totalInputTokens} input, ${this.totalOutputTokens} output, ${this.totalThinkingTokens} thinking`);
   }
 
+  private async updateHeartbeat(projectId: number, lastCompletedChapter?: number) {
+    const updates: any = { heartbeatAt: new Date() };
+    if (lastCompletedChapter !== undefined) {
+      updates.lastCompletedChapter = lastCompletedChapter;
+    }
+    await storage.updateReeditProject(projectId, updates);
+  }
+
+  private async checkCancellation(projectId: number): Promise<boolean> {
+    const project = await storage.getReeditProject(projectId);
+    if (project?.cancelRequested) {
+      console.log(`[ReeditOrchestrator] Cancellation requested for project ${projectId}`);
+      await storage.updateReeditProject(projectId, {
+        status: "paused",
+        cancelRequested: false,
+        errorMessage: "Cancelado por el usuario",
+      });
+      return true;
+    }
+    return false;
+  }
+
   setProgressCallback(callback: ProgressCallback) {
     this.progressCallback = callback;
   }
@@ -950,8 +972,15 @@ export class ReeditOrchestrator {
 
       // === STAGE 2: EDITOR REVIEW (all chapters first) ===
       await storage.updateReeditProject(projectId, { currentStage: "editing" });
+      await this.updateHeartbeat(projectId);
 
       for (let i = 0; i < validChapters.length; i++) {
+        // Check for cancellation before processing each chapter
+        if (await this.checkCancellation(projectId)) {
+          console.log(`[ReeditOrchestrator] Processing cancelled at editing stage, chapter ${i + 1}`);
+          return;
+        }
+
         const chapter = validChapters[i];
         
         // Skip chapters that were already processed (resume support)
@@ -1005,6 +1034,15 @@ export class ReeditOrchestrator {
         await storage.updateReeditProject(projectId, {
           currentChapter: i + 1,
         });
+        
+        // Update heartbeat and last completed chapter after each chapter
+        await this.updateHeartbeat(projectId, chapter.chapterNumber);
+      }
+
+      // Check cancellation before World Bible extraction
+      if (await this.checkCancellation(projectId)) {
+        console.log(`[ReeditOrchestrator] Processing cancelled before World Bible extraction`);
+        return;
       }
 
       // === STAGE 3: WORLD BIBLE EXTRACTION ===
@@ -1117,6 +1155,12 @@ export class ReeditOrchestrator {
         console.log(`[ReeditOrchestrator] Critical block detected, continuing with warnings`);
       }
 
+      // Check cancellation before CopyEditor stage
+      if (await this.checkCancellation(projectId)) {
+        console.log(`[ReeditOrchestrator] Processing cancelled before CopyEditor stage`);
+        return;
+      }
+
       // === STAGE 5: COPY EDITING (all chapters) ===
       this.emitProgress({
         projectId,
@@ -1127,8 +1171,15 @@ export class ReeditOrchestrator {
       });
 
       await storage.updateReeditProject(projectId, { currentStage: "copyediting" });
+      await this.updateHeartbeat(projectId);
 
       for (let i = 0; i < validChapters.length; i++) {
+        // Check for cancellation before processing each chapter
+        if (await this.checkCancellation(projectId)) {
+          console.log(`[ReeditOrchestrator] Processing cancelled at copyediting stage, chapter ${i + 1}`);
+          return;
+        }
+
         const chapter = validChapters[i];
         
         // Skip chapters that were already copy-edited (resume support)
@@ -1169,6 +1220,15 @@ export class ReeditOrchestrator {
         await storage.updateReeditProject(projectId, {
           processedChapters: i + 1,
         });
+        
+        // Update heartbeat after each copyedited chapter
+        await this.updateHeartbeat(projectId, chapter.chapterNumber);
+      }
+
+      // Check cancellation before QA stage
+      if (await this.checkCancellation(projectId)) {
+        console.log(`[ReeditOrchestrator] Processing cancelled before QA stage`);
+        return;
       }
 
       // === STAGE 6: QA AGENTS ===
