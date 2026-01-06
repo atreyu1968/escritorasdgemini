@@ -100,7 +100,7 @@ export default function ReeditPage() {
   const { toast } = useToast();
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadLanguage, setUploadLanguage] = useState("en");
+  const [uploadLanguage, setUploadLanguage] = useState("es");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
