@@ -859,6 +859,17 @@ export class ReeditOrchestrator {
       for (let i = 0; i < validChapters.length; i++) {
         const chapter = validChapters[i];
         
+        // Skip chapters that were already processed (resume support)
+        if (chapter.processingStage !== "none" && chapter.processingStage !== "editor" && chapter.editorFeedback) {
+          console.log(`[ReeditOrchestrator] Skipping chapter ${chapter.chapterNumber} (already processed in editing stage)`);
+          const existingFeedback = chapter.editorFeedback as any;
+          editorFeedbacks.push(existingFeedback);
+          chapterSummaries.push(
+            `Capítulo ${chapter.chapterNumber} (Puntuación: ${chapter.editorScore || 7}/10): resumido`
+          );
+          continue;
+        }
+        
         this.emitProgress({
           projectId,
           stage: "editing",
@@ -980,6 +991,12 @@ export class ReeditOrchestrator {
 
       for (let i = 0; i < validChapters.length; i++) {
         const chapter = validChapters[i];
+        
+        // Skip chapters that were already copy-edited (resume support)
+        if (chapter.editedContent && chapter.processingStage === "qa") {
+          console.log(`[ReeditOrchestrator] Skipping chapter ${chapter.chapterNumber} (already copy-edited)`);
+          continue;
+        }
         
         this.emitProgress({
           projectId,
