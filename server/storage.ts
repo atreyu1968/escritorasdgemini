@@ -162,6 +162,8 @@ export interface IStorage {
   createReeditAuditReport(data: InsertReeditAuditReport): Promise<ReeditAuditReport>;
   getReeditAuditReportsByProject(projectId: number): Promise<ReeditAuditReport[]>;
   getReeditAuditReportByType(projectId: number, auditType: string): Promise<ReeditAuditReport | undefined>;
+  getReeditAuditReportByTypeAndRange(projectId: number, auditType: string, chapterRange: string): Promise<ReeditAuditReport | undefined>;
+  deleteReeditAuditReportsByType(projectId: number, auditType: string): Promise<void>;
 
   // Reedit World Bibles
   createReeditWorldBible(data: InsertReeditWorldBible): Promise<ReeditWorldBible>;
@@ -918,6 +920,26 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(reeditAuditReports.createdAt))
       .limit(1);
     return report;
+  }
+
+  async getReeditAuditReportByTypeAndRange(projectId: number, auditType: string, chapterRange: string): Promise<ReeditAuditReport | undefined> {
+    const [report] = await db.select().from(reeditAuditReports)
+      .where(and(
+        eq(reeditAuditReports.projectId, projectId),
+        eq(reeditAuditReports.auditType, auditType),
+        eq(reeditAuditReports.chapterRange, chapterRange)
+      ))
+      .orderBy(desc(reeditAuditReports.createdAt))
+      .limit(1);
+    return report;
+  }
+
+  async deleteReeditAuditReportsByType(projectId: number, auditType: string): Promise<void> {
+    await db.delete(reeditAuditReports)
+      .where(and(
+        eq(reeditAuditReports.projectId, projectId),
+        eq(reeditAuditReports.auditType, auditType)
+      ));
   }
 
   // Reedit World Bibles

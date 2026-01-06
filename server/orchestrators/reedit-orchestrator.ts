@@ -1914,6 +1914,12 @@ export class ReeditOrchestrator {
       // === STAGE 6: QA AGENTS ===
       await storage.updateReeditProject(projectId, { currentStage: "qa" });
 
+      // Clean up previous QA reports to avoid duplicates on restarts
+      await storage.deleteReeditAuditReportsByType(projectId, "continuity");
+      await storage.deleteReeditAuditReportsByType(projectId, "voice_rhythm");
+      await storage.deleteReeditAuditReportsByType(projectId, "semantic_repetition");
+      await storage.deleteReeditAuditReportsByType(projectId, "anachronism");
+
       // 6a: Continuity Sentinel - every 5 chapters
       const chapterBlocks5 = [];
       for (let i = 0; i < validChapters.length; i += 5) {
