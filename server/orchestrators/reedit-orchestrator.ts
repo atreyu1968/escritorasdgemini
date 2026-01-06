@@ -668,12 +668,24 @@ export class ReeditOrchestrator {
   private editorAgent: ReeditEditorAgent;
   private copyEditorAgent: ReeditCopyEditorAgent;
   private finalReviewerAgent: ReeditFinalReviewerAgent;
+  private worldBibleExtractor: WorldBibleExtractorAgent;
+  private architectAnalyzer: ArchitectAnalyzerAgent;
+  private continuitySentinel: ContinuitySentinelAgent;
+  private voiceRhythmAuditor: VoiceRhythmAuditorAgent;
+  private semanticRepetitionDetector: SemanticRepetitionDetectorAgent;
+  private anachronismDetector: AnachronismDetectorAgent;
   private progressCallback: ProgressCallback | null = null;
 
   constructor() {
     this.editorAgent = new ReeditEditorAgent();
     this.copyEditorAgent = new ReeditCopyEditorAgent();
     this.finalReviewerAgent = new ReeditFinalReviewerAgent();
+    this.worldBibleExtractor = new WorldBibleExtractorAgent();
+    this.architectAnalyzer = new ArchitectAnalyzerAgent();
+    this.continuitySentinel = new ContinuitySentinelAgent();
+    this.voiceRhythmAuditor = new VoiceRhythmAuditorAgent();
+    this.semanticRepetitionDetector = new SemanticRepetitionDetectorAgent();
+    this.anachronismDetector = new AnachronismDetectorAgent();
   }
 
   setProgressCallback(callback: ProgressCallback) {
@@ -799,12 +811,13 @@ export class ReeditOrchestrator {
 
       const chapters = await storage.getReeditChaptersByProject(projectId);
       
+      // === STAGE 1: STRUCTURE ANALYSIS ===
       this.emitProgress({
         projectId,
         stage: "analyzing",
         currentChapter: 0,
         totalChapters: chapters.length,
-        message: "Analyzing manuscript structure...",
+        message: "Analizando estructura del manuscrito...",
       });
 
       const structureAnalysis = await this.analyzeStructure(chapters);
@@ -831,8 +844,6 @@ export class ReeditOrchestrator {
         }
       }
 
-      await storage.updateReeditProject(projectId, { currentStage: "editing" });
-
       const validChapters = chapters.filter(c => {
         const isDup = structureAnalysis.duplicateChapters.some(d => d.chapterId === c.id);
         return !isDup;
@@ -840,6 +851,10 @@ export class ReeditOrchestrator {
 
       const detectedLang = project.detectedLanguage || "es";
       const chapterSummaries: string[] = [];
+      const editorFeedbacks: any[] = [];
+
+      // === STAGE 2: EDITOR REVIEW (all chapters first) ===
+      await storage.updateReeditProject(projectId, { currentStage: "editing" });
 
       for (let i = 0; i < validChapters.length; i++) {
         const chapter = validChapters[i];
@@ -849,7 +864,7 @@ export class ReeditOrchestrator {
           stage: "editing",
           currentChapter: i + 1,
           totalChapters: validChapters.length,
-          message: `Processing chapter ${chapter.chapterNumber}: Editor review...`,
+          message: `Capítulo ${chapter.chapterNumber}: Revisión editorial...`,
         });
 
         await storage.updateReeditChapter(chapter.id, {
@@ -873,15 +888,109 @@ export class ReeditOrchestrator {
           narrativeIssues: {
             pacing: editorResult.pacingNotes || "",
           },
-          processingStage: "copyeditor",
+          processingStage: "world_bible",
         });
 
+        editorFeedbacks.push(editorResult);
+        chapterSummaries.push(
+          `Capítulo ${chapter.chapterNumber} (Puntuación: ${editorResult.score || 7}/10): ${(editorResult.strengths || []).slice(0, 2).join(", ")}`
+        );
+
+        await storage.updateReeditProject(projectId, {
+          currentChapter: i + 1,
+        });
+      }
+
+      // === STAGE 3: WORLD BIBLE EXTRACTION ===
+      this.emitProgress({
+        projectId,
+        stage: "world_bible",
+        currentChapter: validChapters.length,
+        totalChapters: validChapters.length,
+        message: "Extrayendo Biblia del Mundo (personajes, ubicaciones, timeline)...",
+      });
+
+      await storage.updateReeditProject(projectId, { currentStage: "world_bible" });
+
+      const chaptersForBible = validChapters.map((c, i) => ({
+        num: c.chapterNumber,
+        content: c.originalContent,
+        feedback: editorFeedbacks[i]
+      }));
+
+      const worldBibleResult = await this.worldBibleExtractor.extractWorldBible(
+        chaptersForBible,
+        editorFeedbacks
+      );
+
+      // Save world bible to database
+      await storage.createReeditWorldBible({
+        projectId,
+        characters: worldBibleResult.personajes || [],
+        locations: worldBibleResult.ubicaciones || [],
+        timeline: worldBibleResult.timeline || [],
+        loreRules: worldBibleResult.reglasDelMundo || [],
+        historicalPeriod: worldBibleResult.epocaHistorica?.periodo || null,
+        historicalDetails: worldBibleResult.epocaHistorica?.detalles || null,
+        extractedFromChapters: validChapters.length,
+        confidence: worldBibleResult.confianza || 7,
+      });
+
+      // === STAGE 4: ARCHITECT ANALYSIS ===
+      this.emitProgress({
+        projectId,
+        stage: "architect",
+        currentChapter: validChapters.length,
+        totalChapters: validChapters.length,
+        message: "Arquitecto analizando estructura y trama...",
+      });
+
+      await storage.updateReeditProject(projectId, { currentStage: "architect" });
+
+      const architectResult = await this.architectAnalyzer.analyzeArchitecture(
+        worldBibleResult,
+        chaptersForBible,
+        structureAnalysis
+      );
+
+      await storage.createReeditAuditReport({
+        projectId,
+        auditType: "architect",
+        chapterRange: "all",
+        score: architectResult.puntuacionArquitectura || 7,
+        findings: architectResult,
+        recommendations: architectResult.recomendaciones || [],
+      });
+
+      // Check for critical blocks
+      if (architectResult.bloqueoCritico) {
+        console.log(`[ReeditOrchestrator] Critical block detected, continuing with warnings`);
+      }
+
+      // === STAGE 5: COPY EDITING (all chapters) ===
+      this.emitProgress({
+        projectId,
+        stage: "copyediting",
+        currentChapter: 0,
+        totalChapters: validChapters.length,
+        message: "Iniciando corrección de estilo...",
+      });
+
+      await storage.updateReeditProject(projectId, { currentStage: "copyediting" });
+
+      for (let i = 0; i < validChapters.length; i++) {
+        const chapter = validChapters[i];
+        
         this.emitProgress({
           projectId,
-          stage: "editing",
+          stage: "copyediting",
           currentChapter: i + 1,
           totalChapters: validChapters.length,
-          message: `Processing chapter ${chapter.chapterNumber}: Copy editing...`,
+          message: `Capítulo ${chapter.chapterNumber}: Corrección de estilo...`,
+        });
+
+        await storage.updateReeditChapter(chapter.id, {
+          processingStage: "copyeditor",
         });
 
         const copyEditorResult = await this.copyEditorAgent.editChapter(
@@ -898,20 +1007,135 @@ export class ReeditOrchestrator {
           copyeditorChanges: copyEditorResult.changesLog || "",
           fluencyImprovements: copyEditorResult.fluencyChanges || [],
           wordCount,
-          status: "completed",
-          processingStage: "completed",
+          processingStage: "qa",
         });
 
-        chapterSummaries.push(
-          `Chapter ${chapter.chapterNumber} (Score: ${editorResult.score || 7}/10): ${(editorResult.strengths || []).slice(0, 2).join(", ")}`
-        );
-
         await storage.updateReeditProject(projectId, {
-          currentChapter: i + 1,
           processedChapters: i + 1,
         });
       }
 
+      // === STAGE 6: QA AGENTS ===
+      await storage.updateReeditProject(projectId, { currentStage: "qa" });
+
+      // 6a: Continuity Sentinel - every 5 chapters
+      const chapterBlocks5 = [];
+      for (let i = 0; i < validChapters.length; i += 5) {
+        chapterBlocks5.push(validChapters.slice(i, Math.min(i + 5, validChapters.length)));
+      }
+
+      for (let blockIdx = 0; blockIdx < chapterBlocks5.length; blockIdx++) {
+        const block = chapterBlocks5[blockIdx];
+        const startChap = block[0].chapterNumber;
+        const endChap = block[block.length - 1].chapterNumber;
+
+        this.emitProgress({
+          projectId,
+          stage: "qa",
+          currentChapter: blockIdx + 1,
+          totalChapters: chapterBlocks5.length,
+          message: `Centinela de Continuidad: capítulos ${startChap}-${endChap}...`,
+        });
+
+        const continuityResult = await this.continuitySentinel.auditContinuity(
+          block.map(c => c.originalContent),
+          startChap,
+          endChap
+        );
+
+        await storage.createReeditAuditReport({
+          projectId,
+          auditType: "continuity",
+          chapterRange: `${startChap}-${endChap}`,
+          score: continuityResult.puntuacion || 8,
+          findings: continuityResult,
+          recommendations: continuityResult.erroresContinuidad?.map((e: any) => e.correccion) || [],
+        });
+      }
+
+      // 6b: Voice & Rhythm Auditor - every 10 chapters
+      const chapterBlocks10 = [];
+      for (let i = 0; i < validChapters.length; i += 10) {
+        chapterBlocks10.push(validChapters.slice(i, Math.min(i + 10, validChapters.length)));
+      }
+
+      for (let blockIdx = 0; blockIdx < chapterBlocks10.length; blockIdx++) {
+        const block = chapterBlocks10[blockIdx];
+        const startChap = block[0].chapterNumber;
+        const endChap = block[block.length - 1].chapterNumber;
+
+        this.emitProgress({
+          projectId,
+          stage: "qa",
+          currentChapter: blockIdx + 1,
+          totalChapters: chapterBlocks10.length,
+          message: `Auditor de Voz y Ritmo: capítulos ${startChap}-${endChap}...`,
+        });
+
+        const voiceResult = await this.voiceRhythmAuditor.auditVoiceRhythm(
+          block.map(c => c.originalContent),
+          startChap,
+          endChap
+        );
+
+        await storage.createReeditAuditReport({
+          projectId,
+          auditType: "voice_rhythm",
+          chapterRange: `${startChap}-${endChap}`,
+          score: voiceResult.puntuacion || 8,
+          findings: voiceResult,
+          recommendations: voiceResult.problemasTono?.map((p: any) => p.correccion) || [],
+        });
+      }
+
+      // 6c: Semantic Repetition Detector - full manuscript
+      this.emitProgress({
+        projectId,
+        stage: "qa",
+        currentChapter: validChapters.length,
+        totalChapters: validChapters.length,
+        message: "Detector de Repetición Semántica: manuscrito completo...",
+      });
+
+      const semanticResult = await this.semanticRepetitionDetector.detectRepetitions(
+        chapterSummaries,
+        validChapters.length
+      );
+
+      await storage.createReeditAuditReport({
+        projectId,
+        auditType: "semantic_repetition",
+        chapterRange: "all",
+        score: semanticResult.puntuacion || 8,
+        findings: semanticResult,
+        recommendations: semanticResult.repeticionesSemanticas?.map((r: any) => `${r.accion}: ${r.descripcion}`) || [],
+      });
+
+      // 6d: Anachronism Detector - for historical novels
+      this.emitProgress({
+        projectId,
+        stage: "qa",
+        currentChapter: validChapters.length,
+        totalChapters: validChapters.length,
+        message: "Detector de Anacronismos...",
+      });
+
+      const anachronismResult = await this.anachronismDetector.detectAnachronisms(
+        validChapters.map(c => ({ num: c.chapterNumber, content: c.originalContent })),
+        project.genre || "",
+        project.title || ""
+      );
+
+      await storage.createReeditAuditReport({
+        projectId,
+        auditType: "anachronism",
+        chapterRange: "all",
+        score: anachronismResult.puntuacionHistorica || 10,
+        findings: anachronismResult,
+        recommendations: anachronismResult.anacronismos?.map((a: any) => a.correccion) || [],
+      });
+
+      // === STAGE 7: FINAL REVIEW ===
       await storage.updateReeditProject(projectId, { currentStage: "reviewing" });
 
       this.emitProgress({
@@ -919,12 +1143,20 @@ export class ReeditOrchestrator {
         stage: "reviewing",
         currentChapter: validChapters.length,
         totalChapters: validChapters.length,
-        message: "Running final review...",
+        message: "Ejecutando revisión final...",
       });
 
       const updatedChapters = await storage.getReeditChaptersByProject(projectId);
-      const completedChapters = updatedChapters.filter(c => c.status === "completed");
+      const completedChapters = updatedChapters.filter(c => c.editedContent);
       const totalWords = completedChapters.reduce((sum, c) => sum + (c.wordCount || 0), 0);
+
+      // Mark all chapters as completed
+      for (const chapter of validChapters) {
+        await storage.updateReeditChapter(chapter.id, {
+          status: "completed",
+          processingStage: "completed",
+        });
+      }
 
       const finalResult = await this.finalReviewerAgent.reviewManuscript(
         chapterSummaries,
@@ -956,7 +1188,7 @@ export class ReeditOrchestrator {
         stage: "completed",
         currentChapter: validChapters.length,
         totalChapters: validChapters.length,
-        message: `Reedit complete! Bestseller score: ${bestsellerScore}/10`,
+        message: `Reedición completa. Puntuación bestseller: ${bestsellerScore}/10`,
       });
 
     } catch (error) {
