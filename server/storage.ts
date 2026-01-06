@@ -3,7 +3,7 @@ import {
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
   series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides, activityLogs,
   projectQueue, queueState, seriesArcMilestones, seriesPlotThreads, seriesArcVerifications,
-  aiUsageEvents, reeditProjects, reeditChapters, reeditAuditReports,
+  aiUsageEvents, reeditProjects, reeditChapters, reeditAuditReports, reeditWorldBibles,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
@@ -22,7 +22,8 @@ import {
   type AiUsageEvent, type InsertAiUsageEvent,
   type ReeditProject, type InsertReeditProject,
   type ReeditChapter, type InsertReeditChapter,
-  type ReeditAuditReport, type InsertReeditAuditReport
+  type ReeditAuditReport, type InsertReeditAuditReport,
+  type ReeditWorldBible, type InsertReeditWorldBible
 } from "@shared/schema";
 import { eq, desc, asc, and, lt, isNull, or, sql } from "drizzle-orm";
 
@@ -160,6 +161,11 @@ export interface IStorage {
   // Reedit Audit Reports
   createReeditAuditReport(data: InsertReeditAuditReport): Promise<ReeditAuditReport>;
   getReeditAuditReportsByProject(projectId: number): Promise<ReeditAuditReport[]>;
+
+  // Reedit World Bibles
+  createReeditWorldBible(data: InsertReeditWorldBible): Promise<ReeditWorldBible>;
+  getReeditWorldBibleByProject(projectId: number): Promise<ReeditWorldBible | undefined>;
+  updateReeditWorldBible(id: number, data: Partial<ReeditWorldBible>): Promise<ReeditWorldBible | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -900,6 +906,24 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(reeditAuditReports)
       .where(eq(reeditAuditReports.projectId, projectId))
       .orderBy(desc(reeditAuditReports.createdAt));
+  }
+
+  // Reedit World Bibles
+  async createReeditWorldBible(data: InsertReeditWorldBible): Promise<ReeditWorldBible> {
+    const [bible] = await db.insert(reeditWorldBibles).values(data).returning();
+    return bible;
+  }
+
+  async getReeditWorldBibleByProject(projectId: number): Promise<ReeditWorldBible | undefined> {
+    const [bible] = await db.select().from(reeditWorldBibles)
+      .where(eq(reeditWorldBibles.projectId, projectId));
+    return bible;
+  }
+
+  async updateReeditWorldBible(id: number, data: Partial<ReeditWorldBible>): Promise<ReeditWorldBible | undefined> {
+    const [updated] = await db.update(reeditWorldBibles).set(data)
+      .where(eq(reeditWorldBibles.id, id)).returning();
+    return updated;
   }
 }
 

@@ -592,6 +592,34 @@ export const reeditAuditReports = pgTable("reedit_audit_reports", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const reeditWorldBibles = pgTable("reedit_world_bibles", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => reeditProjects.id, { onDelete: "cascade" }),
+  // Characters extracted from manuscript
+  characters: jsonb("characters"), // [{name, description, firstAppearance, aliases, relationships}]
+  // Locations
+  locations: jsonb("locations"), // [{name, description, firstMention, characteristics}]
+  // Timeline of events
+  timeline: jsonb("timeline"), // [{event, chapter, timeMarker, importance}]
+  // World rules and lore
+  loreRules: jsonb("lore_rules"), // [{rule, source, category}]
+  // Historical period (for anachronism detection)
+  historicalPeriod: text("historical_period"),
+  historicalDetails: jsonb("historical_details"), // {era, location, socialContext, technology}
+  // Extraction metadata
+  extractedFromChapters: integer("extracted_from_chapters"),
+  confidence: integer("confidence"), // 1-10
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertReeditWorldBibleSchema = createInsertSchema(reeditWorldBibles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ReeditWorldBible = typeof reeditWorldBibles.$inferSelect;
+export type InsertReeditWorldBible = z.infer<typeof insertReeditWorldBibleSchema>;
+
 export const insertReeditProjectSchema = createInsertSchema(reeditProjects).omit({
   id: true,
   createdAt: true,
