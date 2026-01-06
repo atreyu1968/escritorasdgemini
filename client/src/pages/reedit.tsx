@@ -480,14 +480,20 @@ export default function ReeditPage() {
                       </Card>
                     )}
 
-                    {selectedProjectData.structureAnalysis && (
+                    {selectedProjectData.structureAnalysis != null && (
                       <Card>
                         <CardHeader>
                           <CardTitle className="text-base">Structure Analysis</CardTitle>
                         </CardHeader>
                         <CardContent>
                           <pre className="text-sm bg-muted p-3 rounded-md overflow-auto max-h-[200px]">
-                            {JSON.stringify(selectedProjectData.structureAnalysis as object, null, 2)}
+                            {(() => {
+                              try {
+                                return JSON.stringify(selectedProjectData.structureAnalysis, null, 2);
+                              } catch {
+                                return String(selectedProjectData.structureAnalysis);
+                              }
+                            })()}
                           </pre>
                         </CardContent>
                       </Card>
