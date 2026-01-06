@@ -4619,7 +4619,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         totalWordCount: wordCount,
       });
 
-      const chapterPattern = /^(Prólogo|Prologue|Prolog|Prologo|Epílogo|Epilogue|Epilog|Epilogo|Capítulo\s+\d+|Chapter\s+\d+|Chapitre\s+\d+|Kapitel\s+\d+|Capitolo\s+\d+|Capítol\s+\d+)(?:\s*[:\-–—.]?\s*(.*))?$/gim;
+      const chapterPattern = /^(Prólogo|Prologue|Prolog|Prologo|Epílogo|Epilogue|Epilog|Epilogo|Nota\s+de(?:l)?\s+Autor(?:a)?|Author'?s?\s+Note|Note\s+de\s+l'Auteur|Nachwort|Nota\s+dell'Autore|Nota\s+de\s+l'Autor|Capítulo\s+\d+|Chapter\s+\d+|Chapitre\s+\d+|Kapitel\s+\d+|Capitolo\s+\d+|Capítol\s+\d+)(?:\s*[:\-–—.]?\s*(.*))?$/gim;
       
       const chapters: { number: number; title: string; content: string }[] = [];
       const lines = fullText.split('\n');
@@ -4628,7 +4628,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        const match = line.match(/^(Prólogo|Prologue|Prolog|Prologo|Epílogo|Epilogue|Epilog|Epilogo|Capítulo\s+\d+|Chapter\s+\d+|Chapitre\s+\d+|Kapitel\s+\d+|Capitolo\s+\d+|Capítol\s+\d+)(?:\s*[:\-–—.]?\s*(.*))?$/i);
+        const match = line.match(/^(Prólogo|Prologue|Prolog|Prologo|Epílogo|Epilogue|Epilog|Epilogo|Nota\s+de(?:l)?\s+Autor(?:a)?|Author'?s?\s+Note|Note\s+de\s+l'Auteur|Nachwort|Nota\s+dell'Autore|Nota\s+de\s+l'Autor|Capítulo\s+\d+|Chapter\s+\d+|Chapitre\s+\d+|Kapitel\s+\d+|Capitolo\s+\d+|Capítol\s+\d+)(?:\s*[:\-–—.]?\s*(.*))?$/i);
         
         if (match) {
           if (currentChapter) {
@@ -4645,6 +4645,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           if (chapterType.includes('prólogo') || chapterType.includes('prologue') || chapterType.includes('prolog') || chapterType.includes('prologo')) {
             chapterNum = 0;
           } else if (chapterType.includes('epílogo') || chapterType.includes('epilogue') || chapterType.includes('epilog') || chapterType.includes('epilogo')) {
+            chapterNum = 998;
+          } else if (chapterType.includes('nota') || chapterType.includes('note') || chapterType.includes('nachwort')) {
             chapterNum = 999;
           } else {
             const numMatch = match[1].match(/\d+/);
