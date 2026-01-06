@@ -2092,6 +2092,12 @@ export class ReeditOrchestrator {
         chapterBlocks5.push(validChapters.slice(i, Math.min(i + 5, validChapters.length)));
       }
 
+      // Calculate total QA operations for progress tracking
+      const chapterBlocks10Count = Math.ceil(validChapters.length / 10);
+      const totalQaOps = chapterBlocks5.length + chapterBlocks10Count + 2; // continuity blocks + voice blocks + semantic + anachronism
+      let completedQaOps = 0;
+      const baseProgress = validChapters.length; // Start from 100% of chapters (copyeditor done)
+
       for (let blockIdx = 0; blockIdx < chapterBlocks5.length; blockIdx++) {
         const block = chapterBlocks5[blockIdx];
         const startChap = block[0].chapterNumber;
@@ -2120,6 +2126,14 @@ export class ReeditOrchestrator {
           findings: continuityResult,
           recommendations: continuityResult.erroresContinuidad?.map((e: any) => e.correccion) || [],
         });
+
+        // Update progress and heartbeat after each QA block
+        completedQaOps++;
+        await storage.updateReeditProject(projectId, {
+          processedChapters: baseProgress,
+          currentChapter: endChap,
+        });
+        await this.updateHeartbeat(projectId, endChap);
       }
 
       // 6b: Voice & Rhythm Auditor - every 10 chapters
@@ -2156,6 +2170,13 @@ export class ReeditOrchestrator {
           findings: voiceResult,
           recommendations: voiceResult.problemasTono?.map((p: any) => p.correccion) || [],
         });
+
+        // Update progress and heartbeat after each Voice/Rhythm block
+        completedQaOps++;
+        await storage.updateReeditProject(projectId, {
+          currentChapter: endChap,
+        });
+        await this.updateHeartbeat(projectId, endChap);
       }
 
       // 6c: Semantic Repetition Detector - full manuscript
@@ -2182,6 +2203,10 @@ export class ReeditOrchestrator {
         recommendations: semanticResult.repeticionesSemanticas?.map((r: any) => `${r.accion}: ${r.descripcion}`) || [],
       });
 
+      // Update heartbeat after Semantic Repetition
+      completedQaOps++;
+      await this.updateHeartbeat(projectId, validChapters.length);
+
       // 6d: Anachronism Detector - for historical novels
       this.emitProgress({
         projectId,
@@ -2206,6 +2231,11 @@ export class ReeditOrchestrator {
         findings: anachronismResult,
         recommendations: anachronismResult.anacronismos?.map((a: any) => a.correccion) || [],
       });
+
+      // Update heartbeat after Anachronism Detector
+      completedQaOps++;
+      await this.updateHeartbeat(projectId, validChapters.length);
+      console.log(`[ReeditOrchestrator] QA stage completed: ${completedQaOps}/${totalQaOps} operations`);
 
       // === STAGE 6.5: QA CORRECTIONS (automatic fix of QA-detected issues) ===
       // Check if QA corrections already completed (resume support)
