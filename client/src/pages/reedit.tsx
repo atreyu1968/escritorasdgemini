@@ -102,6 +102,161 @@ function ScoreDisplay({ score }: { score: number | null }) {
   );
 }
 
+function FinalReviewDisplay({ result }: { result: any }) {
+  if (!result) return null;
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity?.toLowerCase()) {
+      case 'critica': case 'critical': return 'text-red-600 dark:text-red-400';
+      case 'mayor': case 'major': return 'text-orange-600 dark:text-orange-400';
+      case 'menor': case 'minor': return 'text-yellow-600 dark:text-yellow-400';
+      default: return 'text-muted-foreground';
+    }
+  };
+
+  const getVerdictBadge = (verdict: string) => {
+    const v = verdict?.toUpperCase() || '';
+    if (v.includes('APROBADO') && !v.includes('RESERVA')) {
+      return <Badge className="bg-green-600">Aprobado</Badge>;
+    } else if (v.includes('RESERVA')) {
+      return <Badge className="bg-yellow-600">Aprobado con Reservas</Badge>;
+    } else if (v.includes('REVISION') || v.includes('REQUIERE')) {
+      return <Badge variant="destructive">Requiere Revisión</Badge>;
+    }
+    return <Badge variant="outline">{verdict}</Badge>;
+  };
+
+  return (
+    <div className="space-y-6">
+      {result.veredicto && (
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">Veredicto</p>
+            {getVerdictBadge(result.veredicto)}
+          </div>
+          {result.puntuacion_global && (
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Puntuación Global</p>
+              <ScoreDisplay score={result.puntuacion_global} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {result.resumen_general && (
+        <div>
+          <h4 className="font-semibold mb-2">Resumen General</h4>
+          <p className="text-sm leading-relaxed bg-muted p-3 rounded-md">{result.resumen_general}</p>
+        </div>
+      )}
+
+      {result.issues && result.issues.length > 0 && (
+        <div>
+          <h4 className="font-semibold mb-2">Problemas Detectados ({result.issues.length})</h4>
+          <div className="space-y-3">
+            {result.issues.map((issue: any, idx: number) => (
+              <div key={idx} className="border rounded-md p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline">{issue.categoria || 'General'}</Badge>
+                  <span className={`text-sm font-medium ${getSeverityColor(issue.severidad)}`}>
+                    {issue.severidad || 'Sin severidad'}
+                  </span>
+                </div>
+                <p className="text-sm">{issue.descripcion}</p>
+                {issue.capitulos_afectados && issue.capitulos_afectados.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Capítulos afectados: {issue.capitulos_afectados.join(', ')}
+                  </p>
+                )}
+                {issue.instrucciones_correccion && (
+                  <p className="text-sm mt-2 italic text-muted-foreground">
+                    Corrección: {issue.instrucciones_correccion}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result.analisis_bestseller && (
+        <div>
+          <h4 className="font-semibold mb-2">Análisis de Potencial Bestseller</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.entries(result.analisis_bestseller).map(([key, value]) => (
+              <div key={key} className="bg-muted p-2 rounded-md">
+                <p className="text-xs text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</p>
+                <p className="text-sm">{String(value)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result.justificacion_puntuacion && (
+        <div>
+          <h4 className="font-semibold mb-2">Justificación de la Puntuación</h4>
+          
+          {result.justificacion_puntuacion.puntuacion_desglosada && (
+            <div className="mb-3">
+              <p className="text-xs text-muted-foreground mb-1">Puntuación Desglosada</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(result.justificacion_puntuacion.puntuacion_desglosada).map(([key, value]) => (
+                  <Badge key={key} variant="secondary">
+                    {key}: {String(value)}/10
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {result.justificacion_puntuacion.fortalezas_principales && (
+            <div className="mb-3">
+              <p className="text-xs text-muted-foreground mb-1">Fortalezas Principales</p>
+              <ul className="text-sm list-disc list-inside space-y-1">
+                {result.justificacion_puntuacion.fortalezas_principales.map((f: string, i: number) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.justificacion_puntuacion.debilidades_principales && (
+            <div className="mb-3">
+              <p className="text-xs text-muted-foreground mb-1">Debilidades Principales</p>
+              <ul className="text-sm list-disc list-inside space-y-1">
+                {result.justificacion_puntuacion.debilidades_principales.map((d: string, i: number) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.justificacion_puntuacion.comparacion_mercado && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Comparación con el Mercado</p>
+              <p className="text-sm">{result.justificacion_puntuacion.comparacion_mercado}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result.capitulos_para_reescribir && result.capitulos_para_reescribir.length > 0 && (
+        <div>
+          <h4 className="font-semibold mb-2 text-orange-600 dark:text-orange-400">
+            Capítulos que Requieren Reescritura
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {result.capitulos_para_reescribir.map((cap: number) => (
+              <Badge key={cap} variant="destructive">Capítulo {cap}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReeditPage() {
   const { toast } = useToast();
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
@@ -559,11 +714,15 @@ export default function ReeditPage() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <pre className="text-sm bg-muted p-4 rounded-md overflow-auto max-h-[400px]">
-                            {JSON.stringify(selectedProjectData.finalReviewResult, null, 2)}
-                          </pre>
+                          <FinalReviewDisplay result={selectedProjectData.finalReviewResult} />
                           <div className="mt-4 flex justify-end">
-                            <Button variant="outline" data-testid="button-download-reedit">
+                            <Button 
+                              variant="outline" 
+                              data-testid="button-download-reedit"
+                              onClick={() => {
+                                window.open(`/api/reedit-projects/${selectedProjectData.id}/export`, '_blank');
+                              }}
+                            >
                               <Download className="h-4 w-4 mr-2" />
                               Exportar Manuscrito Editado
                             </Button>
