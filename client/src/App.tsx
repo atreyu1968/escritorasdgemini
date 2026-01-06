@@ -21,6 +21,7 @@ import ExportPage from "@/pages/export";
 import SeriesPage from "@/pages/series";
 import QueuePage from "@/pages/queue";
 import CostsPage from "@/pages/costs";
+import ReeditPage from "@/pages/reedit";
 import asdLogo from "@assets/ASD_1766442257801.png";
 
 function Router() {
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/series" component={SeriesPage} />
       <Route path="/queue" component={QueuePage} />
       <Route path="/costs" component={CostsPage} />
+      <Route path="/reedit" component={ReeditPage} />
       <Route path="/config" component={ConfigPage} />
       <Route component={NotFound} />
     </Switch>
