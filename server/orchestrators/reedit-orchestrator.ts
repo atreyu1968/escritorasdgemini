@@ -1070,24 +1070,25 @@ RESPONDE ÚNICAMENTE CON JSON VÁLIDO.`;
 class ReeditFinalReviewerAgent extends BaseAgent {
   constructor() {
     super({
-      name: "Reedit Final Reviewer",
+      name: "Revisor Final de Re-edición",
       role: "final_reviewer",
       systemPrompt: `Eres un experto de la industria editorial evaluando manuscritos para potencial de bestseller.
+IMPORTANTE: Todas tus respuestas deben estar en ESPAÑOL.
 
 Evalúa el manuscrito y proporciona:
-1. Bestseller score (1-10)
-2. Key strengths
-3. Areas needing improvement
-4. Market potential assessment
-5. Recommendations for author
+1. Puntuación de bestseller (1-10)
+2. Fortalezas principales
+3. Áreas que necesitan mejora
+4. Evaluación del potencial de mercado
+5. Recomendaciones para el autor
 
-RESPOND WITH JSON ONLY:
+RESPONDE ÚNICAMENTE CON JSON EN ESPAÑOL:
 {
   "bestsellerScore": 8,
-  "strengths": ["Compelling plot", "Strong characters"],
-  "weaknesses": ["Pacing issues in middle"],
-  "marketPotential": "high",
-  "recommendations": ["Tighten middle act", "Strengthen ending"]
+  "strengths": ["Trama atrapante", "Personajes bien desarrollados"],
+  "weaknesses": ["Problemas de ritmo en la parte central"],
+  "marketPotential": "alto",
+  "recommendations": ["Apretar el segundo acto", "Fortalecer el final"]
 }`,
       model: "gemini-2.5-flash",
       useThinking: false,
@@ -1099,16 +1100,17 @@ RESPOND WITH JSON ONLY:
   }
 
   async reviewManuscript(summaries: string[], totalChapters: number, totalWords: number): Promise<any> {
-    const prompt = `Evaluate this manuscript for bestseller potential:
+    const prompt = `Evalúa este manuscrito para determinar su potencial de bestseller.
+IMPORTANTE: Responde COMPLETAMENTE EN ESPAÑOL.
 
-MANUSCRIPT STATISTICS:
-- Total Chapters: ${totalChapters}
-- Total Words: ${totalWords}
+ESTADÍSTICAS DEL MANUSCRITO:
+- Total de Capítulos: ${totalChapters}
+- Total de Palabras: ${totalWords}
 
-CHAPTER SUMMARIES AND QUALITY:
+RESÚMENES Y CALIDAD DE LOS CAPÍTULOS:
 ${summaries.join("\n\n")}
 
-Provide your evaluation in JSON format.`;
+Proporciona tu evaluación en formato JSON, con todos los textos en ESPAÑOL.`;
     
     const response = await this.generateContent(prompt);
     let result: any = { bestsellerScore: 7, strengths: [], weaknesses: [], recommendations: [], marketPotential: "moderate" };
