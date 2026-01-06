@@ -3,7 +3,7 @@ import {
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
   series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides, activityLogs,
   projectQueue, queueState, seriesArcMilestones, seriesPlotThreads, seriesArcVerifications,
-  aiUsageEvents,
+  aiUsageEvents, reeditProjects, reeditChapters, reeditAuditReports,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
@@ -19,7 +19,10 @@ import {
   type SeriesPlotThread, type InsertSeriesPlotThread,
   type SeriesArcVerification, type InsertSeriesArcVerification,
   type Translation, type InsertTranslation, translations,
-  type AiUsageEvent, type InsertAiUsageEvent
+  type AiUsageEvent, type InsertAiUsageEvent,
+  type ReeditProject, type InsertReeditProject,
+  type ReeditChapter, type InsertReeditChapter,
+  type ReeditAuditReport, type InsertReeditAuditReport
 } from "@shared/schema";
 import { eq, desc, asc, and, lt, isNull, or, sql } from "drizzle-orm";
 
@@ -140,6 +143,23 @@ export interface IStorage {
   getAllTranslations(): Promise<Translation[]>;
   getTranslationsByProject(projectId: number): Promise<Translation[]>;
   deleteTranslation(id: number): Promise<void>;
+
+  // Reedit Projects - Full manuscript re-editing pipeline
+  createReeditProject(data: InsertReeditProject): Promise<ReeditProject>;
+  getReeditProject(id: number): Promise<ReeditProject | undefined>;
+  getAllReeditProjects(): Promise<ReeditProject[]>;
+  updateReeditProject(id: number, data: Partial<ReeditProject>): Promise<ReeditProject | undefined>;
+  deleteReeditProject(id: number): Promise<void>;
+
+  // Reedit Chapters
+  createReeditChapter(data: InsertReeditChapter): Promise<ReeditChapter>;
+  getReeditChaptersByProject(projectId: number): Promise<ReeditChapter[]>;
+  getReeditChapter(id: number): Promise<ReeditChapter | undefined>;
+  updateReeditChapter(id: number, data: Partial<ReeditChapter>): Promise<ReeditChapter | undefined>;
+
+  // Reedit Audit Reports
+  createReeditAuditReport(data: InsertReeditAuditReport): Promise<ReeditAuditReport>;
+  getReeditAuditReportsByProject(projectId: number): Promise<ReeditAuditReport[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -822,6 +842,64 @@ export class DatabaseStorage implements IStorage {
     }).from(aiUsageEvents)
       .groupBy(aiUsageEvents.model)
       .orderBy(sql`SUM(CAST(${aiUsageEvents.totalCostUsd} AS numeric)) DESC`);
+  }
+
+  // Reedit Projects - Full manuscript re-editing pipeline
+  async createReeditProject(data: InsertReeditProject): Promise<ReeditProject> {
+    const [project] = await db.insert(reeditProjects).values(data).returning();
+    return project;
+  }
+
+  async getReeditProject(id: number): Promise<ReeditProject | undefined> {
+    const [project] = await db.select().from(reeditProjects).where(eq(reeditProjects.id, id));
+    return project;
+  }
+
+  async getAllReeditProjects(): Promise<ReeditProject[]> {
+    return db.select().from(reeditProjects).orderBy(desc(reeditProjects.createdAt));
+  }
+
+  async updateReeditProject(id: number, data: Partial<ReeditProject>): Promise<ReeditProject | undefined> {
+    const [updated] = await db.update(reeditProjects).set(data).where(eq(reeditProjects.id, id)).returning();
+    return updated;
+  }
+
+  async deleteReeditProject(id: number): Promise<void> {
+    await db.delete(reeditProjects).where(eq(reeditProjects.id, id));
+  }
+
+  // Reedit Chapters
+  async createReeditChapter(data: InsertReeditChapter): Promise<ReeditChapter> {
+    const [chapter] = await db.insert(reeditChapters).values(data).returning();
+    return chapter;
+  }
+
+  async getReeditChaptersByProject(projectId: number): Promise<ReeditChapter[]> {
+    return db.select().from(reeditChapters)
+      .where(eq(reeditChapters.projectId, projectId))
+      .orderBy(asc(reeditChapters.chapterNumber));
+  }
+
+  async getReeditChapter(id: number): Promise<ReeditChapter | undefined> {
+    const [chapter] = await db.select().from(reeditChapters).where(eq(reeditChapters.id, id));
+    return chapter;
+  }
+
+  async updateReeditChapter(id: number, data: Partial<ReeditChapter>): Promise<ReeditChapter | undefined> {
+    const [updated] = await db.update(reeditChapters).set(data).where(eq(reeditChapters.id, id)).returning();
+    return updated;
+  }
+
+  // Reedit Audit Reports
+  async createReeditAuditReport(data: InsertReeditAuditReport): Promise<ReeditAuditReport> {
+    const [report] = await db.insert(reeditAuditReports).values(data).returning();
+    return report;
+  }
+
+  async getReeditAuditReportsByProject(projectId: number): Promise<ReeditAuditReport[]> {
+    return db.select().from(reeditAuditReports)
+      .where(eq(reeditAuditReports.projectId, projectId))
+      .orderBy(desc(reeditAuditReports.createdAt));
   }
 }
 
