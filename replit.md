@@ -5,8 +5,9 @@
 LitAgents is a Node.js application that orchestrates 4 autonomous AI literary agents using Google's Gemini 3 Pro model with advanced reasoning capabilities. The system manages the complete novel-writing workflow from plot planning to final manuscript production.
 
 The application features:
-- **8 Specialized AI Agents**: 
+- **9 Specialized AI Agents**: 
   - **Core Pipeline**: Architect (plot planning), Ghostwriter (prose writing), Editor (quality auditing), Copy Editor (style polishing)
+  - **Structural Fixer** (NEW): Automatically corrects plot holes, incomplete arcs, contradictions, and unresolved subplots detected by ArchitectAnalyzer
   - **3-Layer QA System**: Continuity Sentinel (every 5 chapters - temporal/spatial/state drift detection), Voice & Rhythm Auditor (10-chapter tranches - tonal consistency and pacing), Semantic Repetition Detector (manuscript-wide - idea repetition and foreshadowing payoff tracking)
   - **Final Reviewer**: End-to-end manuscript validation
 - **World Bible System**: Persistent memory for characters, locations, timeline events, and lore rules
