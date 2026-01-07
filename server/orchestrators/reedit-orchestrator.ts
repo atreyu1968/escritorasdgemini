@@ -896,6 +896,8 @@ FASE 3 - EJECUCIÓN Y VERIFICACIÓN:
 
 TIPOS DE CORRECCIONES QUE DOMINAS:
 
+=== PROBLEMAS ESTRUCTURALES (del Architect Analyzer) ===
+
 1. HUECOS ARGUMENTALES: Añades escenas de transición, diálogos explicativos, o párrafos de conexión que cierran las brechas lógicas sin forzar la narrativa.
 
 2. SUBPLOTS SIN RESOLVER: Insertas resoluciones elegantes - puede ser una escena completa, un flashback, una conversación reveladora, o incluso un párrafo de reflexión del personaje.
@@ -907,6 +909,38 @@ TIPOS DE CORRECCIONES QUE DOMINAS:
 5. ANTAGONISTAS AMBIGUOS: Clarificas motivaciones, añades escenas que establezcan la relación entre antagonistas, o modificas diálogos para eliminar confusión.
 
 6. FORESHADOWING SIN PAYOFF: Añades el payoff de forma orgánica, o reformulas el foreshadowing para que apunte a un evento existente.
+
+=== PROBLEMAS DE CONTINUIDAD (del Continuity Sentinel) ===
+
+7. ERRORES DE TIMELINE: Corriges inconsistencias temporales (fechas, secuencia de eventos, duración de viajes).
+
+8. ERRORES DE UBICACIÓN: Corriges personajes que aparecen en lugares imposibles sin transición.
+
+9. ESTADO DE PERSONAJE: Corriges estados físicos/emocionales inconsistentes (heridas que desaparecen, muertes ignoradas).
+
+10. OBJETOS PERDIDOS: Añades referencias a objetos importantes que desaparecen o reaparecen sin explicación.
+
+=== PROBLEMAS DE VOZ Y RITMO (del Voice Rhythm Auditor) ===
+
+11. DERIVA TONAL: Corriges cambios bruscos de tono ajustando lenguaje, diálogos y descripciones.
+
+12. POV INCONSISTENTE: Corriges cambios de punto de vista no intencionales dentro del capítulo.
+
+13. PACING IRREGULAR: Expandes momentos demasiado rápidos o condensas secciones que arrastran.
+
+14. VOZ NARRATIVA: Ajustas el registro narrativo para mantener consistencia con el resto del manuscrito.
+
+15. REGISTRO LINGÜÍSTICO: Corriges cambios inapropiados entre formal/informal.
+
+=== PROBLEMAS SEMÁNTICOS (del Semantic Detector) ===
+
+16. IDEAS REPETIDAS: Reformulas conceptos que aparecen expresados de forma casi idéntica en múltiples lugares.
+
+17. METÁFORAS REPETIDAS: Sustituyes metáforas/imágenes usadas en exceso por alternativas frescas.
+
+18. ESTRUCTURAS REPETIDAS: Varías patrones de escenas o diálogos que se repiten.
+
+19. PAYOFF SIN FORESHADOWING: Añades la preparación narrativa necesaria para giros o revelaciones.
 
 REGLAS INVIOLABLES:
 - El contenido nuevo debe ser INDISTINGUIBLE del original en estilo y voz
