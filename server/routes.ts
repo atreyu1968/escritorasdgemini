@@ -4963,6 +4963,61 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  app.post("/api/reedit-projects/:id/restart", async (req: Request, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getReeditProject(projectId);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      if (project.status === "processing") {
+        return res.status(400).json({ error: "Project is currently being processed" });
+      }
+
+      // Reset project state
+      await storage.updateReeditProject(projectId, {
+        status: "pending",
+        currentStage: null,
+        processedChapters: 0,
+        finalReviewResult: null,
+        bestsellerScore: null,
+        worldBible: null,
+        structureAnalysis: null,
+        qaReports: null,
+        errorMessage: null,
+        cancelRequested: false,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalThinkingTokens: 0,
+      });
+
+      // Reset all chapters to pending state
+      const chapters = await storage.getReeditChaptersByProject(projectId);
+      for (const chapter of chapters) {
+        await storage.updateReeditChapter(chapter.id, {
+          status: "pending",
+          editedContent: null,
+          auditReport: null,
+        });
+      }
+
+      // Delete audit reports for this project
+      await storage.deleteReeditAuditReports(projectId);
+
+      console.log(`[ReeditRestart] Project ${projectId} reset to pending state`);
+      res.json({ 
+        success: true, 
+        message: "Proyecto reiniciado. Puede iniciar la reedición nuevamente.",
+        projectId 
+      });
+    } catch (error) {
+      console.error("Error restarting reedit project:", error);
+      res.status(500).json({ error: "Failed to restart reedit project" });
+    }
+  });
+
   app.delete("/api/reedit-projects/:id", async (req: Request, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
