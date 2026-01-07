@@ -79,9 +79,17 @@ SEVERIDAD:
 - MAYOR: Objeto perdido reaparece, ubicación imposible sin explicación
 - MENOR: Pequeñas inconsistencias de estado emocional
 
+SISTEMA DE PUNTUACIÓN ESTRICTO (OBLIGATORIO):
+- 10/10: CERO issues de cualquier tipo. Continuidad PERFECTA.
+- 9/10: Solo 1 issue MENOR.
+- 8/10: 2 issues menores.
+- 7/10: 1 issue MAYOR o 3+ menores.
+- 6/10: 2 issues mayores.
+- 5/10 o menos: Cualquier issue CRÍTICO o 3+ mayores.
+
 APROBACIÓN:
-- APROBADO: 0 issues críticos, máx 1 mayor
-- REQUIERE REVISIÓN: 1+ críticos o 2+ mayores
+- APROBADO (10/10): CERO issues. Continuidad perfecta sin ningún error.
+- REQUIERE REVISIÓN: CUALQUIER issue, sin importar severidad.
 
 ═══════════════════════════════════════════════════════════════════
 SALIDA OBLIGATORIA (JSON)
