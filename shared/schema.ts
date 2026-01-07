@@ -462,7 +462,9 @@ export const seriesArcVerifications = pgTable("series_arc_verifications", {
 
 export const translations = pgTable("translations", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }), // Nullable for reedit projects
+  reeditProjectId: integer("reedit_project_id").references(() => reeditProjects.id, { onDelete: "cascade" }), // For reedit projects
+  source: text("source").notNull().default("original"), // "original" or "reedit"
   projectTitle: text("project_title").notNull(),
   sourceLanguage: text("source_language").notNull(),
   targetLanguage: text("target_language").notNull(),

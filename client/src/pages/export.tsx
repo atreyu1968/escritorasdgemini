@@ -46,11 +46,12 @@ const SUPPORTED_LANGUAGES = [
 interface CompletedProject {
   id: number;
   title: string;
-  genre: string;
+  genre: string | null;
   chapterCount: number;
   totalWords: number;
   finalScore: number | null;
   createdAt: string;
+  source: "original" | "reedit";
 }
 
 interface SavedTranslation {
@@ -175,7 +176,7 @@ export default function ExportPage() {
     }
   });
 
-  const startTranslation = useCallback((projectId: number, srcLang: string, tgtLang: string, projectTitle?: string) => {
+  const startTranslation = useCallback((projectId: number, srcLang: string, tgtLang: string, projectTitle?: string, source: "original" | "reedit" = "original") => {
     const title = projectTitle || completedProjects.find(p => p.id === projectId)?.title || "Proyecto";
     
     setTranslationProgress({
@@ -200,8 +201,11 @@ export default function ExportPage() {
       outputTokens: 0,
     });
 
+    const baseUrl = source === "reedit" 
+      ? `/api/reedit-projects/${projectId}/translate-stream`
+      : `/api/projects/${projectId}/translate-stream`;
     const eventSource = new EventSource(
-      `/api/projects/${projectId}/translate-stream?sourceLanguage=${srcLang}&targetLanguage=${tgtLang}`
+      `${baseUrl}?sourceLanguage=${srcLang}&targetLanguage=${tgtLang}`
     );
     setEventSourceRef(eventSource);
 
@@ -394,8 +398,11 @@ export default function ExportPage() {
   }, [eventSourceRef, toast]);
 
   const exportMutation = useMutation({
-    mutationFn: async (projectId: number) => {
-      const response = await fetch(`/api/projects/${projectId}/export-markdown`);
+    mutationFn: async ({ projectId, source }: { projectId: number; source: "original" | "reedit" }) => {
+      const endpoint = source === "reedit" 
+        ? `/api/reedit-projects/${projectId}/export-markdown`
+        : `/api/projects/${projectId}/export-markdown`;
+      const response = await fetch(endpoint);
       if (!response.ok) throw new Error("Failed to export project");
       return response.json() as Promise<ExportResult>;
     },
@@ -470,7 +477,7 @@ export default function ExportPage() {
 
   const filteredProjects = completedProjects.filter(p => 
     p.title.toLowerCase().includes(projectSearch.toLowerCase()) ||
-    p.genre.toLowerCase().includes(projectSearch.toLowerCase())
+    (p.genre?.toLowerCase().includes(projectSearch.toLowerCase()) ?? false)
   );
 
   const filteredTranslations = savedTranslations.filter(t =>
@@ -524,23 +531,32 @@ export default function ExportPage() {
                 <div className="space-y-3 pr-4">
                   {filteredProjects.map((project) => (
                     <Card
-                      key={project.id}
+                      key={`${project.source}-${project.id}`}
                       className={`hover-elevate cursor-pointer transition-all ${
                         selectedProjectId === project.id ? "ring-2 ring-primary" : ""
                       }`}
                       onClick={() => setSelectedProjectId(project.id)}
-                      data-testid={`card-project-${project.id}`}
+                      data-testid={`card-project-${project.source}-${project.id}`}
                     >
                       <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <CardTitle className="text-base truncate">{project.title}</CardTitle>
-                            <CardDescription className="text-xs">{project.genre}</CardDescription>
+                            <CardDescription className="text-xs">
+                              {project.genre || (project.source === "reedit" ? "Manuscrito re-editado" : "Sin género")}
+                            </CardDescription>
                           </div>
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Completado
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1">
+                            {project.source === "reedit" && (
+                              <Badge variant="outline" className="text-xs">
+                                Re-editado
+                              </Badge>
+                            )}
+                            <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Completado
+                            </Badge>
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -586,7 +602,7 @@ export default function ExportPage() {
                     </p>
                   </div>
                   <Button
-                    onClick={() => exportMutation.mutate(selectedProject.id)}
+                    onClick={() => exportMutation.mutate({ projectId: selectedProject.id, source: selectedProject.source })}
                     disabled={exportMutation.isPending}
                     className="w-full"
                     data-testid="button-export-markdown"
@@ -720,7 +736,7 @@ export default function ExportPage() {
                     </div>
                   ) : (
                     <Button
-                      onClick={() => startTranslation(selectedProject.id, sourceLanguage, targetLanguage)}
+                      onClick={() => startTranslation(selectedProject.id, sourceLanguage, targetLanguage, selectedProject.title, selectedProject.source)}
                       disabled={translationProgress.isTranslating || sourceLanguage === targetLanguage}
                       className="w-full"
                       data-testid="button-translate-project"

@@ -96,10 +96,11 @@ export async function registerRoutes(
 
   app.get("/api/projects/completed", async (_req: Request, res: Response) => {
     try {
+      // Get completed original projects
       const allProjects = await storage.getAllProjects();
       const completedProjects = allProjects.filter(p => p.status === "completed");
       
-      const projectsWithStats = await Promise.all(
+      const originalProjectsWithStats = await Promise.all(
         completedProjects.map(async (project) => {
           const chapters = await storage.getChaptersByProject(project.id);
           const totalWords = chapters.reduce((acc, c) => acc + (c.wordCount || 0), 0);
@@ -111,11 +112,37 @@ export async function registerRoutes(
             totalWords,
             finalScore: project.finalScore,
             createdAt: project.createdAt,
+            source: "original" as const,
           };
         })
       );
       
-      res.json(projectsWithStats);
+      // Get completed reedit projects
+      const allReeditProjects = await storage.getAllReeditProjects();
+      const completedReeditProjects = allReeditProjects.filter(p => p.status === "completed");
+      
+      const reeditProjectsWithStats = await Promise.all(
+        completedReeditProjects.map(async (project) => {
+          const chapters = await storage.getReeditChaptersByProject(project.id);
+          const totalWords = chapters.reduce((acc, c) => acc + (c.wordCount || 0), 0);
+          return {
+            id: project.id,
+            title: project.title,
+            genre: null, // Reedit projects don't have genre
+            chapterCount: chapters.length,
+            totalWords: totalWords || project.totalWordCount || 0,
+            finalScore: project.bestsellerScore,
+            createdAt: project.createdAt,
+            source: "reedit" as const,
+          };
+        })
+      );
+      
+      // Combine and sort by createdAt descending
+      const allCompletedProjects = [...originalProjectsWithStats, ...reeditProjectsWithStats]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      res.json(allCompletedProjects);
     } catch (error) {
       console.error("Error fetching completed projects:", error);
       res.status(500).json({ error: "Failed to fetch completed projects" });
@@ -3959,6 +3986,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     try {
       const translation = await storage.createTranslation({
         projectId,
+        source: "original",
         projectTitle: project.title,
         sourceLanguage,
         targetLanguage,
@@ -4245,6 +4273,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           } else {
             savedTranslation = await storage.createTranslation({
               projectId,
+              source: "original",
               projectTitle: project.title,
               sourceLanguage,
               targetLanguage,
@@ -4942,6 +4971,56 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  // Export reedit project as JSON (for frontend compatibility with original projects)
+  app.get("/api/reedit-projects/:id/export-markdown", async (req: Request, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getReeditProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const chapters = await storage.getReeditChaptersByProject(projectId);
+      if (chapters.length === 0) {
+        return res.status(400).json({ error: "No chapters to export" });
+      }
+
+      const sortedChapters = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
+      
+      let markdown = `# ${project.title}\n\n`;
+      let totalWords = 0;
+      
+      for (const chapter of sortedChapters) {
+        const content = chapter.editedContent || chapter.originalContent;
+        if (!content) continue;
+
+        let chapterTitle = chapter.title || `Capítulo ${chapter.chapterNumber}`;
+        if (chapter.chapterNumber === 0) {
+          chapterTitle = chapter.title || "Prólogo";
+        } else if (chapter.chapterNumber === 998) {
+          chapterTitle = chapter.title || "Epílogo";
+        } else if (chapter.chapterNumber === 999) {
+          chapterTitle = chapter.title || "Nota del Autor";
+        }
+
+        markdown += `## ${chapterTitle}\n\n`;
+        markdown += content.trim() + "\n\n---\n\n";
+        totalWords += content.split(/\s+/).filter((w: string) => w.length > 0).length;
+      }
+      
+      res.json({
+        projectId,
+        title: project.title,
+        chapterCount: sortedChapters.length,
+        totalWords,
+        markdown,
+      });
+    } catch (error) {
+      console.error("Error exporting reedit manuscript as markdown JSON:", error);
+      res.status(500).json({ error: "Failed to export manuscript" });
+    }
+  });
+
   app.get("/api/reedit-projects/:id/export-md", async (req: Request, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
@@ -5059,6 +5138,229 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     } catch (error) {
       console.error("Error exporting reedit manuscript:", error);
       res.status(500).json({ error: "Failed to export manuscript" });
+    }
+  });
+
+  // Translation stream for reedit projects
+  app.get("/api/reedit-projects/:id/translate-stream", async (req: Request, res: Response) => {
+    const projectId = parseInt(req.params.id);
+    const { sourceLanguage, targetLanguage } = req.query;
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    const sendEvent = (event: string, data: any) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Keep-alive heartbeat
+    const heartbeatInterval = setInterval(() => {
+      try {
+        res.write(": heartbeat\n\n");
+      } catch {
+        clearInterval(heartbeatInterval);
+      }
+    }, 15000);
+
+    const cleanup = () => {
+      clearInterval(heartbeatInterval);
+    };
+
+    req.on("close", cleanup);
+
+    const project = await storage.getReeditProject(projectId);
+    if (!project) {
+      sendEvent("error", { error: "Reedit project not found" });
+      cleanup();
+      res.end();
+      return;
+    }
+
+    // Create initial translation record for reedit project
+    let translationRecordId: number | null = null;
+    try {
+      const translation = await storage.createTranslation({
+        reeditProjectId: projectId,
+        source: "reedit",
+        projectTitle: project.title + " (Re-editado)",
+        sourceLanguage: sourceLanguage as string,
+        targetLanguage: targetLanguage as string,
+        status: "translating",
+        chaptersTranslated: 0,
+        totalWords: 0,
+        markdown: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      translationRecordId = translation.id;
+      console.log(`[Translation-Reedit] Initialized repository record ID ${translationRecordId}`);
+    } catch (dbError) {
+      console.error("Error creating initial reedit translation record:", dbError);
+    }
+    
+    try {
+      if (!targetLanguage) {
+        sendEvent("error", { error: "targetLanguage is required" });
+        cleanup();
+        res.end();
+        return;
+      }
+      
+      const chapters = await storage.getReeditChaptersByProject(projectId);
+      if (chapters.length === 0) {
+        sendEvent("error", { error: "No chapters found in project" });
+        cleanup();
+        res.end();
+        return;
+      }
+      
+      const sortedChapters = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
+      const chaptersWithContent = sortedChapters.filter(c => 
+        (c.editedContent || c.originalContent)?.trim().length > 0
+      );
+      const totalChapters = chaptersWithContent.length;
+      
+      sendEvent("start", { 
+        projectTitle: project.title,
+        totalChapters,
+        sourceLanguage,
+        targetLanguage
+      });
+      
+      const { TranslatorAgent } = await import("./agents/translator");
+      const translator = new TranslatorAgent();
+      
+      const translatedChapters: Array<{
+        chapterNumber: number;
+        title: string;
+        translatedContent: string;
+        notes: string;
+      }> = [];
+      
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let completedCount = 0;
+      
+      for (const chapter of chaptersWithContent) {
+        const chapterLabel = chapter.chapterNumber === 0 ? "Prólogo" :
+                            chapter.chapterNumber === 998 ? "Epílogo" :
+                            chapter.chapterNumber === 999 ? "Nota del Autor" :
+                            `Capítulo ${chapter.chapterNumber}`;
+        
+        sendEvent("progress", {
+          current: completedCount + 1,
+          total: totalChapters,
+          chapterNumber: chapter.chapterNumber,
+          chapterTitle: chapter.title || chapterLabel,
+          status: "translating"
+        });
+
+        const contentToTranslate = chapter.editedContent || chapter.originalContent || "";
+        console.log(`[Translate-Reedit] Translating ${chapterLabel}: ${chapter.title}`);
+        
+        const result = await translator.execute({
+          content: contentToTranslate,
+          sourceLanguage: sourceLanguage as string,
+          targetLanguage: targetLanguage as string,
+          chapterTitle: chapter.title || undefined,
+          chapterNumber: chapter.chapterNumber,
+          projectId: -projectId, // Negative for reedit projects
+        });
+        
+        if (result.result) {
+          translatedChapters.push({
+            chapterNumber: chapter.chapterNumber,
+            title: chapter.title || chapterLabel,
+            translatedContent: result.result.translated_text,
+            notes: result.result.notes,
+          });
+          completedCount++;
+        }
+        
+        totalInputTokens += (result as any).inputTokens || 0;
+        totalOutputTokens += (result as any).outputTokens || 0;
+        
+        sendEvent("progress", {
+          current: completedCount,
+          total: totalChapters,
+          chapterNumber: chapter.chapterNumber,
+          chapterTitle: chapter.title || chapterLabel,
+          status: "completed",
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens
+        });
+
+        if (translationRecordId) {
+          try {
+            await storage.updateTranslation(translationRecordId, {
+              chaptersTranslated: completedCount,
+              status: "translating"
+            });
+          } catch (err) {
+            console.error("[Translation] Progress DB update failed:", err);
+          }
+        }
+      }
+      
+      // Generate final markdown
+      let finalMarkdown = `# ${project.title}\n\n`;
+      let totalWords = 0;
+      
+      for (const ch of translatedChapters) {
+        const titleLabel = ch.chapterNumber === 0 ? "Prólogo" :
+                          ch.chapterNumber === 998 ? "Epílogo" :
+                          ch.chapterNumber === 999 ? "Nota del Autor" :
+                          `Capítulo ${ch.chapterNumber}`;
+        
+        finalMarkdown += `## ${ch.title || titleLabel}\n\n`;
+        finalMarkdown += ch.translatedContent.trim() + "\n\n---\n\n";
+        totalWords += ch.translatedContent.split(/\s+/).filter((w: string) => w.length > 0).length;
+      }
+      
+      // Save to repository
+      if (translationRecordId) {
+        try {
+          await storage.updateTranslation(translationRecordId, {
+            chaptersTranslated: completedCount,
+            totalWords,
+            markdown: finalMarkdown,
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            status: "completed"
+          });
+        } catch (err) {
+          console.error("[Translation] Final DB update failed:", err);
+        }
+      }
+      
+      sendEvent("complete", {
+        chaptersTranslated: completedCount,
+        totalWords,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        projectTitle: project.title,
+        targetLanguage,
+        markdown: finalMarkdown
+      });
+      
+    } catch (error: any) {
+      console.error("[Translation-Reedit] Error:", error);
+      sendEvent("error", { error: error.message || "Translation failed" });
+      
+      if (translationRecordId) {
+        try {
+          await storage.updateTranslation(translationRecordId, { status: "error" });
+        } catch (err) {
+          console.error("[Translation] Status update to error failed:", err);
+        }
+      }
+    } finally {
+      cleanup();
+      res.end();
     }
   });
 
