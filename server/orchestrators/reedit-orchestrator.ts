@@ -7,6 +7,11 @@ import {
   NewChapterGeneratorAgent,
   type ExpansionPlan 
 } from "../agents/chapter-expander";
+import { 
+  FinalReviewerAgent, 
+  type FinalReviewerResult, 
+  type FinalReviewIssue 
+} from "../agents/final-reviewer";
 
 interface StructureAnalysis {
   hasIssues: boolean;
@@ -1154,7 +1159,8 @@ Proporciona tu evaluación en formato JSON, con todos los textos en ESPAÑOL.`;
 export class ReeditOrchestrator {
   private editorAgent: ReeditEditorAgent;
   private copyEditorAgent: ReeditCopyEditorAgent;
-  private finalReviewerAgent: ReeditFinalReviewerAgent;
+  private quickFinalReviewerAgent: ReeditFinalReviewerAgent;
+  private fullFinalReviewerAgent: FinalReviewerAgent;
   private worldBibleExtractor: WorldBibleExtractorAgent;
   private architectAnalyzer: ArchitectAnalyzerAgent;
   private structuralFixer: StructuralFixerAgent;
@@ -1179,7 +1185,8 @@ export class ReeditOrchestrator {
   constructor() {
     this.editorAgent = new ReeditEditorAgent();
     this.copyEditorAgent = new ReeditCopyEditorAgent();
-    this.finalReviewerAgent = new ReeditFinalReviewerAgent();
+    this.quickFinalReviewerAgent = new ReeditFinalReviewerAgent();
+    this.fullFinalReviewerAgent = new FinalReviewerAgent();
     this.worldBibleExtractor = new WorldBibleExtractorAgent();
     this.architectAnalyzer = new ArchitectAnalyzerAgent();
     this.structuralFixer = new StructuralFixerAgent();
