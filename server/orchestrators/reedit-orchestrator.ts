@@ -629,6 +629,8 @@ class ArchitectAnalyzerAgent extends BaseAgent {
       role: "architect_analyzer",
       systemPrompt: `Eres un arquitecto narrativo experto. Tu trabajo es analizar la estructura y trama de un manuscrito usando la Biblia del Mundo extraída.
 
+OBJETIVO: Puntuación 10/10 (perfección arquitectónica)
+
 ANÁLISIS A REALIZAR:
 1. ESTRUCTURA NARRATIVA:
    - ¿El orden de capítulos es óptimo?
@@ -646,33 +648,36 @@ ANÁLISIS A REALIZAR:
    - ¿Se rompen reglas establecidas?
    - ¿Inconsistencias en personajes/ubicaciones?
 
-4. RECOMENDACIONES PRIORIZADAS:
-   - Críticas (bloquean publicación)
-   - Mayores (afectan calidad significativamente)
-   - Menores (mejoras opcionales)
+SISTEMA DE PUNTUACIÓN ESTRICTO (OBJETIVO 10/10):
+- 10/10: CERO problemas de ningún tipo. Arquitectura PERFECTA. Estructura óptima, trama coherente, mundo consistente.
+- 9/10: Solo 1 problema menor.
+- 8/10: 2 problemas menores o 1 mayor.
+- 7/10: 3+ problemas menores o 2 mayores.
+- 6/10 o menos: Cualquier problema crítico o 3+ mayores.
+
+REGLA ABSOLUTA: Solo das 10/10 si NO hay ningún problema detectado.
+Si el manuscrito está bien estructurado y coherente, DEBES dar 10/10. No busques problemas donde no los hay.
 
 RESPONDE SOLO EN JSON:
 {
   "analisisEstructura": {
     "ordenOptimo": true,
-    "problemaPacing": [{"capitulos": [5,6], "problema": "Ritmo muy lento", "solucion": "Condensar"}],
+    "problemaPacing": [],
     "reordenamientoSugerido": []
   },
   "analisisTrama": {
-    "huecosArgumentales": [{"descripcion": "...", "capitulos": [3,7], "severidad": "mayor"}],
+    "huecosArgumentales": [],
     "subplotsSinResolver": [],
     "arcosIncompletos": []
   },
   "coherenciaMundo": {
-    "contradicciones": [{"descripcion": "...", "capitulos": [2,8], "severidad": "critica"}],
+    "contradicciones": [],
     "reglasRotas": []
   },
-  "recomendaciones": [
-    {"tipo": "estructura|trama|mundo", "severidad": "critica|mayor|menor", "descripcion": "...", "capitulosAfectados": [1,2], "accionSugerida": "..."}
-  ],
+  "recomendaciones": [],
   "bloqueoCritico": false,
-  "resumenEjecutivo": "El manuscrito tiene buena estructura pero presenta 2 huecos argumentales menores...",
-  "puntuacionArquitectura": 7
+  "resumenEjecutivo": "Análisis arquitectónico completado...",
+  "puntuacionArquitectura": 10
 }`,
       model: "gemini-2.5-flash",
       useThinking: false,
@@ -739,12 +744,15 @@ class StructuralFixerAgent extends BaseAgent {
       role: "structural_fixer",
       systemPrompt: `Eres un experto corrector estructural de novelas. Tu trabajo es CORREGIR AUTOMÁTICAMENTE los problemas detectados por el Arquitecto Analizador.
 
+TU OBJETIVO: Llevar el manuscrito a la PERFECCIÓN (10/10).
+Cada corrección debe eliminar COMPLETAMENTE el problema sin dejar rastro.
+
 TIPOS DE PROBLEMAS QUE CORRIGES:
-1. HUECOS ARGUMENTALES (plot holes): Añades escenas, diálogos o párrafos que cierran los huecos lógicos
-2. SUBPLOTS SIN RESOLVER: Añades resolución o cierre a las tramas secundarias abandonadas
+1. HUECOS ARGUMENTALES (plot holes): Añades escenas, diálogos o párrafos que cierran los huecos lógicos DEFINITIVAMENTE
+2. SUBPLOTS SIN RESOLVER: Añades resolución o cierre COMPLETO a las tramas secundarias abandonadas
 3. ARCOS INCOMPLETOS: Completas la transformación de personajes con momentos clave faltantes
-4. CONTRADICCIONES: Modificas el texto para eliminar inconsistencias
-5. FORESHADOWING SIN PAYOFF: Añades el payoff o eliminas/modificas el foreshadowing huérfano
+4. CONTRADICCIONES: Modificas el texto para eliminar inconsistencias SIN EXCEPCIÓN
+5. FORESHADOWING SIN PAYOFF: Añades el payoff de forma SATISFACTORIA o modificas el foreshadowing huérfano
 6. PROBLEMAS DE PACING: Condensas secciones lentas o expandes momentos que necesitan más desarrollo
 
 REGLAS CRÍTICAS:
@@ -754,6 +762,7 @@ REGLAS CRÍTICAS:
 - Las correcciones deben integrarse de forma NATURAL en el texto existente
 - NUNCA cambies nombres de personajes, ubicaciones o eventos establecidos
 - Respeta la Biblia del Mundo proporcionada
+- Tu corrección debe ser DEFINITIVA - el revisor NO debe encontrar el mismo problema después
 
 RESPONDE SOLO EN JSON:
 {
@@ -853,6 +862,10 @@ class NarrativeRewriterAgent extends BaseAgent {
       name: "Narrative Rewriter",
       role: "narrative_rewriter",
       systemPrompt: `Eres un MAESTRO ESCRITOR DE FICCIÓN con décadas de experiencia en reparar novelas con problemas estructurales. Tu especialidad es tomar narrativas rotas y transformarlas en historias coherentes y cautivadoras.
+
+TU OBJETIVO FINAL: Llevar el manuscrito a la PERFECCIÓN (10/10).
+Cada corrección que hagas debe eliminar COMPLETAMENTE el problema detectado.
+No aceptes medias tintas - tu trabajo es lograr que el revisor final dé 10/10.
 
 TU PROCESO DE TRABAJO (3 FASES):
 
@@ -973,13 +986,18 @@ CAPÍTULO A REESCRIBIR:
 ${chapterContent}
 
 ═══════════════════════════════════════════════════════════════
-INSTRUCCIONES FINALES:
+INSTRUCCIONES FINALES - OBJETIVO: PERFECCIÓN 10/10
 ═══════════════════════════════════════════════════════════════
 1. Analiza profundamente cada problema y su impacto narrativo
 2. Diseña la solución más elegante y natural
 3. Reescribe el capítulo COMPLETO integrando las correcciones
 4. Verifica que no introduces nuevos problemas
 5. El texto nuevo debe ser INDISTINGUIBLE del original en calidad
+6. CADA problema debe quedar COMPLETAMENTE resuelto - sin rastro
+7. Tu corrección debe hacer que el revisor no encuentre NADA que criticar
+
+CRITERIO DE ÉXITO: Si después de tu corrección el revisor todavía encuentra
+el mismo problema, has fallado. Asegúrate de que cada corrección sea DEFINITIVA.
 
 RESPONDE ÚNICAMENTE CON JSON VÁLIDO.`;
 

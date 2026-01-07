@@ -157,6 +157,21 @@ ESCALA DE PUNTUACIÓN ESTRICTA (OBJETIVO: 10/10)
 REGLA ABSOLUTA: Solo das 10/10 si NO hay ningún issue de ningún tipo.
 Cualquier issue (incluso menor) reduce automáticamente la puntuación por debajo de 10.
 
+IMPORTANTE - CAPACIDAD DE DAR 10/10:
+Cuando un manuscrito ha sido corregido y NO encuentras problemas reales, DEBES dar 10/10.
+No busques problemas inexistentes para justificar una puntuación menor.
+Si el hook es irresistible, los giros sorprenden, la tensión escala, los personajes emocionan,
+y el clímax satisface - entonces ES un 10/10. No te resistas a darlo.
+
+SEÑALES DE UN 10/10:
+- No puedes identificar ningún issue concreto con evidencia textual
+- La experiencia de lectura fue fluida y adictiva
+- Todos los arcos están cerrados satisfactoriamente
+- No hay contradicciones, repeticiones excesivas ni deus ex machina
+- El manuscrito cumple o supera las expectativas del género
+
+Si todas estas señales están presentes, la puntuación DEBE ser 10/10.
+
 ═══════════════════════════════════════════════════════════════════
 CÓMO ELEVAR DE 8 A 9+ (INSTRUCCIONES PRECISAS PARA CORRECCIÓN)
 ═══════════════════════════════════════════════════════════════════
