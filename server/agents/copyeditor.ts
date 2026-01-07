@@ -13,6 +13,8 @@ export interface CopyEditorResult {
   cambios_realizados: string;
   repeticiones_suavizadas?: string[];
   mejoras_fluidez?: string[];
+  anacronismos_corregidos?: string[];
+  cliches_ia_eliminados?: string[];
   idioma_detectado: string;
 }
 
@@ -197,12 +199,34 @@ MEJORA DE FLUIDEZ NATURAL:
 16. CONSTRUCCIONES NATURALES: El texto debe sonar como lo escribiría un hablante nativo culto.
 17. EVITAR REDUNDANCIAS: "archivados en archivos", "dijo diciendo" son errores a corregir.
 
+═══════════════════════════════════════════════════════════════════
+DETECCIÓN Y CORRECCIÓN DE ANACRONISMOS (FICCIÓN HISTÓRICA)
+═══════════════════════════════════════════════════════════════════
+
+18. OBJETOS ANACRÓNICOS: Detecta y corrige referencias a tecnología, armas o herramientas que no existían en la época del relato.
+    - Ejemplos: relojes de bolsillo antes del s.XVI, antibióticos antes de 1928, electricidad antes de 1880.
+
+19. VOCABULARIO ANACRÓNICO: Sustituye expresiones modernas por equivalentes de época.
+    - Prohibidos en histórica: "OK", "estrés", "ADN", "psicología", "impactante", "genial", "flipar", "mola", "rollo".
+    - Sustituir por: expresiones apropiadas al período histórico.
+
+20. COSTUMBRES ANACRÓNICAS: Detecta comportamientos sociales que no corresponden a la época.
+    - Tuteo donde debería haber tratamiento formal.
+    - Roles de género o libertades anacrónicos.
+    - Actitudes modernas en personajes de otra época.
+
+21. CONOCIMIENTOS ANACRÓNICOS: Detecta personajes que saben cosas no descubiertas en su época.
+    - Un médico medieval hablando de bacterias.
+    - Un personaje del s.XVIII entendiendo la evolución.
+
 SALIDA REQUERIDA (JSON):
 {
   "texto_final": "El contenido completo del capítulo maquetado en Markdown (EN EL IDIOMA ORIGINAL)",
   "cambios_realizados": "Breve resumen de los ajustes técnicos hechos",
   "repeticiones_suavizadas": ["Lista de frases que fueron reformuladas para evitar repetición"],
   "mejoras_fluidez": ["Lista de mejoras de fluidez aplicadas (frases divididas, pronombres corregidos, etc.)"],
+  "anacronismos_corregidos": ["Lista de anacronismos detectados y cómo se corrigieron (solo si aplica a ficción histórica)"],
+  "cliches_ia_eliminados": ["Lista de clichés de IA sustituidos por expresiones originales"],
   "idioma_detectado": "código ISO del idioma (es, en, fr, de, it, pt, ca)"
 }
 `;
