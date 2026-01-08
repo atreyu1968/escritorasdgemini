@@ -2215,6 +2215,34 @@ export class ReeditOrchestrator {
     this.totalThinkingTokens = project.totalThinkingTokens || 0;
     console.log(`[ReeditOrchestrator] Loaded existing tokens: ${this.totalInputTokens} input, ${this.totalOutputTokens} output, ${this.totalThinkingTokens} thinking`);
 
+    // SPECIAL CASE: If resuming from awaiting_instructions with existing finalReviewResult,
+    // skip directly to applying corrections based on final review + user instructions
+    const hasExistingFinalReview = project.finalReviewResult && 
+      ((project.finalReviewResult as any).issues?.length > 0 || 
+       (project.finalReviewResult as any).capitulos_para_reescribir?.length > 0);
+    const hasUserInstructions = project.pendingUserInstructions && project.pendingUserInstructions.trim().length > 0;
+    // Only trigger fast-track if project was actually awaiting instructions (not if it was successfully completed)
+    const isResumingFromPause = project.status === "awaiting_instructions" || 
+      (project.status !== "completed" && (project.currentStage === "reviewing" || project.currentStage === "completed"));
+    
+    if (hasExistingFinalReview && isResumingFromPause && (hasUserInstructions || project.currentStage === "reviewing" || project.currentStage === "completed")) {
+      console.log(`[ReeditOrchestrator] FAST-TRACK RESUME: Project has finalReviewResult with issues. Skipping to corrections + final review.`);
+      console.log(`  - User instructions: ${hasUserInstructions ? 'YES' : 'NO'}`);
+      console.log(`  - Previous stage: ${project.currentStage}`);
+      
+      this.emitProgress({
+        projectId,
+        stage: "fixing",
+        currentChapter: 0,
+        totalChapters: 0,
+        message: "Retomando desde correcciones pendientes (salto rápido)...",
+      });
+      
+      // Go directly to runFinalReviewOnly which handles corrections + re-review
+      await this.runFinalReviewOnly(projectId);
+      return;
+    }
+
     // Detect resume stage - if project was interrupted, continue from where it left off
     const resumeStage = project.currentStage || "none";
     const stageOrder = ["none", "analyzing", "editing", "world_bible", "expansion", "architect", "qa", "narrative_rewriting", "copyediting", "reviewing", "completed"];
@@ -3347,6 +3375,124 @@ export class ReeditOrchestrator {
     let finalResult: FinalReviewerResult | null = null;
     let bestsellerScore = 0;
     const correctedIssueDescriptions: string[] = [];
+    
+    // Check for user instructions and add them to context
+    const userInstructions = project.pendingUserInstructions || "";
+    if (userInstructions) {
+      console.log(`[ReeditOrchestrator] User instructions found: "${userInstructions.substring(0, 100)}..."`);
+      correctedIssueDescriptions.push(`INSTRUCCIONES DEL USUARIO: ${userInstructions}`);
+      // NOTE: Instructions are cleared AFTER corrections are applied successfully (see below)
+    }
+    
+    // If we have an existing finalReviewResult, apply those corrections FIRST before running review
+    const existingFinalReview = project.finalReviewResult as any;
+    if (existingFinalReview?.issues?.length > 0 || existingFinalReview?.capitulos_para_reescribir?.length > 0) {
+      console.log(`[ReeditOrchestrator] Applying corrections from existing finalReviewResult before re-review...`);
+      
+      const issues = existingFinalReview.issues || [];
+      const chaptersToRewrite = existingFinalReview.capitulos_para_reescribir || [];
+      
+      // Get unique chapter numbers that need fixes
+      const chapterNumbersToFix = new Set<number>(chaptersToRewrite);
+      for (const issue of issues) {
+        if (issue.capitulos_afectados) {
+          for (const chNum of issue.capitulos_afectados) {
+            chapterNumbersToFix.add(chNum);
+          }
+        }
+      }
+      
+      if (chapterNumbersToFix.size > 0) {
+        const chaptersNeedingFix = validChapters.filter(c => chapterNumbersToFix.has(c.chapterNumber));
+        
+        this.emitProgress({
+          projectId,
+          stage: "fixing",
+          currentChapter: 0,
+          totalChapters: chaptersNeedingFix.length,
+          message: `Aplicando correcciones a ${chaptersNeedingFix.length} capítulos según revisión anterior + instrucciones del usuario...`,
+        });
+        
+        for (let i = 0; i < chaptersNeedingFix.length; i++) {
+          const chapter = chaptersNeedingFix[i];
+          
+          // Get issues specific to this chapter
+          const chapterIssues = issues.filter((iss: any) => 
+            iss.capitulos_afectados?.includes(chapter.chapterNumber)
+          );
+          
+          this.emitProgress({
+            projectId,
+            stage: "fixing",
+            currentChapter: i + 1,
+            totalChapters: chaptersNeedingFix.length,
+            message: `Corrigiendo capítulo ${chapter.chapterNumber}: ${chapterIssues.length} issue(s)...`,
+          });
+          
+          try {
+            // Convert FinalReviewIssues to problem format for NarrativeRewriter
+            const problems = chapterIssues.map((issue: any, idx: number) => ({
+              id: `issue-${idx}`,
+              tipo: issue.categoria || "otro",
+              descripcion: issue.descripcion + (userInstructions ? `\n\nINSTRUCCIONES ADICIONALES: ${userInstructions}` : ""),
+              severidad: issue.severidad || "media",
+              accionSugerida: issue.instrucciones_correccion || "Corregir según indicación"
+            }));
+            
+            // Build adjacent context
+            const prevChapter = validChapters.find(c => c.chapterNumber === chapter.chapterNumber - 1);
+            const nextChapter = validChapters.find(c => c.chapterNumber === chapter.chapterNumber + 1);
+            const adjacentContext = {
+              previousChapter: prevChapter?.editedContent?.substring(0, 2000),
+              nextChapter: nextChapter?.editedContent?.substring(0, 2000),
+            };
+            
+            const rewriteResult = await this.narrativeRewriter.rewriteChapter(
+              chapter.editedContent || chapter.originalContent,
+              chapter.chapterNumber,
+              problems,
+              worldBibleForReview || {},
+              adjacentContext,
+              "español"
+            );
+            this.trackTokens(rewriteResult);
+            await this.updateHeartbeat(projectId);
+            
+            if (rewriteResult.rewrittenContent) {
+              const wordCount = rewriteResult.rewrittenContent.split(/\s+/).filter((w: string) => w.length > 0).length;
+              await storage.updateReeditChapter(chapter.id, {
+                editedContent: rewriteResult.rewrittenContent,
+                wordCount,
+              });
+              
+              // Track corrected issues
+              for (const issue of chapterIssues) {
+                correctedIssueDescriptions.push(issue.descripcion);
+              }
+              
+              // Update local validChapters array
+              const idx = validChapters.findIndex(c => c.id === chapter.id);
+              if (idx !== -1) {
+                validChapters[idx].editedContent = rewriteResult.rewrittenContent;
+              }
+            }
+          } catch (err) {
+            console.error(`[ReeditOrchestrator] Error fixing chapter ${chapter.chapterNumber}:`, err);
+          }
+        }
+        
+        console.log(`[ReeditOrchestrator] Pre-corrections applied. Now running final review...`);
+        
+        // Clear user instructions AFTER corrections are applied successfully
+        if (userInstructions) {
+          await storage.updateReeditProject(projectId, { 
+            pendingUserInstructions: null,
+            pauseReason: null,
+          });
+          console.log(`[ReeditOrchestrator] User instructions cleared after successful application`);
+        }
+      }
+    }
 
     while (revisionCycle < this.maxFinalReviewCycles) {
       const consecutiveInfo = consecutiveHighScores > 0 

@@ -196,6 +196,23 @@ All agents now target 10/10 perfection:
 
 **Result**: Projects will NEVER close with unresolved problems. They will pause waiting for user instructions instead.
 
+### Fast-Track Resume System (NEW - 2026-01-08)
+
+**Problem**: When resuming from `awaiting_instructions`, the system re-executed World Bible, Architect, and QA stages unnecessarily, wasting tokens.
+
+**Solution**: Added fast-track detection at the start of `processProject()`:
+1. Detects if project has existing `finalReviewResult` with issues
+2. Detects if project has `pendingUserInstructions` or `currentStage` is "completed"/"reviewing"
+3. If both conditions met: skips entire pipeline and calls `runFinalReviewOnly()` directly
+
+**Enhanced `runFinalReviewOnly()`**:
+- Now processes `pendingUserInstructions` before re-evaluating
+- Applies corrections from existing `finalReviewResult.issues` FIRST
+- Merges user instructions into problem descriptions for NarrativeRewriter
+- Clears `pendingUserInstructions` and `pauseReason` after applying
+
+**Expected Savings**: 80-90% token reduction for projects resuming from `awaiting_instructions`
+
 ### Project Status
 - Project 4 "La superficie rota": COMPLETED (65 chapters, 97,683 words, score 9/10, "muy alto potencial de mercado")
 - Project 5 "El silencio de las plataneras": AWAITING_INSTRUCTIONS (40 chapters, score 6/10, critical issues to resolve: redundant ch36, Gaspar death inconsistency, geographic inconsistency)
