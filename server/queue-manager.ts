@@ -717,6 +717,47 @@ export class QueueManager {
   getCurrentStatus(): { isRunning: boolean; isPaused: boolean } {
     return { isRunning: this.isRunning, isPaused: this.isPaused };
   }
+
+  async forceUnlock(projectId?: number): Promise<{ success: boolean; message: string }> {
+    console.log(`[QueueManager] Force unlock requested for project ${projectId ?? 'any'}`);
+    
+    if (projectId && this.currentProjectId !== null && this.currentProjectId !== projectId) {
+      return { 
+        success: false, 
+        message: `Cannot unlock project ${projectId}: different project ${this.currentProjectId} is currently locked` 
+      };
+    }
+
+    const lockedProjectId = this.currentProjectId;
+    
+    this.processingLock = false;
+    this.currentProjectId = null;
+    this.pendingRetryProjectId = null;
+    this.currentOrchestrator = null;
+    this.stopHeartbeatMonitor();
+    
+    await storage.updateQueueState({ currentProjectId: null });
+    
+    if (lockedProjectId) {
+      const queueItem = await storage.getQueueItemByProject(lockedProjectId);
+      if (queueItem && queueItem.status === "processing") {
+        await storage.updateQueueItem(queueItem.id, {
+          status: "waiting",
+          startedAt: null,
+          errorMessage: "Force unlocked by admin",
+        });
+      }
+    }
+
+    console.log(`[QueueManager] Force unlock completed. Project ${lockedProjectId ?? 'none'} was unlocked`);
+    
+    return { 
+      success: true, 
+      message: lockedProjectId 
+        ? `Project ${lockedProjectId} unlocked successfully` 
+        : "Processing lock cleared (no project was locked)"
+    };
+  }
 }
 
 export const queueManager = new QueueManager();

@@ -33,7 +33,8 @@ import {
   TrendingUp,
   Zap,
   RotateCcw,
-  Pause
+  Pause,
+  Unlock
 } from "lucide-react";
 import type { ReeditProject, ReeditChapter, ReeditAuditReport } from "@shared/schema";
 
@@ -762,6 +763,19 @@ export default function ReeditPage() {
     },
   });
 
+  const forceUnlockMutation = useMutation({
+    mutationFn: async (projectId: number) => {
+      return apiRequest("POST", `/api/reedit-projects/${projectId}/force-unlock`);
+    },
+    onSuccess: () => {
+      toast({ title: "Desbloqueado", description: "El proyecto ha sido desbloqueado. Ahora puedes continuar o reiniciar." });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const resumeMutation = useMutation({
     mutationFn: async ({ projectId, instructions }: { projectId: number; instructions?: string }) => {
       return apiRequest("POST", `/api/reedit-projects/${projectId}/resume`, { instructions });
@@ -1077,19 +1091,34 @@ export default function ReeditPage() {
                       </Button>
                     )}
                     {selectedProjectData.status === "processing" && (
-                      <Button
-                        variant="destructive"
-                        onClick={() => cancelMutation.mutate(selectedProjectData.id)}
-                        disabled={cancelMutation.isPending}
-                        data-testid="button-cancel-reedit"
-                      >
-                        {cancelMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <StopCircle className="h-4 w-4 mr-2" />
-                        )}
-                        Cancelar
-                      </Button>
+                      <>
+                        <Button
+                          variant="destructive"
+                          onClick={() => cancelMutation.mutate(selectedProjectData.id)}
+                          disabled={cancelMutation.isPending}
+                          data-testid="button-cancel-reedit"
+                        >
+                          {cancelMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <StopCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Cancelar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => forceUnlockMutation.mutate(selectedProjectData.id)}
+                          disabled={forceUnlockMutation.isPending}
+                          data-testid="button-force-unlock"
+                        >
+                          {forceUnlockMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Unlock className="h-4 w-4 mr-2" />
+                          )}
+                          Desbloquear
+                        </Button>
+                      </>
                     )}
                     {selectedProjectData.status === "error" && (
                       <Button

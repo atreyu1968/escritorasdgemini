@@ -5061,6 +5061,45 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  app.post("/api/reedit-projects/:id/force-unlock", async (req: Request, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getReeditProject(projectId);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      console.log(`[ForceUnlock] Admin requested force unlock for reedit project ${projectId}`);
+
+      const wasInOrchestrators = activeReeditOrchestrators.has(projectId);
+      if (wasInOrchestrators) {
+        activeReeditOrchestrators.delete(projectId);
+        console.log(`[ForceUnlock] Removed project ${projectId} from active orchestrators`);
+      } else {
+        console.log(`[ForceUnlock] Project ${projectId} was not in active orchestrators`);
+      }
+
+      if (project.status === "processing") {
+        await storage.updateReeditProject(projectId, {
+          status: "awaiting_instructions",
+          pauseReason: "Desbloqueado forzosamente por el administrador",
+          cancelRequested: false,
+        });
+        console.log(`[ForceUnlock] Project ${projectId} status changed to awaiting_instructions`);
+      }
+
+      const message = wasInOrchestrators 
+        ? `Proyecto ${projectId} desbloqueado. Orquestador activo eliminado.`
+        : `Proyecto ${projectId} desbloqueado. Estado actualizado a awaiting_instructions.`;
+
+      res.json({ success: true, message });
+    } catch (error) {
+      console.error("Error force unlocking reedit project:", error);
+      res.status(500).json({ error: "Failed to force unlock project" });
+    }
+  });
+
   app.post("/api/reedit-projects/:id/restart", async (req: Request, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
