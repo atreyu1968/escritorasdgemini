@@ -4160,15 +4160,67 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return cleaned.trim();
       };
 
+      // Helper function to normalize chapter headers from AI output
+      const normalizeChapterHeader = (header: string, chapterNumber: number, targetLang: string): string => {
+        const langLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
+          es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
+          en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
+          fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
+          de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
+          it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
+          pt: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota do Autor", chapter: "Capítulo" },
+          ca: { prologue: "Pròleg", epilogue: "Epíleg", authorNote: "Nota de l'Autor", chapter: "Capítol" },
+        };
+        const lbl = langLabels[targetLang] || langLabels.en;
+        
+        // Patterns to detect and normalize chapter headers (case insensitive)
+        // Match: "CHAPTER X:", "Chapter X:", "Capítulo X:", "Chapitre X:", etc.
+        const chapterPatterns = [
+          /^(CHAPTER|Chapter|CAPÍTULO|Capítulo|CHAPITRE|Chapitre|KAPITEL|Kapitel|CAPITOLO|Capitolo|CAPÍTOL|Capítol)\s*(\d+)\s*[:\-–—]?\s*/i,
+        ];
+        
+        for (const pattern of chapterPatterns) {
+          const match = header.match(pattern);
+          if (match) {
+            const num = parseInt(match[2], 10);
+            const rest = header.slice(match[0].length).trim();
+            return `${lbl.chapter} ${num}${rest ? `: ${rest}` : ''}`;
+          }
+        }
+        
+        // Prologue patterns
+        if (/^(PROLOGUE|Prologue|PRÓLOGO|Prólogo|PROLOG|Prolog|PROLOGO|Prologo|PRÒLEG|Pròleg)\s*[:\-–—]?\s*/i.test(header)) {
+          const rest = header.replace(/^(PROLOGUE|Prologue|PRÓLOGO|Prólogo|PROLOG|Prolog|PROLOGO|Prologo|PRÒLEG|Pròleg)\s*[:\-–—]?\s*/i, '').trim();
+          return rest ? `${lbl.prologue}: ${rest}` : lbl.prologue;
+        }
+        
+        // Epilogue patterns
+        if (/^(EPILOGUE|Epilogue|EPÍLOGO|Epílogo|EPILOG|Epilog|EPILOGO|Epilogo|EPÍLEG|Epíleg)\s*[:\-–—]?\s*/i.test(header)) {
+          const rest = header.replace(/^(EPILOGUE|Epilogue|EPÍLOGO|Epílogo|EPILOG|Epilog|EPILOGO|Epilogo|EPÍLEG|Epíleg)\s*[:\-–—]?\s*/i, '').trim();
+          return rest ? `${lbl.epilogue}: ${rest}` : lbl.epilogue;
+        }
+        
+        // Author's Note patterns
+        if (/^(AUTHOR'?S?\s*NOTE|Author'?s?\s*Note|NOTA\s*DEL?\s*AUTOR|Nota\s*del?\s*Autor|NOTE\s*DE\s*L'AUTEUR|Note\s*de\s*l'Auteur|ANMERKUNG\s*DES\s*AUTORS|Anmerkung\s*des\s*Autors|NOTA\s*DELL'?AUTORE|Nota\s*dell'?Autore|NOTA\s*DE\s*L'AUTOR|Nota\s*de\s*l'Autor)\s*[:\-–—]?\s*/i.test(header)) {
+          return lbl.authorNote;
+        }
+        
+        // If no pattern matched, return as-is but ensure proper case for leading word
+        return header;
+      };
+      
       // Helper function to clean JSON artifacts and extract heading + body from content
-      const parseTranslatedContent = (content: string): { heading: string | null; body: string } => {
+      const parseTranslatedContent = (content: string, chapterNumber: number, targetLang: string): { heading: string | null; body: string } => {
         let cleaned = content.trim();
         
-        // First, check if content is wrapped in markdown code block (```json ... ```)
-        const codeBlockMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/);
+        // First, check if content is wrapped in markdown code block (```json ... ``` or ```markdown ... ```)
+        const codeBlockMatch = cleaned.match(/^```(?:json|markdown|md)?\s*([\s\S]*?)```\s*$/);
         if (codeBlockMatch) {
           cleaned = codeBlockMatch[1].trim();
         }
+        
+        // Also strip any remaining code fences that might be embedded
+        cleaned = cleaned.replace(/```(?:json|markdown|md)?\n?/g, '').replace(/```\s*$/g, '');
         
         // Check if content is a JSON object with translated_text field
         if (cleaned.startsWith('{') && cleaned.includes('"translated_text"')) {
@@ -4187,13 +4239,23 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         
         // Extract the first markdown heading if present (## or # at start)
         const headingMatch = cleaned.match(/^(#{1,2})\s*(.+?)\n+/);
+        let bodyText = cleaned;
+        let extractedHeading: string | null = null;
+        
         if (headingMatch) {
-          const heading = headingMatch[2].trim();
-          const body = cleaned.slice(headingMatch[0].length).trim();
-          return { heading, body };
+          const rawHeading = headingMatch[2].trim();
+          extractedHeading = normalizeChapterHeader(rawHeading, chapterNumber, targetLang);
+          bodyText = cleaned.slice(headingMatch[0].length).trim();
         }
         
-        return { heading: null, body: cleaned.trim() };
+        // Remove any duplicate headers from the start of body (AI sometimes includes them twice)
+        // Includes all supported languages: en, es, fr, de, it, pt, ca
+        bodyText = bodyText.replace(/^(#{1,2})\s*(CHAPTER|Chapter|CAPÍTULO|Capítulo|CHAPITRE|Chapitre|KAPITEL|Kapitel|CAPITOLO|Capitolo|CAPÍTOL|Capítol|Prologue|PROLOGUE|Prólogo|PRÓLOGO|Prolog|PROLOG|Prologo|PROLOGO|Pròleg|PRÒLEG|Epilogue|EPILOGUE|Epílogo|EPÍLOGO|Epilog|EPILOG|Epilogo|EPILOGO|Epíleg|EPÍLEG|Author'?s?\s*Note|AUTHOR'?S?\s*NOTE|Nota\s*del?\s*Autor|NOTA\s*DEL?\s*AUTOR|Note\s*de\s*l'Auteur|NOTE\s*DE\s*L'AUTEUR|Anmerkung\s*des\s*Autors|ANMERKUNG\s*DES\s*AUTORS|Nota\s*dell'?Autore|NOTA\s*DELL'?AUTORE|Nota\s*de\s*l'Autor|NOTA\s*DE\s*L'AUTOR)[^\n]*\n+/i, '');
+        
+        // Remove trailing dividers (---, ***) from the end
+        bodyText = bodyText.replace(/\n*[-*]{3,}\s*$/, '').trim();
+        
+        return { heading: extractedHeading, body: bodyText };
       };
       
       const lines: string[] = [];
@@ -4213,7 +4275,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       const labels = chapterLabels[targetLanguage] || chapterLabels.en;
       
       for (const chapter of translatedChapters) {
-        const parsed = parseTranslatedContent(chapter.translatedContent);
+        const parsed = parseTranslatedContent(chapter.translatedContent, chapter.chapterNumber, targetLanguage);
         
         // Use the translated heading from the AI if available, otherwise generate a fallback
         let heading: string;
