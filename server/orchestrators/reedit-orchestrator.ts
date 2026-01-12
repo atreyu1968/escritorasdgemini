@@ -2993,6 +2993,9 @@ export class ReeditOrchestrator {
       
       // Maximum non-10 scores before pausing for user instructions
       const MAX_NON_PERFECT_BEFORE_PAUSE = 15;
+      // TOTAL cycle limit to prevent infinite loops (uses dedicated field that never resets)
+      const MAX_TOTAL_CYCLES = 30;
+      let totalCyclesExecuted = (savedProject?.totalReviewCycles || 0);
 
       if (revisionCycle > 0) {
         console.log(`[ReeditOrchestrator] RESUMING Final Review: cycle ${revisionCycle}, consecutive=${consecutiveHighScores}, nonPerfect=${nonPerfectCount}, scores=[${previousScores.join(',')}]`);
@@ -3014,6 +3017,38 @@ export class ReeditOrchestrator {
       const guiaEstilo = (project as any).styleGuide || "";
 
       while (revisionCycle < this.maxFinalReviewCycles) {
+        // Check for cancellation at start of each cycle
+        if (await this.checkCancellation(projectId)) {
+          console.log(`[ReeditOrchestrator] Cancelled during final review cycle ${revisionCycle}`);
+          return;
+        }
+        
+        // Check total cycle limit to prevent infinite loops
+        totalCyclesExecuted++;
+        if (totalCyclesExecuted > MAX_TOTAL_CYCLES) {
+          const pauseReason = `Se alcanzó el límite de ${MAX_TOTAL_CYCLES} ciclos totales. Última puntuación: ${Math.round(bestsellerScore)}/10. Por favor, usa "Forzar completado" o proporciona instrucciones.`;
+          console.log(`[ReeditOrchestrator] PAUSING: Total cycle limit reached (${totalCyclesExecuted})`);
+          
+          await storage.updateReeditProject(projectId, {
+            status: "awaiting_instructions",
+            pauseReason,
+            totalReviewCycles: totalCyclesExecuted,
+            consecutiveHighScores,
+            nonPerfectFinalReviews: nonPerfectCount,
+            previousScores: previousScores as any,
+            finalReviewResult: finalResult,
+            bestsellerScore: Math.round(bestsellerScore),
+          });
+          
+          this.emitProgress({
+            projectId,
+            stage: "paused",
+            currentChapter: validChapters.length,
+            totalChapters: validChapters.length,
+            message: pauseReason,
+          });
+          return;
+        }
         const consecutiveInfo = consecutiveHighScores > 0 
           ? ` [${consecutiveHighScores}/${this.requiredConsecutiveHighScores} puntuaciones 10/10 consecutivas]`
           : "";
@@ -3127,29 +3162,15 @@ export class ReeditOrchestrator {
           continue;
         }
 
-        // NO hay "escape hatch" - el proyecto SOLO se aprueba con 2 puntuaciones 10/10 consecutivas
-        // Si llegamos al límite de ciclos sin el doble 10/10, seguimos intentando
+        // Si llegamos al límite de ciclos sin el doble 10/10, incrementamos y dejamos
+        // que el límite total (MAX_TOTAL_CYCLES) controle el bucle
         if (revisionCycle === this.maxFinalReviewCycles - 1) {
           const avgScore = previousScores.length > 0
             ? (previousScores.reduce((a, b) => a + b, 0) / previousScores.length).toFixed(1)
             : bestsellerScore;
           
-          console.log(`[ReeditOrchestrator] Límite de ciclos alcanzado sin doble 10/10 consecutivo. Puntuación: ${bestsellerScore}/10 (promedio: ${avgScore}). Continuando correcciones...`);
-          
-          // Si la puntuación es 10 pero no hay 2 consecutivos, continuamos intentando
-          if (bestsellerScore >= this.minAcceptableScore) {
-            this.emitProgress({
-              projectId,
-              stage: "reviewing",
-              currentChapter: validChapters.length,
-              totalChapters: validChapters.length,
-              message: `Puntuación ${bestsellerScore}/10 pero sin confirmación consecutiva. Continuando evaluaciones...`,
-            });
-            // Reset cycle counter to keep trying
-            revisionCycle = 0;
-            continue;
-          }
-          // Si la puntuación es < 9, seguimos corrigiendo
+          console.log(`[ReeditOrchestrator] Límite de ciclos locales alcanzado. Puntuación: ${bestsellerScore}/10 (promedio: ${avgScore}). Total ejecutados: ${totalCyclesExecuted}`);
+          // NO reseteamos revisionCycle - dejamos que MAX_TOTAL_CYCLES controle el bucle
         }
 
         this.emitProgress({
@@ -3256,6 +3277,7 @@ export class ReeditOrchestrator {
         // Save review cycle state for resume support
         await storage.updateReeditProject(projectId, {
           revisionCycle,
+          totalReviewCycles: totalCyclesExecuted,
           consecutiveHighScores,
           nonPerfectFinalReviews: nonPerfectCount,
           previousScores: previousScores as any,
@@ -3273,6 +3295,7 @@ export class ReeditOrchestrator {
           status: "awaiting_instructions",
           pauseReason,
           revisionCycle,
+          totalReviewCycles: totalCyclesExecuted,
           consecutiveHighScores,
           nonPerfectFinalReviews: nonPerfectCount,
           previousScores: previousScores as any,
@@ -3383,6 +3406,10 @@ export class ReeditOrchestrator {
     let finalResult: FinalReviewerResult | null = null;
     let bestsellerScore = 0;
     const correctedIssueDescriptions: string[] = [];
+    
+    // TOTAL cycle limit to prevent infinite loops (uses dedicated field that never resets)
+    const MAX_TOTAL_CYCLES = 30;
+    let totalCyclesExecuted = project.totalReviewCycles || 0;
     
     // Check for user instructions and add them to context
     const userInstructions = project.pendingUserInstructions || "";
@@ -3509,6 +3536,37 @@ export class ReeditOrchestrator {
     }
 
     while (revisionCycle < this.maxFinalReviewCycles) {
+      // Check for cancellation at start of each cycle
+      if (await this.checkCancellation(projectId)) {
+        console.log(`[ReeditOrchestrator] Cancelled during final review cycle ${revisionCycle}`);
+        return;
+      }
+      
+      // Check total cycle limit to prevent infinite loops
+      totalCyclesExecuted++;
+      if (totalCyclesExecuted > MAX_TOTAL_CYCLES) {
+        const pauseReason = `Se alcanzó el límite de ${MAX_TOTAL_CYCLES} ciclos totales. Última puntuación: ${Math.round(bestsellerScore)}/10. Por favor, usa "Forzar completado" o proporciona instrucciones.`;
+        console.log(`[ReeditOrchestrator] PAUSING: Total cycle limit reached (${totalCyclesExecuted})`);
+        
+        await storage.updateReeditProject(projectId, {
+          status: "awaiting_instructions",
+          pauseReason,
+          totalReviewCycles: totalCyclesExecuted,
+          consecutiveHighScores,
+          finalReviewResult: finalResult,
+          bestsellerScore: Math.round(bestsellerScore),
+        });
+        
+        this.emitProgress({
+          projectId,
+          stage: "paused",
+          currentChapter: validChapters.length,
+          totalChapters: validChapters.length,
+          message: pauseReason,
+        });
+        return;
+      }
+      
       const consecutiveInfo = consecutiveHighScores > 0 
         ? ` [${consecutiveHighScores}/${this.requiredConsecutiveHighScores} puntuaciones 10/10 consecutivas]`
         : "";
@@ -3584,28 +3642,14 @@ export class ReeditOrchestrator {
         continue;
       }
 
-      // NO hay "escape hatch" - el proyecto SOLO se aprueba con 2 puntuaciones 10/10 consecutivas
+      // Si llegamos al límite de ciclos sin el doble 10/10, dejamos que MAX_TOTAL_CYCLES controle
       if (revisionCycle === this.maxFinalReviewCycles - 1) {
         const avgScore = previousScores.length > 0
           ? (previousScores.reduce((a, b) => a + b, 0) / previousScores.length).toFixed(1)
           : bestsellerScore;
         
-        console.log(`[ReeditOrchestrator] Límite de ciclos alcanzado sin doble 10/10 consecutivo. Puntuación: ${bestsellerScore}/10 (promedio: ${avgScore}). Continuando correcciones...`);
-        
-        // Si la puntuación es 10 pero no hay 2 consecutivos, continuamos intentando
-        if (bestsellerScore >= this.minAcceptableScore) {
-          this.emitProgress({
-            projectId,
-            stage: "reviewing",
-            currentChapter: validChapters.length,
-            totalChapters: validChapters.length,
-            message: `Puntuación ${bestsellerScore}/10 pero sin confirmación consecutiva. Continuando evaluaciones...`,
-          });
-          // Reset cycle counter to keep trying
-          revisionCycle = 0;
-          continue;
-        }
-        // Si la puntuación es < 9, seguimos corrigiendo
+        console.log(`[ReeditOrchestrator] Límite de ciclos locales alcanzado. Puntuación: ${bestsellerScore}/10 (promedio: ${avgScore}). Total: ${totalCyclesExecuted}`);
+        // NO reseteamos revisionCycle - dejamos que MAX_TOTAL_CYCLES controle
       }
 
       this.emitProgress({
@@ -3720,6 +3764,7 @@ export class ReeditOrchestrator {
         status: "awaiting_instructions",
         pauseReason,
         revisionCycle,
+        totalReviewCycles: totalCyclesExecuted,
         consecutiveHighScores,
         previousScores: previousScores as any,
         finalReviewResult: finalResult,

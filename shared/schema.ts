@@ -563,6 +563,7 @@ export const reeditProjects = pgTable("reedit_projects", {
   expansionPlan: jsonb("expansion_plan"),
   // Final review cycle state (for resume support)
   revisionCycle: integer("revision_cycle").default(0),
+  totalReviewCycles: integer("total_review_cycles").default(0), // Lifetime count, never resets - used to prevent infinite loops
   consecutiveHighScores: integer("consecutive_high_scores").default(0),
   previousScores: jsonb("previous_scores"), // Array of scores from previous review cycles
   // Pause after N non-perfect scores
