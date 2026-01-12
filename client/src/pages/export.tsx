@@ -22,6 +22,7 @@ import {
   Library,
   X,
   Search,
+  Play,
 } from "lucide-react";
 
 interface TranslationProgress {
@@ -467,6 +468,111 @@ export default function ExportPage() {
     },
   });
 
+  const resumeTranslation = useCallback((translationId: number, projectTitle: string) => {
+    setTranslationProgress({
+      isTranslating: true,
+      currentChapter: 0,
+      totalChapters: 0,
+      chapterTitle: "Reanudando traducción...",
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+
+    const eventSource = new EventSource(`/api/translations/${translationId}/resume`);
+    setEventSourceRef(eventSource);
+
+    eventSource.addEventListener("start", (event) => {
+      const data = JSON.parse(event.data);
+      queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+      setTranslationProgress(prev => ({
+        ...prev,
+        totalChapters: data.totalChapters,
+        chapterTitle: data.resumed 
+          ? `Reanudando: ${data.alreadyTranslated}/${data.totalChapters} ya traducidos, quedan ${data.remaining}...`
+          : `Preparando ${data.totalChapters} capítulos...`,
+      }));
+      toast({
+        title: "Reanudando traducción",
+        description: `${data.alreadyTranslated} capítulos ya traducidos, continuando con ${data.remaining} restantes`,
+      });
+    });
+
+    eventSource.addEventListener("progress", (event) => {
+      const data = JSON.parse(event.data);
+      queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+      setTranslationProgress(prev => ({
+        ...prev,
+        currentChapter: data.current,
+        totalChapters: data.total,
+        chapterTitle: data.status === "translating" 
+          ? `Traduciendo: ${data.chapterTitle}...`
+          : `Completado: ${data.chapterTitle}`,
+        inputTokens: data.inputTokens || prev.inputTokens,
+        outputTokens: data.outputTokens || prev.outputTokens,
+      }));
+    });
+
+    eventSource.addEventListener("complete", (event) => {
+      const data = JSON.parse(event.data);
+      eventSource.close();
+      setEventSourceRef(null);
+      clearTranslationState();
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+      toast({
+        title: "Traducción completada",
+        description: data.resumed 
+          ? `${projectTitle}: ${data.newChaptersTranslated} nuevos capítulos traducidos (total: ${data.chaptersTranslated})`
+          : `${projectTitle}: ${data.chaptersTranslated} capítulos traducidos`,
+      });
+    });
+
+    eventSource.addEventListener("error", (event) => {
+      let errorMessage = "Error desconocido";
+      try {
+        const data = JSON.parse((event as MessageEvent).data);
+        errorMessage = data.error || errorMessage;
+      } catch {}
+      eventSource.close();
+      setEventSourceRef(null);
+      clearTranslationState();
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      toast({
+        title: "Error al reanudar",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    });
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      setEventSourceRef(null);
+      clearTranslationState();
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    };
+  }, [toast]);
+
   const selectedProject = completedProjects.find(p => p.id === selectedProjectId);
 
   // Check if selected project already has a translation (any status)
@@ -854,12 +960,18 @@ export default function ExportPage() {
                     ) : translation.status === "translating" ? (
                       <Button
                         size="sm"
-                        variant="ghost"
-                        disabled
-                        className="opacity-50"
+                        variant="outline"
+                        onClick={() => resumeTranslation(translation.id, translation.projectTitle)}
+                        disabled={translationProgress.isTranslating}
+                        className="border-blue-500/50 text-blue-600 hover:bg-blue-500/10"
+                        data-testid={`button-resume-translation-${translation.id}`}
                       >
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Traduciendo
+                        {translationProgress.isTranslating ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-2" />
+                        )}
+                        Reanudar
                       </Button>
                     ) : (
                       <Button

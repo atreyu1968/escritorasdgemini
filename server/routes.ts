@@ -4453,6 +4453,271 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  // Resume a stuck translation from where it left off
+  app.get("/api/translations/:id/resume", async (req: Request, res: Response) => {
+    const translationId = parseInt(req.params.id);
+    
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    
+    const sendEvent = (event: string, data: any) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(() => {
+      try {
+        res.write(`:heartbeat\n\n`);
+      } catch (e) {
+        clearInterval(heartbeatInterval);
+      }
+    }, 15000);
+
+    const cleanup = () => {
+      clearInterval(heartbeatInterval);
+    };
+
+    req.on("close", cleanup);
+
+    try {
+      const existingTranslation = await storage.getTranslation(translationId);
+      if (!existingTranslation) {
+        sendEvent("error", { error: "Translation not found" });
+        cleanup();
+        res.end();
+        return;
+      }
+
+      if (existingTranslation.status === "completed") {
+        sendEvent("error", { error: "Translation is already completed" });
+        cleanup();
+        res.end();
+        return;
+      }
+
+      const projectId = existingTranslation.projectId;
+      if (!projectId) {
+        sendEvent("error", { error: "No project associated with this translation" });
+        cleanup();
+        res.end();
+        return;
+      }
+
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        sendEvent("error", { error: "Original project not found" });
+        cleanup();
+        res.end();
+        return;
+      }
+
+      const sourceLanguage = existingTranslation.sourceLanguage;
+      const targetLanguage = existingTranslation.targetLanguage;
+
+      // Parse existing translated chapters from markdown
+      const existingMarkdown = existingTranslation.markdown || "";
+      const translatedChapterNumbers = new Set<number>();
+      
+      // Match chapter headers to find which are already translated
+      const chapterPatterns = [
+        /^#+ *(?:Capítulo|Chapter|Chapitre|Kapitel|Capitolo|Capítol)\s+(\d+)/gmi,
+        /^#+ *(?:Prólogo|Prologue|Prolog|Prologo|Pròleg)/gmi,
+        /^#+ *(?:Epílogo|Epilogue|Epilog|Epilogo|Epíleg)/gmi,
+        /^#+ *(?:Nota del Autor|Author['']?s? Note|Note de l['']Auteur|Anmerkung des Autors|Nota dell['']Autore|Nota de l['']Autor)/gmi,
+      ];
+      
+      let match;
+      for (const pattern of chapterPatterns) {
+        pattern.lastIndex = 0;
+        while ((match = pattern.exec(existingMarkdown)) !== null) {
+          if (match[1]) {
+            translatedChapterNumbers.add(parseInt(match[1]));
+          } else if (pattern.source.includes("Prólogo") || pattern.source.includes("Prologue")) {
+            translatedChapterNumbers.add(0);
+          } else if (pattern.source.includes("Epílogo") || pattern.source.includes("Epilogue")) {
+            translatedChapterNumbers.add(-1);
+          } else if (pattern.source.includes("Nota del Autor") || pattern.source.includes("Author")) {
+            translatedChapterNumbers.add(-2);
+          }
+        }
+      }
+
+      console.log(`[Resume] Found ${translatedChapterNumbers.size} already translated chapters: ${[...translatedChapterNumbers].join(', ')}`);
+
+      const chapters = await storage.getChaptersByProject(projectId);
+      const sortedChapters = [...chapters].sort((a, b) => {
+        const orderA = a.chapterNumber === 0 ? -1000 : a.chapterNumber === -1 ? 1000 : a.chapterNumber === -2 ? 1001 : a.chapterNumber;
+        const orderB = b.chapterNumber === 0 ? -1000 : b.chapterNumber === -1 ? 1000 : b.chapterNumber === -2 ? 1001 : b.chapterNumber;
+        return orderA - orderB;
+      });
+
+      const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
+      const remainingChapters = chaptersWithContent.filter(c => !translatedChapterNumbers.has(c.chapterNumber));
+      const totalChapters = chaptersWithContent.length;
+      const alreadyTranslated = translatedChapterNumbers.size;
+
+      if (remainingChapters.length === 0) {
+        await storage.updateTranslation(translationId, { status: "completed" });
+        sendEvent("complete", {
+          id: translationId,
+          projectId,
+          title: project.title,
+          sourceLanguage,
+          targetLanguage,
+          chaptersTranslated: alreadyTranslated,
+          totalWords: existingTranslation.totalWords,
+          markdown: existingMarkdown,
+          tokensUsed: {
+            input: existingTranslation.inputTokens,
+            output: existingTranslation.outputTokens,
+          },
+          resumed: true,
+          message: "All chapters were already translated",
+        });
+        cleanup();
+        res.end();
+        return;
+      }
+
+      sendEvent("start", {
+        projectTitle: project.title,
+        totalChapters,
+        alreadyTranslated,
+        remaining: remainingChapters.length,
+        sourceLanguage,
+        targetLanguage,
+        resumed: true,
+      });
+
+      const { TranslatorAgent } = await import("./agents/translator");
+      const translator = new TranslatorAgent();
+
+      const translatedChapters: Array<{
+        chapterNumber: number;
+        title: string;
+        translatedContent: string;
+        notes: string;
+      }> = [];
+
+      let totalInputTokens = existingTranslation.inputTokens || 0;
+      let totalOutputTokens = existingTranslation.outputTokens || 0;
+      let completedCount = alreadyTranslated;
+
+      for (const chapter of remainingChapters) {
+        const chapterLabel = chapter.chapterNumber === 0 ? "Prólogo" :
+                            chapter.chapterNumber === -1 ? "Epílogo" :
+                            chapter.chapterNumber === -2 ? "Nota del Autor" :
+                            `Capítulo ${chapter.chapterNumber}`;
+
+        sendEvent("progress", {
+          current: completedCount + 1,
+          total: totalChapters,
+          chapterNumber: chapter.chapterNumber,
+          chapterTitle: chapter.title || chapterLabel,
+          status: "translating",
+          resumed: true,
+        });
+
+        await storage.updateTranslation(translationId, {
+          chaptersTranslated: completedCount + 1,
+          status: "translating",
+        });
+
+        console.log(`[Resume] Translating ${chapterLabel}: ${chapter.title}`);
+
+        const result = await translator.execute({
+          content: chapter.content || "",
+          sourceLanguage,
+          targetLanguage,
+          chapterTitle: chapter.title || undefined,
+          chapterNumber: chapter.chapterNumber,
+          projectId,
+        });
+
+        if (result.result) {
+          translatedChapters.push({
+            chapterNumber: chapter.chapterNumber,
+            title: chapter.title || chapterLabel,
+            translatedContent: result.result.translated_text,
+            notes: result.result.notes,
+          });
+          completedCount++;
+        }
+
+        totalInputTokens += (result as any).inputTokens || 0;
+        totalOutputTokens += (result as any).outputTokens || 0;
+
+        sendEvent("progress", {
+          current: completedCount,
+          total: totalChapters,
+          chapterNumber: chapter.chapterNumber,
+          chapterTitle: chapter.title || chapterLabel,
+          status: "completed",
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          resumed: true,
+        });
+
+        // Save progress after each chapter
+        const newChapterMarkdown = translatedChapters.map(tc => tc.translatedContent).join("\n\n---\n\n");
+        const combinedMarkdown = existingMarkdown 
+          ? existingMarkdown + "\n\n---\n\n" + newChapterMarkdown 
+          : newChapterMarkdown;
+        
+        await storage.updateTranslation(translationId, {
+          chaptersTranslated: completedCount,
+          markdown: combinedMarkdown,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          status: "translating",
+        });
+      }
+
+      // Final update - mark as completed
+      const newChapterMarkdown = translatedChapters.map(tc => tc.translatedContent).join("\n\n---\n\n");
+      const finalMarkdown = existingMarkdown 
+        ? existingMarkdown + "\n\n---\n\n" + newChapterMarkdown 
+        : newChapterMarkdown;
+      
+      const totalWords = finalMarkdown.split(/\s+/).filter(w => w.length > 0).length;
+
+      await storage.updateTranslation(translationId, {
+        status: "completed",
+        chaptersTranslated: completedCount,
+        totalWords,
+        markdown: finalMarkdown,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      });
+
+      sendEvent("complete", {
+        id: translationId,
+        projectId,
+        title: project.title,
+        sourceLanguage,
+        targetLanguage,
+        chaptersTranslated: completedCount,
+        totalWords,
+        markdown: finalMarkdown,
+        tokensUsed: {
+          input: totalInputTokens,
+          output: totalOutputTokens,
+        },
+        resumed: true,
+        newChaptersTranslated: translatedChapters.length,
+      });
+
+      cleanup();
+      res.end();
+    } catch (error) {
+      console.error("Error resuming translation:", error);
+      sendEvent("error", { error: "Failed to resume translation" });
+      cleanup();
+      res.end();
+    }
+  });
+
   // AI Usage / Cost Tracking endpoints
   app.get("/api/ai-usage/summary", async (_req: Request, res: Response) => {
     try {
