@@ -5195,31 +5195,53 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
       const sortedChapters = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
       
+      // Localized chapter labels based on detected language
+      const exportLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
+        es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
+        en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
+        fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
+        de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
+        it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
+        pt: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota do Autor", chapter: "Capítulo" },
+        ca: { prologue: "Pròleg", epilogue: "Epíleg", authorNote: "Nota de l'Autor", chapter: "Capítol" },
+      };
+      const labels = exportLabels[project.detectedLanguage || 'es'] || exportLabels.es;
+      
       let markdown = `# ${project.title}\n\n`;
       let totalWords = 0;
       
-      for (const chapter of sortedChapters) {
+      // Filter chapters with content first to know which is last
+      const chaptersWithContent = sortedChapters.filter(c => c.editedContent || c.originalContent);
+      
+      for (let i = 0; i < chaptersWithContent.length; i++) {
+        const chapter = chaptersWithContent[i];
         const content = chapter.editedContent || chapter.originalContent;
         if (!content) continue;
+        
+        const isLastChapter = i === chaptersWithContent.length - 1;
 
-        let chapterTitle = chapter.title || `Capítulo ${chapter.chapterNumber}`;
+        let chapterTitle = chapter.title || `${labels.chapter} ${chapter.chapterNumber}`;
         if (chapter.chapterNumber === 0) {
-          chapterTitle = chapter.title || "Prólogo";
+          chapterTitle = chapter.title || labels.prologue;
         } else if (chapter.chapterNumber === 998) {
-          chapterTitle = chapter.title || "Epílogo";
+          chapterTitle = chapter.title || labels.epilogue;
         } else if (chapter.chapterNumber === 999) {
-          chapterTitle = chapter.title || "Nota del Autor";
+          chapterTitle = chapter.title || labels.authorNote;
         }
 
         markdown += `## ${chapterTitle}\n\n`;
-        markdown += content.trim() + "\n\n---\n\n";
+        markdown += content.trim() + "\n\n";
+        // Only add divider between chapters, not after the last one
+        if (!isLastChapter) {
+          markdown += "---\n\n";
+        }
         totalWords += content.split(/\s+/).filter((w: string) => w.length > 0).length;
       }
       
       res.json({
         projectId,
         title: project.title,
-        chapterCount: sortedChapters.length,
+        chapterCount: chaptersWithContent.length,
         totalWords,
         markdown,
       });
@@ -5244,23 +5266,45 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
       const sortedChapters = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
       
+      // Localized chapter labels based on detected language
+      const exportLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
+        es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
+        en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
+        fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
+        de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
+        it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
+        pt: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota do Autor", chapter: "Capítulo" },
+        ca: { prologue: "Pròleg", epilogue: "Epíleg", authorNote: "Nota de l'Autor", chapter: "Capítol" },
+      };
+      const labels = exportLabels[project.detectedLanguage || 'es'] || exportLabels.es;
+      
+      // Filter chapters with content first to know which is last
+      const chaptersWithContent = sortedChapters.filter(c => c.editedContent || c.originalContent);
+      
       let markdown = `# ${project.title}\n\n`;
       
-      for (const chapter of sortedChapters) {
+      for (let i = 0; i < chaptersWithContent.length; i++) {
+        const chapter = chaptersWithContent[i];
         const content = chapter.editedContent || chapter.originalContent;
         if (!content) continue;
+        
+        const isLastChapter = i === chaptersWithContent.length - 1;
 
-        let chapterTitle = chapter.title || `Capítulo ${chapter.chapterNumber}`;
+        let chapterTitle = chapter.title || `${labels.chapter} ${chapter.chapterNumber}`;
         if (chapter.chapterNumber === 0) {
-          chapterTitle = chapter.title || "Prólogo";
+          chapterTitle = chapter.title || labels.prologue;
         } else if (chapter.chapterNumber === 998) {
-          chapterTitle = chapter.title || "Epílogo";
+          chapterTitle = chapter.title || labels.epilogue;
         } else if (chapter.chapterNumber === 999) {
-          chapterTitle = chapter.title || "Nota del Autor";
+          chapterTitle = chapter.title || labels.authorNote;
         }
 
         markdown += `## ${chapterTitle}\n\n`;
-        markdown += content.trim() + "\n\n---\n\n";
+        markdown += content.trim() + "\n\n";
+        // Only add divider between chapters, not after the last one
+        if (!isLastChapter) {
+          markdown += "---\n\n";
+        }
       }
       
       const safeTitle = project.title.replace(/[^a-zA-Z0-9áéíóúñüÁÉÍÓÚÑÜ\s-]/g, "").trim();
@@ -5290,6 +5334,18 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
       const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
 
+      // Localized chapter labels based on detected language
+      const exportLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
+        es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
+        en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
+        fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
+        de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
+        it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
+        pt: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota do Autor", chapter: "Capítulo" },
+        ca: { prologue: "Pròleg", epilogue: "Epíleg", authorNote: "Nota de l'Autor", chapter: "Capítol" },
+      };
+      const labels = exportLabels[project.detectedLanguage || 'es'] || exportLabels.es;
+
       const docSections: any[] = [];
       
       const sortedChapters = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
@@ -5298,13 +5354,13 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         const content = chapter.editedContent || chapter.originalContent;
         if (!content) continue;
 
-        let chapterTitle = chapter.title || `Capítulo ${chapter.chapterNumber}`;
+        let chapterTitle = chapter.title || `${labels.chapter} ${chapter.chapterNumber}`;
         if (chapter.chapterNumber === 0) {
-          chapterTitle = chapter.title || "Prólogo";
+          chapterTitle = chapter.title || labels.prologue;
         } else if (chapter.chapterNumber === 998) {
-          chapterTitle = chapter.title || "Epílogo";
+          chapterTitle = chapter.title || labels.epilogue;
         } else if (chapter.chapterNumber === 999) {
-          chapterTitle = chapter.title || "Nota del Autor";
+          chapterTitle = chapter.title || labels.authorNote;
         }
 
         docSections.push(
@@ -5518,15 +5574,60 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       let finalMarkdown = `# ${project.title}\n\n`;
       let totalWords = 0;
       
-      for (const ch of translatedChapters) {
-        const titleLabel = ch.chapterNumber === 0 ? "Prólogo" :
-                          ch.chapterNumber === 998 ? "Epílogo" :
-                          ch.chapterNumber === 999 ? "Nota del Autor" :
-                          `Capítulo ${ch.chapterNumber}`;
+      // Localized chapter labels by target language
+      const reeditLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
+        es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
+        en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
+        fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
+        de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
+        it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
+        pt: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota do Autor", chapter: "Capítulo" },
+        ca: { prologue: "Pròleg", epilogue: "Epíleg", authorNote: "Nota de l'Autor", chapter: "Capítol" },
+      };
+      const lang = reeditLabels[targetLanguage as string] || reeditLabels.en;
+      
+      // Helper to clean code fences and JSON artifacts from translated content
+      const cleanTranslatedContent = (content: string): string => {
+        let cleaned = content.trim();
+        // Strip markdown code block wrapper if present (```json ... ``` or ``` ... ```)
+        const codeBlockMatch = cleaned.match(/^```(?:json|markdown|md)?\s*([\s\S]*?)```\s*$/);
+        if (codeBlockMatch) {
+          cleaned = codeBlockMatch[1].trim();
+        }
+        // If it's still JSON with translated_text field, extract it
+        if (cleaned.startsWith('{') && cleaned.includes('"translated_text"')) {
+          try {
+            const parsed = JSON.parse(cleaned);
+            if (parsed.translated_text) {
+              cleaned = parsed.translated_text;
+            }
+          } catch {
+            // Not valid JSON, continue with content as-is
+          }
+        }
+        return cleaned.trim();
+      };
+      
+      for (let i = 0; i < translatedChapters.length; i++) {
+        const ch = translatedChapters[i];
+        const isLastChapter = i === translatedChapters.length - 1;
+        
+        // Generate localized fallback label
+        const titleLabel = ch.chapterNumber === 0 ? lang.prologue :
+                          ch.chapterNumber === 998 ? lang.epilogue :
+                          ch.chapterNumber === 999 ? lang.authorNote :
+                          `${lang.chapter} ${ch.chapterNumber}`;
+        
+        // Clean the translated content (remove code fences, JSON artifacts)
+        const cleanedContent = cleanTranslatedContent(ch.translatedContent);
         
         finalMarkdown += `## ${ch.title || titleLabel}\n\n`;
-        finalMarkdown += ch.translatedContent.trim() + "\n\n---\n\n";
-        totalWords += ch.translatedContent.split(/\s+/).filter((w: string) => w.length > 0).length;
+        finalMarkdown += cleanedContent + "\n\n";
+        // Only add divider between chapters, not after the last one
+        if (!isLastChapter) {
+          finalMarkdown += "---\n\n";
+        }
+        totalWords += cleanedContent.split(/\s+/).filter((w: string) => w.length > 0).length;
       }
       
       // Save to repository
