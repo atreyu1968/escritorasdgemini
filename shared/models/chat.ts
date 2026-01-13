@@ -78,3 +78,28 @@ export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export const chatProposals = pgTable("chat_proposals", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull(),
+  sessionId: integer("session_id").notNull(),
+  proposalType: text("proposal_type").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: integer("target_id"),
+  targetName: text("target_name"),
+  description: text("description").notNull(),
+  originalContent: text("original_content"),
+  proposedContent: text("proposed_content").notNull(),
+  status: text("status").notNull().default("pending"),
+  appliedAt: timestamp("applied_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertChatProposalSchema = createInsertSchema(chatProposals).omit({
+  id: true,
+  createdAt: true,
+  appliedAt: true,
+});
+
+export type ChatProposal = typeof chatProposals.$inferSelect;
+export type InsertChatProposal = z.infer<typeof insertChatProposalSchema>;

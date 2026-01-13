@@ -4,7 +4,7 @@ import {
   series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides, activityLogs,
   projectQueue, queueState, seriesArcMilestones, seriesPlotThreads, seriesArcVerifications,
   aiUsageEvents, reeditProjects, reeditChapters, reeditAuditReports, reeditWorldBibles,
-  chatSessions, chatMessages,
+  chatSessions, chatMessages, chatProposals,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
   type AgentStatus, type InsertAgentStatus, type Pseudonym, type InsertPseudonym,
@@ -26,7 +26,8 @@ import {
   type ReeditAuditReport, type InsertReeditAuditReport,
   type ReeditWorldBible, type InsertReeditWorldBible,
   type ChatSession, type InsertChatSession,
-  type ChatMessage, type InsertChatMessage
+  type ChatMessage, type InsertChatMessage,
+  type ChatProposal, type InsertChatProposal
 } from "@shared/schema";
 import { eq, desc, asc, and, lt, isNull, or, sql } from "drizzle-orm";
 
@@ -190,6 +191,14 @@ export interface IStorage {
   getChatMessagesBySession(sessionId: number): Promise<ChatMessage[]>;
   updateChatMessage(id: number, data: Partial<ChatMessage>): Promise<ChatMessage | undefined>;
   deleteChatMessage(id: number): Promise<void>;
+
+  // Chat Proposals
+  createChatProposal(data: InsertChatProposal): Promise<ChatProposal>;
+  getChatProposal(id: number): Promise<ChatProposal | undefined>;
+  getChatProposalsBySession(sessionId: number): Promise<ChatProposal[]>;
+  getChatProposalsByMessage(messageId: number): Promise<ChatProposal[]>;
+  updateChatProposal(id: number, data: Partial<ChatProposal>): Promise<ChatProposal | undefined>;
+  deleteChatProposal(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1087,6 +1096,41 @@ export class DatabaseStorage implements IStorage {
 
   async deleteChatMessage(id: number): Promise<void> {
     await db.delete(chatMessages).where(eq(chatMessages.id, id));
+  }
+
+  // Chat Proposals
+  async createChatProposal(data: InsertChatProposal): Promise<ChatProposal> {
+    const [proposal] = await db.insert(chatProposals).values(data).returning();
+    return proposal;
+  }
+
+  async getChatProposal(id: number): Promise<ChatProposal | undefined> {
+    const [proposal] = await db.select().from(chatProposals).where(eq(chatProposals.id, id));
+    return proposal;
+  }
+
+  async getChatProposalsBySession(sessionId: number): Promise<ChatProposal[]> {
+    return db.select().from(chatProposals)
+      .where(eq(chatProposals.sessionId, sessionId))
+      .orderBy(desc(chatProposals.createdAt));
+  }
+
+  async getChatProposalsByMessage(messageId: number): Promise<ChatProposal[]> {
+    return db.select().from(chatProposals)
+      .where(eq(chatProposals.messageId, messageId))
+      .orderBy(asc(chatProposals.createdAt));
+  }
+
+  async updateChatProposal(id: number, data: Partial<ChatProposal>): Promise<ChatProposal | undefined> {
+    const [updated] = await db.update(chatProposals)
+      .set(data)
+      .where(eq(chatProposals.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteChatProposal(id: number): Promise<void> {
+    await db.delete(chatProposals).where(eq(chatProposals.id, id));
   }
 }
 
