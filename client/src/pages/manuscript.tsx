@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChapterList } from "@/components/chapter-list";
 import { ChapterViewer } from "@/components/chapter-viewer";
+import { ChatPanel } from "@/components/chat-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, BookOpen } from "lucide-react";
+import { Download, BookOpen, MessageSquare } from "lucide-react";
 import { useProject } from "@/lib/project-context";
 import type { Project, Chapter } from "@shared/schema";
 
@@ -19,6 +20,7 @@ function sortChaptersForDisplay<T extends { chapterNumber: number }>(chapters: T
 
 export default function ManuscriptPage() {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [showChat, setShowChat] = useState(false);
   const { currentProject, isLoading: projectsLoading } = useProject();
 
   const { data: chapters = [], isLoading: chaptersLoading } = useQuery<Chapter[]>({
@@ -145,6 +147,14 @@ export default function ManuscriptPage() {
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            variant={showChat ? "secondary" : "outline"}
+            onClick={() => setShowChat(!showChat)}
+            data-testid="button-toggle-chat"
+          >
+            <MessageSquare className="h-4 w-4 mr-2" />
+            {showChat ? "Cerrar Arquitecto" : "Arquitecto IA"}
+          </Button>
           <Button 
             variant="outline"
             onClick={handleDownload}
@@ -169,7 +179,7 @@ export default function ManuscriptPage() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+      <div className={`flex-1 grid grid-cols-1 gap-6 min-h-0 ${showChat ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Capítulos</CardTitle>
@@ -183,7 +193,7 @@ export default function ManuscriptPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2 flex flex-col">
+        <Card className={`flex flex-col ${showChat ? "lg:col-span-2" : "lg:col-span-2"}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Vista Previa</CardTitle>
           </CardHeader>
@@ -191,6 +201,16 @@ export default function ManuscriptPage() {
             <ChapterViewer chapter={selectedChapter} />
           </CardContent>
         </Card>
+
+        {showChat && currentProject && (
+          <ChatPanel
+            agentType="architect"
+            projectId={currentProject.id}
+            chapterNumber={selectedChapter?.chapterNumber}
+            className="lg:col-span-1 h-[calc(100vh-220px)]"
+            onClose={() => setShowChat(false)}
+          />
+        )}
       </div>
     </div>
   );
