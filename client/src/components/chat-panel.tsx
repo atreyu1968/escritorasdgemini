@@ -1,14 +1,62 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, MessageSquare, Plus, Trash2, X, BookOpen, PenTool } from "lucide-react";
+import { Loader2, Send, MessageSquare, Plus, Trash2, X, BookOpen, PenTool, Check, XIcon, FileEdit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import type { ChatSession, ChatMessage } from "@shared/models/chat";
+
+interface ParsedProposal {
+  tipo: string;
+  objetivo?: string;
+  capitulo?: string;
+  descripcion: string;
+  contenido_propuesto?: string;
+  texto_original?: string;
+  texto_propuesto?: string;
+}
+
+function parseProposals(content: string): { text: string; proposals: ParsedProposal[] } {
+  const proposals: ParsedProposal[] = [];
+  const proposalRegex = /---PROPUESTA---([\s\S]*?)---FIN_PROPUESTA---/g;
+  let text = content;
+  let match;
+
+  while ((match = proposalRegex.exec(content)) !== null) {
+    const proposalText = match[1];
+    const proposal: ParsedProposal = {
+      tipo: "",
+      descripcion: "",
+    };
+
+    const lines = proposalText.split("\n");
+    for (const line of lines) {
+      const colonIndex = line.indexOf(":");
+      if (colonIndex > 0) {
+        const key = line.substring(0, colonIndex).trim().toLowerCase();
+        const value = line.substring(colonIndex + 1).trim();
+        if (key === "tipo") proposal.tipo = value;
+        else if (key === "objetivo") proposal.objetivo = value;
+        else if (key === "capitulo") proposal.capitulo = value;
+        else if (key === "descripcion") proposal.descripcion = value;
+        else if (key === "contenido_propuesto") proposal.contenido_propuesto = value;
+        else if (key === "texto_original") proposal.texto_original = value;
+        else if (key === "texto_propuesto") proposal.texto_propuesto = value;
+      }
+    }
+
+    if (proposal.descripcion) {
+      proposals.push(proposal);
+    }
+    text = text.replace(match[0], "");
+  }
+
+  return { text: text.trim(), proposals };
+}
 
 interface ChatPanelProps {
   agentType: "architect" | "reeditor";
@@ -264,27 +312,88 @@ export function ChatPanel({
           </div>
         ) : (
           <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  "flex gap-2",
-                  message.role === "user" ? "justify-end" : "justify-start"
-                )}
-                data-testid={`message-${message.id}`}
-              >
+            {messages.map((message) => {
+              const parsed = message.role === "assistant" ? parseProposals(message.content) : null;
+              const displayText = parsed ? parsed.text : message.content;
+              const proposals = parsed?.proposals || [];
+
+              return (
                 <div
+                  key={message.id}
                   className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-sm",
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                    "flex gap-2",
+                    message.role === "user" ? "justify-end" : "justify-start"
                   )}
+                  data-testid={`message-${message.id}`}
                 >
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  <div
+                    className={cn(
+                      "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                      message.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    )}
+                  >
+                    <div className="whitespace-pre-wrap">{displayText}</div>
+                    {proposals.length > 0 && (
+                      <div className="mt-3 space-y-2 border-t pt-3">
+                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2">
+                          <FileEdit className="h-3 w-3" />
+                          Propuestas de cambio
+                        </div>
+                        {proposals.map((proposal, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-background rounded-md p-2 border text-xs"
+                            data-testid={`proposal-${message.id}-${idx}`}
+                          >
+                            <div className="font-medium mb-1">
+                              {proposal.descripcion}
+                            </div>
+                            {proposal.capitulo && (
+                              <div className="text-muted-foreground mb-1">
+                                Capítulo: {proposal.capitulo}
+                              </div>
+                            )}
+                            {proposal.objetivo && (
+                              <div className="text-muted-foreground mb-1">
+                                Objetivo: {proposal.objetivo}
+                              </div>
+                            )}
+                            {(proposal.texto_propuesto || proposal.contenido_propuesto) && (
+                              <div className="bg-green-50 dark:bg-green-900/20 rounded p-1 mb-2 text-green-800 dark:text-green-200 max-h-24 overflow-y-auto">
+                                <span className="font-medium">Nuevo: </span>
+                                {proposal.texto_propuesto || proposal.contenido_propuesto}
+                              </div>
+                            )}
+                            <div className="flex gap-1 mt-2">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-6 text-xs"
+                                data-testid={`button-approve-${message.id}-${idx}`}
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                Aplicar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 text-xs"
+                                data-testid={`button-reject-${message.id}-${idx}`}
+                              >
+                                <XIcon className="h-3 w-3 mr-1" />
+                                Descartar
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {isStreaming && streamingContent && (
               <div className="flex gap-2 justify-start" data-testid="message-streaming">
                 <div className="max-w-[85%] rounded-lg px-3 py-2 text-sm bg-muted">
