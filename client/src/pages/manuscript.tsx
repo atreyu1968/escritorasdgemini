@@ -6,7 +6,8 @@ import { ChapterViewer } from "@/components/chapter-viewer";
 import { ChatPanel } from "@/components/chat-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, BookOpen, MessageSquare } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Download, BookOpen, MessageSquare, PenTool, ChevronDown } from "lucide-react";
 import { useProject } from "@/lib/project-context";
 import type { Project, Chapter } from "@shared/schema";
 
@@ -21,7 +22,13 @@ function sortChaptersForDisplay<T extends { chapterNumber: number }>(chapters: T
 export default function ManuscriptPage() {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [agentType, setAgentType] = useState<"architect" | "reeditor">("architect");
   const { currentProject, isLoading: projectsLoading } = useProject();
+
+  const agentLabels = {
+    architect: "Arquitecto",
+    reeditor: "Re-editor",
+  };
 
   const { data: chapters = [], isLoading: chaptersLoading } = useQuery<Chapter[]>({
     queryKey: ["/api/projects", currentProject?.id, "chapters"],
@@ -147,14 +154,50 @@ export default function ManuscriptPage() {
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <Button
-            variant={showChat ? "secondary" : "outline"}
-            onClick={() => setShowChat(!showChat)}
-            data-testid="button-toggle-chat"
-          >
-            <MessageSquare className="h-4 w-4 mr-2" />
-            {showChat ? "Cerrar Arquitecto" : "Arquitecto IA"}
-          </Button>
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={showChat ? "secondary" : "outline"}
+                  data-testid="button-toggle-chat"
+                >
+                  {agentType === "architect" ? (
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                  ) : (
+                    <PenTool className="h-4 w-4 mr-2" />
+                  )}
+                  {showChat ? `Cerrar ${agentLabels[agentType]}` : "Agentes IA"}
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem 
+                  onClick={() => { setAgentType("architect"); setShowChat(true); }}
+                  data-testid="menu-agent-architect"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Arquitecto (trama y estructura)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => { setAgentType("reeditor"); setShowChat(true); }}
+                  data-testid="menu-agent-reeditor"
+                >
+                  <PenTool className="h-4 w-4 mr-2" />
+                  Re-editor (correcciones y mejoras)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {showChat && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowChat(false)}
+                data-testid="button-close-chat"
+              >
+                Cerrar
+              </Button>
+            )}
+          </div>
           <Button 
             variant="outline"
             onClick={handleDownload}
@@ -204,7 +247,7 @@ export default function ManuscriptPage() {
 
         {showChat && currentProject && (
           <ChatPanel
-            agentType="architect"
+            agentType={agentType}
             projectId={currentProject.id}
             chapterNumber={selectedChapter?.chapterNumber}
             className="lg:col-span-1 h-[calc(100vh-220px)]"
