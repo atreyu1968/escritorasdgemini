@@ -10,11 +10,11 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DuplicateManager } from "@/components/duplicate-manager";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Play, FileText, Clock, CheckCircle, Download, Archive, Copy, Trash2, ClipboardCheck, RefreshCw, Ban, CheckCheck, Plus, Upload, Database, Info } from "lucide-react";
+import { Play, FileText, Clock, CheckCircle, Download, Archive, Copy, Trash2, ClipboardCheck, RefreshCw, Ban, CheckCheck, Plus, Upload, Database, Info, Edit3, ExternalLink } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useProject } from "@/lib/project-context";
 import { Link } from "wouter";
-import type { Project, AgentStatus, Chapter } from "@shared/schema";
+import type { Project, AgentStatus, Chapter, ReeditProject } from "@shared/schema";
 
 import type { AgentRole } from "@/components/process-flow";
 
@@ -129,6 +129,10 @@ export default function Dashboard() {
   const { data: agentStatuses = [] } = useQuery<AgentStatus[]>({
     queryKey: ["/api/agent-statuses"],
     refetchInterval: 2000,
+  });
+
+  const { data: reeditProjects = [] } = useQuery<ReeditProject[]>({
+    queryKey: ["/api/reedit-projects"],
   });
 
   const activeProject = projects.find(p => p.status === "generating");
@@ -852,6 +856,50 @@ export default function Dashboard() {
                    currentProject.status === "archived" ? "Archivado" :
                    currentProject.status === "generating" ? "Generando" : "Pendiente"}
                 </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {reeditProjects.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Edit3 className="h-5 w-5" />
+                  Manuscritos Importados
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {reeditProjects.slice(0, 5).map((project) => (
+                  <Link key={project.id} href={`/reedit?project=${project.id}`}>
+                    <div 
+                      className="flex items-center justify-between p-2 rounded-md hover-elevate cursor-pointer border border-border/50"
+                      data-testid={`reedit-project-${project.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{project.title}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{project.totalChapters} capítulos</span>
+                          <Badge 
+                            variant={project.status === "completed" ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {project.status === "completed" ? "Completado" : 
+                             project.status === "processing" ? "Procesando" : 
+                             project.status === "editing" ? "Editando" : "Pendiente"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Link>
+                ))}
+                {reeditProjects.length > 5 && (
+                  <Link href="/reedit">
+                    <Button variant="ghost" size="sm" className="w-full">
+                      Ver todos ({reeditProjects.length})
+                    </Button>
+                  </Link>
+                )}
               </CardContent>
             </Card>
           )}
