@@ -5111,8 +5111,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         totalChapters: chapters.length,
         styleGuideId: styleGuideId || project.styleGuideId,
         pseudonymId: pseudonymId || project.pseudonymId,
-        status: "pending",
-        currentStage: "uploaded",
       });
 
       // Clone all chapters to reedit chapters

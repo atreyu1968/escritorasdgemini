@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChapterList } from "@/components/chapter-list";
 import { ChapterViewer } from "@/components/chapter-viewer";
 import { ChatPanel } from "@/components/chat-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, BookOpen, MessageSquare, PenTool, ChevronDown } from "lucide-react";
+import { Download, BookOpen, MessageSquare, PenTool, ChevronDown, Wand2, Loader2 } from "lucide-react";
 import { useProject } from "@/lib/project-context";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Project, Chapter } from "@shared/schema";
 
 function sortChaptersForDisplay<T extends { chapterNumber: number }>(chapters: T[]): T[] {
@@ -23,12 +29,44 @@ export default function ManuscriptPage() {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [agentType, setAgentType] = useState<"architect" | "reeditor">("architect");
+  const [showAutoEditDialog, setShowAutoEditDialog] = useState(false);
+  const [autoEditInstructions, setAutoEditInstructions] = useState("");
   const { currentProject, isLoading: projectsLoading } = useProject();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
 
   const agentLabels = {
     architect: "Arquitecto",
     reeditor: "Re-editor",
   };
+
+  const cloneToReeditMutation = useMutation({
+    mutationFn: async (params: { projectId: number; instructions: string }) => {
+      const res = await apiRequest("POST", `/api/projects/${params.projectId}/clone-to-reedit`, {
+        instructions: params.instructions,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      toast({
+        title: "Proyecto clonado",
+        description: `Se creó una copia para re-edición con ${data.chaptersCloned} capítulos.`,
+      });
+      setShowAutoEditDialog(false);
+      setAutoEditInstructions("");
+      // Start the reedit process
+      await apiRequest("POST", `/api/reedit-projects/${data.reeditProjectId}/start`);
+      // Navigate to the reedit page
+      navigate(`/reedit?project=${data.reeditProjectId}`);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo clonar el proyecto",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: chapters = [], isLoading: chaptersLoading } = useQuery<Chapter[]>({
     queryKey: ["/api/projects", currentProject?.id, "chapters"],
@@ -219,8 +257,75 @@ export default function ManuscriptPage() {
               Exportar Word
             </Button>
           )}
+          {completedChapters.length > 0 && (
+            <Button
+              variant="default"
+              onClick={() => setShowAutoEditDialog(true)}
+              data-testid="button-auto-reedit"
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              Re-edición Automática
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Auto Re-edit Dialog */}
+      <Dialog open={showAutoEditDialog} onOpenChange={setShowAutoEditDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Re-edición Automática</DialogTitle>
+            <DialogDescription>
+              El sistema creará una copia del manuscrito y aplicará las instrucciones de edición automáticamente a todos los capítulos. El manuscrito original no se modificará.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="instructions">Instrucciones de edición</Label>
+              <Textarea
+                id="instructions"
+                placeholder="Escribe las instrucciones de edición. Ejemplos:&#10;&#10;- Recortar 20% de introspección en todos los capítulos&#10;- Añadir más tensión y ganchos al final de cada capítulo&#10;- Eliminar repeticiones y mejorar el ritmo&#10;- Mantener las escenas de clímax sin modificar"
+                value={autoEditInstructions}
+                onChange={(e) => setAutoEditInstructions(e.target.value)}
+                className="min-h-[200px]"
+                data-testid="input-auto-edit-instructions"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p><strong>Consejo:</strong> Sé específico. Indica qué capítulos afectar, porcentajes de recorte, elementos a preservar, y qué tipo de mejoras aplicar.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAutoEditDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (currentProject && autoEditInstructions.trim()) {
+                  cloneToReeditMutation.mutate({
+                    projectId: currentProject.id,
+                    instructions: autoEditInstructions,
+                  });
+                }
+              }}
+              disabled={!autoEditInstructions.trim() || cloneToReeditMutation.isPending}
+              data-testid="button-start-auto-reedit"
+            >
+              {cloneToReeditMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Clonando...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  Iniciar Re-edición
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className={`flex-1 grid grid-cols-1 gap-6 min-h-0 ${showChat ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         <Card className="lg:col-span-1">
