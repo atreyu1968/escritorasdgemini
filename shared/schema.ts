@@ -538,6 +538,7 @@ export const reeditProjects = pgTable("reedit_projects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   originalFileName: text("original_file_name").notNull(),
+  sourceProjectId: integer("source_project_id").references(() => projects.id, { onDelete: "set null" }), // Link to original created project if cloned
   detectedLanguage: text("detected_language"),
   totalChapters: integer("total_chapters").default(0),
   processedChapters: integer("processed_chapters").default(0),

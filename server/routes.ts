@@ -5086,6 +5086,70 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
   });
 
+  // Clone a created project to reedit system for automated re-editing
+  app.post("/api/projects/:id/clone-to-reedit", async (req: Request, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { instructions, styleGuideId, pseudonymId } = req.body;
+      
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const chapters = await storage.getChaptersByProject(projectId);
+      if (chapters.length === 0) {
+        return res.status(400).json({ error: "Project has no chapters to edit" });
+      }
+
+      // Create the reedit project linked to the source project
+      const reeditProject = await storage.createReeditProject({
+        title: `${project.title} - Re-edición`,
+        originalFileName: `Clonado de proyecto #${projectId}`,
+        sourceProjectId: projectId,
+        detectedLanguage: "es", // Default to Spanish, can be detected later
+        totalChapters: chapters.length,
+        styleGuideId: styleGuideId || project.styleGuideId,
+        pseudonymId: pseudonymId || project.pseudonymId,
+        status: "pending",
+        currentStage: "uploaded",
+      });
+
+      // Clone all chapters to reedit chapters
+      for (const chapter of chapters) {
+        await storage.createReeditChapter({
+          projectId: reeditProject.id,
+          chapterNumber: chapter.chapterNumber,
+          originalChapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          originalContent: chapter.content || "",
+          status: "pending",
+          wordCount: chapter.wordCount || 0,
+        });
+      }
+
+      // Store the instructions if provided (for restructuring)
+      if (instructions) {
+        await storage.updateReeditProject(reeditProject.id, {
+          pendingUserInstructions: instructions,
+        });
+      }
+
+      console.log(`[Reedit] Cloned project ${projectId} -> reedit project ${reeditProject.id} with ${chapters.length} chapters`);
+
+      res.json({
+        success: true,
+        reeditProjectId: reeditProject.id,
+        title: reeditProject.title,
+        chaptersCloned: chapters.length,
+        message: `Proyecto clonado exitosamente. ${chapters.length} capítulos listos para re-edición.`,
+      });
+    } catch (error: any) {
+      console.error("Error cloning project to reedit:", error);
+      res.status(500).json({ error: error.message || "Failed to clone project" });
+    }
+  });
+
   app.post("/api/reedit-projects/:id/start", async (req: Request, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
