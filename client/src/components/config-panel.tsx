@@ -55,7 +55,7 @@ const workTypes = [
   { value: "standalone", label: "Obra Independiente", description: "Una novela autónoma sin continuación" },
   { value: "series", label: "Serie", description: "Parte de una serie de libros" },
   { value: "trilogy", label: "Trilogía", description: "Parte de una trilogía de 3 libros" },
-  { value: "bookbox", label: "Bookbox", description: "Serie completa en un solo manuscrito (hasta 250 capítulos, múltiples libros)" },
+  { value: "bookbox", label: "Bookbox", description: "Serie completa en un solo manuscrito (hasta 350 capítulos, múltiples libros)" },
 ];
 
 const bookboxBookSchema = z.object({
@@ -76,7 +76,7 @@ const configSchema = z.object({
   premise: z.string().min(10, "Describe la idea de tu novela (mínimo 10 caracteres)").max(2000).or(z.string().length(0)),
   genre: z.string().min(1, "Selecciona un género"),
   tone: z.string().min(1, "Selecciona un tono"),
-  chapterCount: z.number().min(1).max(250), // Increased for bookbox support
+  chapterCount: z.number().min(1).max(350), // Increased for bookbox support
   hasPrologue: z.boolean().default(false),
   hasEpilogue: z.boolean().default(false),
   hasAuthorNote: z.boolean().default(false),
@@ -654,7 +654,7 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
               <FormControl>
                 <Slider
                   min={1}
-                  max={100}
+                  max={isBookbox ? 350 : 100}
                   step={1}
                   value={[field.value]}
                   onValueChange={(value) => field.onChange(value[0])}
@@ -663,7 +663,7 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
                 />
               </FormControl>
               <FormDescription>
-                Entre 1 y 100 capítulos (aproximadamente {(chapterCount * 2500).toLocaleString()} - {(chapterCount * 3500).toLocaleString()} palabras)
+                Entre 1 y {isBookbox ? 350 : 100} capítulos (aproximadamente {(chapterCount * 2500).toLocaleString()} - {(chapterCount * 3500).toLocaleString()} palabras)
               </FormDescription>
               <FormMessage />
             </FormItem>
