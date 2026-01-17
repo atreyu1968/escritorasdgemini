@@ -38,7 +38,7 @@ export default function WorldBiblePage() {
   }
 
   // Show generating state when project is in progress
-  const isGenerating = currentProject.status === "generating" || currentProject.status === "pending";
+  const isGenerating = currentProject.status === "generating" || currentProject.status === "pending" || currentProject.status === "planning";
   
   if (error) {
     return (
