@@ -623,6 +623,38 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         plotOutline: this.convertPlotOutline(worldBibleData),
       });
 
+      // Verify World Bible was saved correctly before proceeding
+      const MAX_VERIFY_ATTEMPTS = 5;
+      let verifyAttempt = 0;
+      let worldBibleVerified = false;
+      
+      while (verifyAttempt < MAX_VERIFY_ATTEMPTS) {
+        const savedWorldBible = await storage.getWorldBibleByProject(project.id);
+        const hasData = savedWorldBible && (
+          ((savedWorldBible.timeline as any[]) || []).length > 0 ||
+          ((savedWorldBible.characters as any[]) || []).length > 0 ||
+          (savedWorldBible.plotOutline && Object.keys(savedWorldBible.plotOutline as object).length > 0)
+        );
+        
+        if (hasData) {
+          console.log(`[Orchestrator] World Bible verified: ${((savedWorldBible.characters as any[]) || []).length} characters, ${((savedWorldBible.timeline as any[]) || []).length} timeline events`);
+          worldBibleVerified = true;
+          break;
+        }
+        
+        verifyAttempt++;
+        console.warn(`[Orchestrator] World Bible verification attempt ${verifyAttempt}/${MAX_VERIFY_ATTEMPTS}: data not yet available`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      if (!worldBibleVerified) {
+        const errorMsg = "La biblia del mundo no se guardó correctamente. Intente de nuevo.";
+        console.error(`[Orchestrator] CRITICAL: World Bible verification failed after ${MAX_VERIFY_ATTEMPTS} attempts`);
+        this.callbacks.onError(errorMsg);
+        await storage.updateProject(project.id, { status: "error" });
+        return;
+      }
+
       this.callbacks.onAgentStatus("architect", "completed", "Estructura narrativa completada");
 
       const allSections = this.buildSectionsList(project, worldBibleData);
