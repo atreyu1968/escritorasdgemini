@@ -55,6 +55,7 @@ interface GhostwriterInput {
   maxWordCount?: number;
   extendedGuideContent?: string;
   previousChapterContent?: string;
+  kindleUnlimitedOptimized?: boolean;
 }
 
 const SYSTEM_PROMPT = `
@@ -340,6 +341,50 @@ export class GhostwriterAgent extends BaseAgent {
     GUÍA DE EXTENSIÓN DEL AUTOR (CRÍTICO):
     ═══════════════════════════════════════════════════════════════════
     ${input.extendedGuideContent}
+    ═══════════════════════════════════════════════════════════════════
+    `;
+    }
+
+    if (input.kindleUnlimitedOptimized) {
+      prompt += `
+    ═══════════════════════════════════════════════════════════════════
+    ⚡⚡⚡ OPTIMIZACIÓN KINDLE UNLIMITED (ACTIVA) ⚡⚡⚡
+    ═══════════════════════════════════════════════════════════════════
+    Este proyecto está OPTIMIZADO para Kindle Unlimited. Aplica estas técnicas de escritura:
+    
+    1. PROSA ADICTIVA Y DIRECTA:
+       - Frases cortas y punzantes que aceleran el ritmo
+       - Mínima descripción ambiental, máxima acción y diálogo
+       - Cada párrafo debe impulsar al lector hacia adelante
+       - Evita digresiones y reflexiones extensas
+    
+    2. CLIFFHANGER OBLIGATORIO AL FINAL:
+       - El capítulo DEBE terminar con un gancho irresistible
+       - Técnicas: revelación parcial, peligro inminente, pregunta sin respuesta, giro inesperado
+       - El lector debe NECESITAR pasar al siguiente capítulo
+       - Ejemplos efectivos:
+         • "Y entonces vi quién estaba detrás de la puerta."
+         • "Lo que encontré me heló la sangre."
+         • "Sabía que solo tenía una oportunidad. Esta."
+    
+    3. TÉCNICA PAGE-TURNER:
+       - Empezar in media res (en mitad de la acción)
+       - Tensión constante, sin momentos de respiro prolongados
+       - Revelar información en dosis pequeñas (dosificar secretos)
+       - Crear múltiples líneas de tensión simultáneas
+    
+    4. ESTRUCTURA DE CAPÍTULO KU:
+       - Apertura: Hook inmediato en las primeras 2 frases
+       - Desarrollo: Acción/conflicto creciente
+       - Cierre: Cliffhanger que obliga a continuar
+    
+    5. RITMO FRENÉTICO:
+       - Diálogos rápidos y tensos
+       - Decisiones constantes del protagonista
+       - Cada página debe aportar algo nuevo (revelación, peligro, giro)
+    
+    ⚠️ RECUERDA: En Kindle Unlimited cada página leída = ingresos.
+    El lector NO PUEDE sentir que es buen momento para dejar de leer.
     ═══════════════════════════════════════════════════════════════════
     `;
     }

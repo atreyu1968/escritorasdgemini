@@ -596,6 +596,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             hasEpilogue: project.hasEpilogue,
             hasAuthorNote: project.hasAuthorNote,
             architectInstructions: project.architectInstructions || undefined,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
           await this.trackTokenUsage(project.id, architectResult.tokenUsage, "El Arquitecto", "gemini-3-pro-preview", undefined, "world_bible");
@@ -874,6 +875,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             maxWordCount: perChapterMax,
             extendedGuideContent: extendedGuideContent || undefined,
             previousChapterContent: isRewrite ? bestVersion.content : undefined,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
           const { cleanContent, continuityState } = this.ghostwriter.extractContinuityState(writerResult.content);
@@ -1434,6 +1436,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             minWordCount: perChapterTargetResume,
             extendedGuideContent: extendedGuideContent || undefined,
             previousChapterContent: isRewrite ? bestVersion.content : undefined,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
           const { cleanContent, continuityState } = this.ghostwriter.extractContinuityState(writerResult.content);
@@ -2299,6 +2302,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           minWordCount: perChapterTargetQA,
           extendedGuideContent: styleGuideContent || undefined,
           previousChapterContent: originalChapterContent,
+          kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
         });
 
         let chapterContent = writerResult.content;
@@ -2329,6 +2333,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             minWordCount: perChapterTargetQA,
             extendedGuideContent: styleGuideContent || undefined,
             previousChapterContent: chapterContent,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
           chapterContent = rewriteResult.content;
           await this.trackTokenUsage(project.id, rewriteResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", sectionData.numero, "qa_rewrite");
@@ -2676,6 +2681,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             authorName: "",
             isRewrite: regenerationAttempt > 1,
             minWordCount: perChapterTargetRegen,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
           await this.trackTokenUsage(project.id, writerResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", chapter.chapterNumber, "chapter_regenerate");
@@ -3621,6 +3627,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
       guiaEstilo,
       previousContinuity,
       refinementInstructions: `CORRECCIONES DE ${qaLabels[qaSource].toUpperCase()}:\n${correctionInstructions}`,
+      kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
     });
 
     await this.trackTokenUsage(project.id, writerResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", sectionData.numero, "qa_rewrite");

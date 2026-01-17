@@ -11,6 +11,7 @@ interface ArchitectInput {
   hasAuthorNote?: boolean;
   guiaEstilo?: string;
   architectInstructions?: string;
+  kindleUnlimitedOptimized?: boolean;
 }
 
 const SYSTEM_PROMPT = `
@@ -486,6 +487,43 @@ export class ArchitectAgent extends BaseAgent {
     ${input.architectInstructions}
     
     Estas instrucciones tienen PRIORIDAD sobre las guías generales. Asegúrate de que cada elemento solicitado se refleje en la estructura de la novela.
+    ═══════════════════════════════════════════════════════════════════
+    ` : ""}
+    
+    ${input.kindleUnlimitedOptimized ? `
+    ═══════════════════════════════════════════════════════════════════
+    ⚡⚡⚡ OPTIMIZACIÓN KINDLE UNLIMITED (ACTIVA) ⚡⚡⚡
+    ═══════════════════════════════════════════════════════════════════
+    Esta novela está OPTIMIZADA para Kindle Unlimited (KU). Aplica estas técnicas:
+    
+    1. CAPÍTULOS CORTOS Y ADICTIVOS:
+       - Capítulos de 800-1500 palabras máximo (lectores KU prefieren capítulos breves)
+       - Estructura "uno más y ya" que maximiza páginas leídas (KENPC)
+       - Cada capítulo debe poder leerse en 3-5 minutos
+    
+    2. CLIFFHANGERS OBLIGATORIOS:
+       - CADA capítulo DEBE terminar con un gancho irresistible
+       - Tipos de cliffhanger: revelación parcial, peligro inminente, pregunta sin respuesta, contradicción
+       - El lector NUNCA debe sentir que puede parar
+    
+    3. RITMO DE COCAÍNA NARRATIVA:
+       - Giros cada 3-4 capítulos (no 5-7 como en novela tradicional)
+       - Escenas cortas y dinámicas
+       - Mínima descripción, máxima acción y diálogo
+       - Conflicto constante, sin capítulos de "respiración"
+    
+    4. ESTRUCTURA PAGE-TURNER:
+       - Acto 1 (primeros 10-15%): Hook en página 1, incidente incitador antes del capítulo 3
+       - Acto 2: Escalada implacable, nunca mesetas
+       - Acto 3: Resolución satisfactoria pero rápida
+    
+    5. TÉCNICAS DE RETENCIÓN KU:
+       - Empezar in media res (en mitad de la acción)
+       - Múltiples líneas de tensión activas simultáneamente
+       - Secretos que se revelan gradualmente
+       - Protagonista en constante movimiento/decisión
+    
+    ⚠️ RECUERDA: En KU, cada página leída = ingresos. Diseña para que el lector NO PUEDA dejar el libro.
     ═══════════════════════════════════════════════════════════════════
     ` : ""}
     
