@@ -88,6 +88,7 @@ export const projects = pgTable("projects", {
   minWordCount: integer("min_word_count"),
   minWordsPerChapter: integer("min_words_per_chapter").default(1500),
   maxWordsPerChapter: integer("max_words_per_chapter").default(3500),
+  kindleUnlimitedOptimized: boolean("kindle_unlimited_optimized").notNull().default(false),
   architectInstructions: text("architect_instructions"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
