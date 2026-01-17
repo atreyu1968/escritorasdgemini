@@ -278,18 +278,77 @@ export class Orchestrator {
     };
   }
 
+  private validateImmediateContinuity(
+    chapterContent: string,
+    characterStates: Map<string, { alive: boolean; location: string; injuries: string[]; lastSeen: number }>,
+    worldBible: any
+  ): { valid: boolean; violations: string[] } {
+    const violations: string[] = [];
+    const contentLower = chapterContent.toLowerCase();
+
+    characterStates.forEach((state, name) => {
+      const nameLower = name.toLowerCase();
+      const nameInContent = contentLower.includes(nameLower);
+
+      if (!state.alive && nameInContent) {
+        const actionPatterns = [
+          `${nameLower} dijo`, `${nameLower} habló`, `${nameLower} respondió`,
+          `${nameLower} caminó`, `${nameLower} corrió`, `${nameLower} miró`,
+          `${nameLower} sonrió`, `${nameLower} asintió`, `${nameLower} se levantó`,
+          `—dijo ${nameLower}`, `—respondió ${nameLower}`, `—exclamó ${nameLower}`,
+        ];
+        
+        for (const pattern of actionPatterns) {
+          if (contentLower.includes(pattern)) {
+            violations.push(
+              `PERSONAJE MUERTO ACTUANDO: "${name}" murió en el Capítulo ${state.lastSeen} pero aparece realizando acciones en este capítulo. Buscar y eliminar: "${pattern}"`
+            );
+            break;
+          }
+        }
+      }
+
+      if (state.alive && state.injuries.length > 0 && nameInContent) {
+        let injuryMentioned = false;
+        for (const injury of state.injuries) {
+          if (contentLower.includes(injury.toLowerCase())) {
+            injuryMentioned = true;
+            break;
+          }
+        }
+        
+        const hasPhysicalAction = contentLower.includes(`${nameLower} corrió`) ||
+                                   contentLower.includes(`${nameLower} luchó`) ||
+                                   contentLower.includes(`${nameLower} saltó`) ||
+                                   contentLower.includes(`${nameLower} golpeó`);
+        
+        if (hasPhysicalAction && !injuryMentioned) {
+          violations.push(
+            `HERIDA IGNORADA: "${name}" tiene heridas [${state.injuries.join(", ")}] que deberían afectar sus acciones físicas pero no se mencionan.`
+          );
+        }
+      }
+    });
+
+    return {
+      valid: violations.length === 0,
+      violations
+    };
+  }
+
   private buildSlidingContextWindow(
     completedChapters: Chapter[],
     currentChapterIndex: number,
     allSections: SectionData[]
-  ): string {
-    if (completedChapters.length === 0) return "";
+  ): { context: string; characterStates: Map<string, { alive: boolean; location: string; injuries: string[]; lastSeen: number }> } {
+    const emptyResult = { context: "", characterStates: new Map() };
+    if (completedChapters.length === 0) return emptyResult;
 
     const sortedChapters = [...completedChapters]
       .filter(c => c.status === "completed" && c.content)
       .sort((a, b) => a.chapterNumber - b.chapterNumber);
 
-    if (sortedChapters.length === 0) return "";
+    if (sortedChapters.length === 0) return emptyResult;
 
     const contextParts: string[] = [];
     const FULL_CONTEXT_CHAPTERS = 2;
@@ -354,7 +413,7 @@ Estado de continuidad: ${continuityState || "No disponible"}
     }
 
     // Build the context with mandatory constraints at the top
-    let result = `
+    let context = `
 ═══════════════════════════════════════════════════════════════════
 🚨🚨🚨 RESTRICCIONES DE CONTINUIDAD OBLIGATORIAS 🚨🚨🚨
 ═══════════════════════════════════════════════════════════════════
@@ -367,7 +426,7 @@ CONTEXTO DE CAPÍTULOS ANTERIORES:
 ${contextParts.join("\n")}
 ═══════════════════════════════════════════════════════════════════`;
 
-    return result;
+    return { context, characterStates };
   }
 
   async generateNovel(project: Project): Promise<void> {
@@ -786,7 +845,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             ? `${baseStyleGuide}\n\n--- GUÍA DE ESTILO DEL AUTOR ---\n${styleGuideContent}`
             : baseStyleGuide;
 
-          const slidingContext = this.buildSlidingContextWindow(chapters, i, allSections);
+          const { context: slidingContext, characterStates } = this.buildSlidingContextWindow(chapters, i, allSections);
           const optimizedContinuity = slidingContext || previousContinuity;
 
           const isRewrite = refinementAttempts > 0;
@@ -891,6 +950,24 @@ ${chapterSummaries || "Sin capítulos disponibles"}
               agentRole: "ghostwriter",
               thoughtContent: writerResult.thoughtSignature,
             });
+          }
+
+          // IMMEDIATE CONTINUITY VALIDATION - Check before sending to Editor
+          if (characterStates.size > 0) {
+            const continuityCheck = this.validateImmediateContinuity(currentContent, characterStates, worldBibleData.world_bible);
+            
+            if (!continuityCheck.valid) {
+              console.warn(`[Orchestrator] VIOLACIÓN DE CONTINUIDAD detectada en ${sectionLabel}:`, continuityCheck.violations);
+              this.callbacks.onAgentStatus("ghostwriter", "warning", 
+                `${sectionLabel} tiene ${continuityCheck.violations.length} violación(es) de continuidad. Corrigiendo...`
+              );
+              
+              // Force a rewrite with specific continuity fix instructions
+              refinementAttempts++;
+              refinementInstructions = `🚨 VIOLACIÓN DE CONTINUIDAD CRÍTICA 🚨\n\nTu capítulo contiene los siguientes errores que DEBEN corregirse:\n\n${continuityCheck.violations.map((v, idx) => `${idx + 1}. ${v}`).join("\n\n")}\n\nReescribe el capítulo CORRIGIENDO estos errores. El resto del contenido está bien, solo corrige las violaciones de continuidad.`;
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              continue;
+            }
           }
 
           await storage.updateChapter(chapter.id, { status: "editing" });
@@ -1435,6 +1512,24 @@ ${chapterSummaries || "Sin capítulos disponibles"}
               agentRole: "ghostwriter",
               thoughtContent: writerResult.thoughtSignature,
             });
+          }
+
+          // IMMEDIATE CONTINUITY VALIDATION - Check before sending to Editor
+          if (characterStates.size > 0) {
+            const continuityCheck = this.validateImmediateContinuity(currentContent, characterStates, worldBibleData.world_bible);
+            
+            if (!continuityCheck.valid) {
+              console.warn(`[Orchestrator] VIOLACIÓN DE CONTINUIDAD detectada en ${sectionLabel}:`, continuityCheck.violations);
+              this.callbacks.onAgentStatus("ghostwriter", "warning", 
+                `${sectionLabel} tiene ${continuityCheck.violations.length} violación(es) de continuidad. Corrigiendo...`
+              );
+              
+              // Force a rewrite with specific continuity fix instructions
+              refinementAttempts++;
+              refinementInstructions = `🚨 VIOLACIÓN DE CONTINUIDAD CRÍTICA 🚨\n\nTu capítulo contiene los siguientes errores que DEBEN corregirse:\n\n${continuityCheck.violations.map((v, idx) => `${idx + 1}. ${v}`).join("\n\n")}\n\nReescribe el capítulo CORRIGIENDO estos errores. El resto del contenido está bien, solo corrige las violaciones de continuidad.`;
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              continue;
+            }
           }
 
           await storage.updateChapter(chapter.id, { status: "editing" });
