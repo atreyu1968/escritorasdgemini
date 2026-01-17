@@ -71,6 +71,8 @@ export default function Dashboard() {
   const [isImporting, setIsImporting] = useState(false);
   const [showArchitectDialog, setShowArchitectDialog] = useState(false);
   const [architectInstructions, setArchitectInstructions] = useState("");
+  const [showExtendDialog, setShowExtendDialog] = useState(false);
+  const [targetChapters, setTargetChapters] = useState("");
   const { projects, currentProject, setSelectedProjectId } = useProject();
 
   const handleExportData = async () => {
@@ -349,6 +351,28 @@ export default function Dashboard() {
     onError: (error) => {
       console.error("[Resume] Error:", error);
       toast({ title: "Error", description: "No se pudo reanudar la generación", variant: "destructive" });
+    },
+  });
+
+  const extendProjectMutation = useMutation({
+    mutationFn: async ({ id, targetChapters }: { id: number; targetChapters: number }) => {
+      const response = await apiRequest("POST", `/api/projects/${id}/extend`, { targetChapters });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-statuses"] });
+      toast({ 
+        title: "Extensión iniciada", 
+        description: `Generando capítulos ${data.fromChapter} a ${data.toChapter}` 
+      });
+      addLog("success", `Extendiendo novela: generando capítulos ${data.fromChapter} a ${data.toChapter}...`);
+      setCompletedStages([]);
+      setShowExtendDialog(false);
+      setTargetChapters("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "No se pudo extender el proyecto", variant: "destructive" });
     },
   });
 
@@ -849,6 +873,19 @@ export default function Dashboard() {
                     </Button>
                   )}
 
+                  {["completed", "paused", "cancelled", "error"].includes(currentProject.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowExtendDialog(true)}
+                      disabled={extendProjectMutation.isPending}
+                      data-testid="button-extend-project"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Extender
+                    </Button>
+                  )}
+
                   {currentProject.status === "archived" ? (
                     <Button
                       variant="outline"
@@ -1083,6 +1120,66 @@ export default function Dashboard() {
                 <>
                   <Play className="h-4 w-4 mr-2" />
                   Iniciar Generación
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend Project Dialog */}
+      <Dialog open={showExtendDialog} onOpenChange={setShowExtendDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Extender Proyecto</DialogTitle>
+            <DialogDescription>
+              Añade más capítulos a tu proyecto. El sistema generará la escaleta y contenido de los capítulos adicionales manteniendo la continuidad con los existentes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="target-chapters">Número total de capítulos</Label>
+              <input
+                id="target-chapters"
+                type="number"
+                min={(chapters?.filter(c => c.chapterNumber > 0).length || 0) + 1}
+                value={targetChapters}
+                onChange={(e) => setTargetChapters(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder={`Actualmente: ${chapters?.filter(c => c.chapterNumber > 0).length || 0} capítulos`}
+                data-testid="input-target-chapters"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p>Capítulos actuales: <strong>{chapters?.filter(c => c.chapterNumber > 0).length || 0}</strong></p>
+              <p>Nuevos capítulos a generar: <strong>{targetChapters ? Math.max(0, parseInt(targetChapters) - (chapters?.filter(c => c.chapterNumber > 0).length || 0)) : 0}</strong></p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExtendDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (currentProject && targetChapters) {
+                  extendProjectMutation.mutate({ 
+                    id: currentProject.id, 
+                    targetChapters: parseInt(targetChapters) 
+                  });
+                }
+              }}
+              disabled={extendProjectMutation.isPending || !targetChapters || parseInt(targetChapters) <= (chapters?.filter(c => c.chapterNumber > 0).length || 0)}
+              data-testid="button-confirm-extend"
+            >
+              {extendProjectMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Extendiendo...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Extender Proyecto
                 </>
               )}
             </Button>

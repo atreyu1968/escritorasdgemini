@@ -853,6 +853,106 @@ export async function registerRoutes(
     }
   });
 
+  // Extend project - continue generating additional chapters for incomplete projects
+  app.post("/api/projects/:id/extend", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { targetChapters } = req.body;
+      
+      console.log(`[Extend] Starting extension for project ${id} to ${targetChapters} chapters`);
+      
+      const project = await storage.getProject(id);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      if (project.status === "generating") {
+        return res.status(400).json({ error: "Project is already generating" });
+      }
+
+      const existingChapters = await storage.getChaptersByProject(id);
+      const regularChapters = existingChapters.filter(c => c.chapterNumber > 0);
+      const maxExistingChapter = regularChapters.length > 0 
+        ? Math.max(...regularChapters.map(c => c.chapterNumber))
+        : 0;
+
+      if (!targetChapters || targetChapters <= maxExistingChapter) {
+        return res.status(400).json({ 
+          error: `Target chapters (${targetChapters}) must be greater than existing chapters (${maxExistingChapter})` 
+        });
+      }
+
+      // Update project with new chapter count
+      await storage.updateProject(id, { 
+        status: "generating",
+        chapterCount: targetChapters
+      });
+
+      for (const agentName of ["architect", "ghostwriter", "editor", "copyeditor", "final-reviewer"]) {
+        await storage.updateAgentStatus(id, agentName, { status: "idle", currentTask: "Preparando extensión..." });
+      }
+
+      res.json({ 
+        message: "Extension started", 
+        projectId: id,
+        fromChapter: maxExistingChapter + 1,
+        toChapter: targetChapters
+      });
+
+      const sendToStreams = (data: any) => {
+        const streams = activeStreams.get(id);
+        if (streams) {
+          const message = `data: ${JSON.stringify(data)}\n\n`;
+          streams.forEach(stream => {
+            try {
+              stream.write(message);
+            } catch (e) {
+              console.error("Error writing to stream:", e);
+            }
+          });
+        }
+      };
+
+      const orchestrator = new Orchestrator({
+        onAgentStatus: async (role, status, message) => {
+          await storage.updateAgentStatus(id, role, { status, currentTask: message });
+          sendToStreams({ type: "agent_status", role, status, message });
+          if (message) await persistActivityLog(id, "info", message, role);
+        },
+        onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
+          sendToStreams({ type: "chapter_complete", chapterNumber, wordCount, chapterTitle });
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "success", `${label} completado (${wordCount} palabras)`, "ghostwriter");
+        },
+        onChapterRewrite: async (chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason) => {
+          sendToStreams({ type: "chapter_rewrite", chapterNumber, chapterTitle, currentIndex, totalToRewrite, reason });
+          const label = getSectionLabel(chapterNumber, chapterTitle);
+          await persistActivityLog(id, "warning", `Reescritura ${currentIndex}/${totalToRewrite}: ${label} - ${reason}`, "editor");
+        },
+        onChapterStatusChange: (chapterNumber, status) => {
+          sendToStreams({ type: "chapter_status_change", chapterNumber, status });
+        },
+        onProjectComplete: async () => {
+          sendToStreams({ type: "project_complete" });
+          await persistActivityLog(id, "success", "Extensión de novela completada", "orchestrator");
+        },
+        onError: async (error) => {
+          sendToStreams({ type: "error", message: error });
+          await persistActivityLog(id, "error", error, "orchestrator");
+        },
+      });
+
+      // Get updated project with new chapter count
+      const updatedProject = await storage.getProject(id);
+      orchestrator.extendNovel(updatedProject!, maxExistingChapter, targetChapters).catch(console.error);
+
+    } catch (error) {
+      console.error("Error extending project:", error);
+      res.status(500).json({ error: "Failed to extend project" });
+    }
+  });
+
   app.post("/api/projects/:id/force-sentinel", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);

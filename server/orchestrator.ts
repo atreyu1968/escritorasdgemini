@@ -2464,6 +2464,327 @@ ${chapterSummaries || "Sin capítulos disponibles"}
     }
   }
 
+  async extendNovel(project: Project, fromChapter: number, toChapter: number): Promise<void> {
+    try {
+      console.log(`[Orchestrator:Extend] Extending project ${project.id} from chapter ${fromChapter + 1} to ${toChapter}`);
+      
+      this.cumulativeTokens = {
+        inputTokens: project.totalInputTokens || 0,
+        outputTokens: project.totalOutputTokens || 0,
+        thinkingTokens: project.totalThinkingTokens || 0,
+      };
+
+      const worldBible = await storage.getWorldBibleByProject(project.id);
+      if (!worldBible) {
+        this.callbacks.onError("No se encontró la biblia del mundo para este proyecto. Necesita generar primero.");
+        await storage.updateProject(project.id, { status: "error" });
+        return;
+      }
+
+      let styleGuideContent = "";
+      let authorName = "";
+      let extendedGuideContent = "";
+      
+      if (project.styleGuideId) {
+        const styleGuide = await storage.getStyleGuide(project.styleGuideId);
+        if (styleGuide) styleGuideContent = styleGuide.content;
+      }
+      
+      if (project.pseudonymId) {
+        const pseudonym = await storage.getPseudonym(project.pseudonymId);
+        if (pseudonym) authorName = pseudonym.name;
+      }
+
+      if ((project as any).extendedGuideId) {
+        const extendedGuide = await storage.getExtendedGuide((project as any).extendedGuideId);
+        if (extendedGuide) extendedGuideContent = extendedGuide.content;
+      }
+
+      // Get existing chapters to understand the story so far
+      const existingChapters = await storage.getChaptersByProject(project.id);
+      const completedChapters = existingChapters
+        .filter(c => c.status === "completed" && c.chapterNumber > 0)
+        .sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+      const lastCompletedChapter = completedChapters.length > 0 
+        ? completedChapters[completedChapters.length - 1] 
+        : null;
+
+      // Build summary of story so far for the Architect
+      const storySoFar = completedChapters.map(c => 
+        `Capítulo ${c.chapterNumber}: ${c.title || "Sin título"}`
+      ).join("\n");
+
+      this.callbacks.onAgentStatus("architect", "planning", 
+        `El Arquitecto está planificando los capítulos ${fromChapter + 1} a ${toChapter}...`
+      );
+
+      // Call the Architect to generate outline for new chapters
+      const chaptersToGenerate = toChapter - fromChapter;
+      const architectPrompt = `
+EXTENSIÓN DE NOVELA EN PROGRESO
+
+La novela ya tiene ${fromChapter} capítulos escritos. Necesitas planificar los capítulos ${fromChapter + 1} hasta ${toChapter} (${chaptersToGenerate} capítulos adicionales).
+
+INFORMACIÓN DEL PROYECTO:
+- Título: ${project.title}
+- Género: ${project.genre}
+- Tono: ${project.tone}
+- Premisa: ${project.premise || "No especificada"}
+
+CAPÍTULOS EXISTENTES:
+${storySoFar}
+
+ÚLTIMO CAPÍTULO COMPLETADO:
+${lastCompletedChapter ? `
+Capítulo ${lastCompletedChapter.chapterNumber}: ${lastCompletedChapter.title || "Sin título"}
+Contenido (últimas 1000 palabras):
+${lastCompletedChapter.content?.slice(-4000) || "Sin contenido disponible"}
+` : "No hay capítulos previos"}
+
+PERSONAJES EXISTENTES:
+${JSON.stringify(worldBible.characters, null, 2)}
+
+REGLAS DEL MUNDO:
+${JSON.stringify(worldBible.worldRules, null, 2)}
+
+INSTRUCCIONES:
+1. Genera una escaleta detallada SOLO para los capítulos ${fromChapter + 1} hasta ${toChapter}
+2. Mantén la continuidad con la historia existente
+3. Cada capítulo debe tener: numero, titulo, resumen, puntos_clave, personajes_involucrados
+4. Los números de capítulo deben ser consecutivos desde ${fromChapter + 1}
+
+Responde SOLO con un JSON válido con la estructura:
+{
+  "escaleta_capitulos": [
+    {
+      "numero": ${fromChapter + 1},
+      "titulo": "...",
+      "resumen": "...",
+      "puntos_clave": ["..."],
+      "personajes_involucrados": ["..."]
+    }
+  ]
+}
+`;
+
+      const architectResult = await this.architect.execute({
+        title: project.title,
+        premise: architectPrompt,
+        genre: project.genre,
+        chapterCount: chaptersToGenerate,
+        hasPrologue: false,
+        hasEpilogue: false,
+        hasAuthorNote: false,
+        tone: project.tone,
+      });
+
+      if (!architectResult.content) {
+        this.callbacks.onError("El Arquitecto no generó una escaleta válida para la extensión");
+        await storage.updateProject(project.id, { status: "error" });
+        return;
+      }
+
+      await this.trackTokenUsage(project.id, architectResult.tokenUsage, "El Arquitecto", "gemini-3-pro-preview", undefined, "extend_outline");
+
+      // Parse the new chapter outlines
+      let newChapterOutlines: any[] = [];
+      try {
+        const jsonMatch = architectResult.content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          newChapterOutlines = parsed.escaleta_capitulos || [];
+        }
+      } catch (e) {
+        console.error("[Orchestrator:Extend] Failed to parse architect response:", e);
+        this.callbacks.onError("Error al parsear la escaleta de extensión");
+        await storage.updateProject(project.id, { status: "error" });
+        return;
+      }
+
+      if (newChapterOutlines.length === 0) {
+        this.callbacks.onError("El Arquitecto no generó capítulos para la extensión");
+        await storage.updateProject(project.id, { status: "error" });
+        return;
+      }
+
+      this.callbacks.onAgentStatus("architect", "completed", 
+        `Escaleta generada: ${newChapterOutlines.length} capítulos planificados`
+      );
+
+      // Create chapter records for the new chapters
+      for (const outline of newChapterOutlines) {
+        await storage.createChapter({
+          projectId: project.id,
+          chapterNumber: outline.numero,
+          title: outline.titulo,
+          content: "",
+          wordCount: 0,
+          status: "pending",
+        });
+      }
+
+      console.log(`[Orchestrator:Extend] Created ${newChapterOutlines.length} new chapter records`);
+
+      // Build world bible data for ghostwriter
+      const worldBibleData = this.reconstructWorldBibleData(worldBible, project);
+      
+      // Add the new outlines to the world bible data
+      worldBibleData.escaleta_capitulos = [
+        ...(worldBibleData.escaleta_capitulos || []),
+        ...newChapterOutlines
+      ];
+
+      // Initialize character states from existing chapters
+      const characterStates: Map<string, { alive: boolean; location: string; injuries: string[]; lastSeen: number }> = new Map();
+
+      // Get continuity from last completed chapter
+      let previousContinuity = lastCompletedChapter?.continuityState 
+        ? JSON.stringify(lastCompletedChapter.continuityState)
+        : lastCompletedChapter?.content 
+          ? `Capítulo anterior completado. Contenido termina con: ${lastCompletedChapter.content.slice(-500)}`
+          : "";
+
+      let previousContinuityStateForEditor: any = lastCompletedChapter?.continuityState || null;
+
+      // Get the newly created pending chapters
+      const allChapters = await storage.getChaptersByProject(project.id);
+      const pendingChapters = allChapters
+        .filter(c => c.status === "pending" && c.chapterNumber > fromChapter)
+        .sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+      this.callbacks.onAgentStatus("ghostwriter", "writing", 
+        `Iniciando escritura de ${pendingChapters.length} capítulos nuevos...`
+      );
+
+      // Generate content for each new chapter (similar to resumeNovel logic)
+      for (const chapter of pendingChapters) {
+        if (await isProjectCancelledFromDb(project.id)) {
+          this.callbacks.onAgentStatus("orchestrator", "cancelled", "Extensión cancelada por el usuario");
+          await storage.updateProject(project.id, { status: "cancelled" });
+          return;
+        }
+
+        const sectionData = this.buildSectionDataFromChapter(chapter, worldBibleData);
+        
+        await storage.updateChapter(chapter.id, { status: "writing" });
+
+        const sectionLabel = this.getSectionLabel(sectionData);
+        this.callbacks.onAgentStatus("ghostwriter", "writing", `El Narrador está escribiendo ${sectionLabel}...`);
+
+        let chapterContent = "";
+        let approved = false;
+        let refinementAttempts = 0;
+        let refinementInstructions = "";
+        let extractedContinuityState: any = null;
+        
+        let bestVersion = { content: "", score: 0, continuityState: null as any };
+
+        while (!approved && refinementAttempts < this.maxRefinementLoops) {
+          const baseStyleGuide = `Género: ${project.genre}, Tono: ${project.tone}`;
+          const fullStyleGuide = styleGuideContent 
+            ? `${baseStyleGuide}\n\n--- GUÍA DE ESTILO DEL AUTOR ---\n${styleGuideContent}`
+            : baseStyleGuide;
+
+          const isRewrite = refinementAttempts > 0;
+          const perChapterMin = (project as any).minWordsPerChapter || 2500;
+          const perChapterMax = (project as any).maxWordsPerChapter || Math.round(perChapterMin * 1.15);
+          
+          const writerResult = await this.ghostwriter.execute({
+            chapterNumber: sectionData.numero,
+            chapterData: sectionData,
+            worldBible: worldBibleData.world_bible,
+            guiaEstilo: fullStyleGuide,
+            previousContinuity,
+            refinementInstructions,
+            authorName,
+            isRewrite,
+            minWordCount: perChapterMin,
+            maxWordCount: perChapterMax,
+            extendedGuideContent: extendedGuideContent || undefined,
+            previousChapterContent: isRewrite ? bestVersion.content : undefined,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
+          });
+
+          const { cleanContent, continuityState } = this.ghostwriter.extractContinuityState(writerResult.content);
+          let currentContent = cleanContent;
+          const currentContinuityState = continuityState;
+          
+          const contentWordCount = currentContent.split(/\s+/).filter((w: string) => w.length > 0).length;
+          
+          await this.trackTokenUsage(project.id, writerResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", sectionData.numero, "extend_write");
+
+          // Editor review
+          this.callbacks.onAgentStatus("editor", "reviewing", `El Editor está revisando ${sectionLabel}...`);
+          
+          const editorResult = await this.editor.execute({
+            chapterNumber: sectionData.numero,
+            chapterContent: currentContent,
+            chapterData: sectionData,
+            worldBible: worldBibleData.world_bible,
+            previousContinuityState: previousContinuityStateForEditor,
+            guiaEstilo: fullStyleGuide,
+          });
+
+          await this.trackTokenUsage(project.id, editorResult.tokenUsage, "El Editor", "gemini-3-pro-preview", sectionData.numero, "extend_edit");
+
+          if (editorResult.result) {
+            const score = editorResult.result.puntuacion || 0;
+            
+            if (score > bestVersion.score) {
+              bestVersion = { content: currentContent, score, continuityState: currentContinuityState };
+            }
+
+            if (score >= 8 || refinementAttempts >= this.maxRefinementLoops - 1) {
+              approved = true;
+              chapterContent = bestVersion.content;
+              extractedContinuityState = bestVersion.continuityState;
+            } else {
+              refinementInstructions = editorResult.result.plan_quirurgico?.procedimiento || "Mejorar la calidad general";
+              refinementAttempts++;
+              this.callbacks.onAgentStatus("editor", "refining", 
+                `${sectionLabel}: Puntuación ${score}/10, refinando (intento ${refinementAttempts})...`
+              );
+            }
+          } else {
+            approved = true;
+            chapterContent = currentContent;
+            extractedContinuityState = currentContinuityState;
+          }
+        }
+
+        // Save the chapter
+        const wordCount = chapterContent.split(/\s+/).filter((w: string) => w.length > 0).length;
+        await storage.updateChapter(chapter.id, {
+          content: chapterContent,
+          wordCount,
+          status: "completed",
+          continuityState: extractedContinuityState,
+        });
+
+        this.callbacks.onChapterComplete(chapter.chapterNumber, wordCount, chapter.title ?? "");
+
+        // Update continuity for next chapter
+        previousContinuity = extractedContinuityState 
+          ? JSON.stringify(extractedContinuityState)
+          : `Capítulo ${chapter.chapterNumber} completado. Termina con: ${chapterContent.slice(-500)}`;
+        previousContinuityStateForEditor = extractedContinuityState;
+      }
+
+      // Mark project as completed
+      await storage.updateProject(project.id, { status: "completed" });
+      this.callbacks.onAgentStatus("orchestrator", "completed", 
+        `Extensión completada: ${pendingChapters.length} capítulos generados`
+      );
+      this.callbacks.onProjectComplete();
+
+    } catch (error) {
+      console.error("[Orchestrator:Extend] Error:", error);
+      this.callbacks.onError(`Error en extensión: ${error instanceof Error ? error.message : "Error desconocido"}`);
+      await storage.updateProject(project.id, { status: "error" });
+    }
+  }
+
   async runContinuitySentinelForce(project: Project): Promise<void> {
     try {
       this.cumulativeTokens = {
