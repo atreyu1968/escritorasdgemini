@@ -72,6 +72,8 @@ const configSchema = z.object({
   seriesId: z.number().nullable().optional(),
   seriesOrder: z.number().nullable().optional(),
   minWordCount: z.number().min(0).nullable().optional(),
+  minWordsPerChapter: z.number().min(500).max(10000).default(1500),
+  maxWordsPerChapter: z.number().min(500).max(15000).default(3500),
 });
 
 type ConfigFormData = z.infer<typeof configSchema>;
@@ -103,6 +105,8 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
       seriesId: (defaultValues as any)?.seriesId || null,
       seriesOrder: (defaultValues as any)?.seriesOrder || null,
       minWordCount: (defaultValues as any)?.minWordCount || null,
+      minWordsPerChapter: (defaultValues as any)?.minWordsPerChapter || 1500,
+      maxWordsPerChapter: (defaultValues as any)?.maxWordsPerChapter || 3500,
     },
   });
 
@@ -523,6 +527,55 @@ export function ConfigPanel({ onSubmit, onReset, isLoading, defaultValues, isEdi
             </FormItem>
           )}
         />
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="minWordsPerChapter"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Mínimo palabras/capítulo</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={500}
+                    max={10000}
+                    value={field.value}
+                    onChange={(e) => field.onChange(parseInt(e.target.value) || 1500)}
+                    data-testid="input-min-words-per-chapter"
+                  />
+                </FormControl>
+                <FormDescription className="text-xs">
+                  Extensión mínima por capítulo
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="maxWordsPerChapter"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Máximo palabras/capítulo</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={500}
+                    max={15000}
+                    value={field.value}
+                    onChange={(e) => field.onChange(parseInt(e.target.value) || 3500)}
+                    data-testid="input-max-words-per-chapter"
+                  />
+                </FormControl>
+                <FormDescription className="text-xs">
+                  Extensión máxima por capítulo
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <div className="space-y-4 pt-2">
           <FormLabel className="text-base">Secciones Adicionales</FormLabel>

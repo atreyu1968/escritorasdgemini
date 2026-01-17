@@ -715,9 +715,12 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           const optimizedContinuity = slidingContext || previousContinuity;
 
           const isRewrite = refinementAttempts > 0;
-          // Calculate per-chapter target from total novel target / number of chapters
+          // Use per-chapter limits if set, otherwise calculate from total novel target
+          const projectMinPerChapter = (project as any).minWordsPerChapter;
+          const projectMaxPerChapter = (project as any).maxWordsPerChapter;
           const totalNovelTarget = (project as any).minWordCount;
-          const perChapterTarget = this.calculatePerChapterTarget(totalNovelTarget, allSections.length);
+          const perChapterTarget = projectMinPerChapter || this.calculatePerChapterTarget(totalNovelTarget, allSections.length);
+          const perChapterMax = projectMaxPerChapter || Math.round(perChapterTarget * 1.15);
           const writerResult = await this.ghostwriter.execute({
             chapterNumber: sectionData.numero,
             chapterData: sectionData,
@@ -728,6 +731,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             authorName,
             isRewrite,
             minWordCount: perChapterTarget,
+            maxWordCount: perChapterMax,
             extendedGuideContent: extendedGuideContent || undefined,
             previousChapterContent: isRewrite ? bestVersion.content : undefined,
           });
@@ -736,12 +740,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           let currentContent = cleanContent;
           const currentContinuityState = continuityState;
           
-          // Validate minimum word count with 15% flexibility margin
+          // Validate word count with user-defined min/max per chapter
           const ABSOLUTE_MIN = 500; // Detect severe truncation
-          const TARGET_WORDS = perChapterTarget; // Per-chapter target (calculated from total / chapters)
-          const MARGIN = 0.15; // 15% flexibility
-          const TARGET_MIN = Math.round(TARGET_WORDS * (1 - MARGIN)); // Lower bound (e.g., 2125 for 2500)
-          const TARGET_MAX = Math.round(TARGET_WORDS * (1 + MARGIN)); // Upper bound (e.g., 2875 for 2500)
+          const TARGET_MIN = perChapterTarget; // Use project's minWordsPerChapter
+          const TARGET_MAX = perChapterMax; // Use project's maxWordsPerChapter
           const contentWordCount = currentContent.split(/\s+/).filter((w: string) => w.length > 0).length;
           
           // Check for severe truncation (less than 500 words)
@@ -760,7 +762,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           if (contentWordCount < TARGET_MIN) {
             // If we still have retry attempts, try again
             if (refinementAttempts < this.maxRefinementLoops - 1) {
-              console.warn(`[Orchestrator] Capítulo corto: ${contentWordCount} palabras < ${TARGET_MIN} objetivo (${TARGET_WORDS} ±15%). Reintentando...`);
+              console.warn(`[Orchestrator] Capítulo corto: ${contentWordCount} palabras < ${TARGET_MIN} objetivo. Reintentando...`);
               this.callbacks.onAgentStatus("ghostwriter", "warning", 
                 `${sectionLabel} muy corto (${contentWordCount}/${TARGET_MIN}-${TARGET_MAX} palabras). Expandiendo...`
               );
@@ -1304,7 +1306,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           if (contentWordCount < TARGET_MIN) {
             // If we still have retry attempts, try again
             if (refinementAttempts < this.maxRefinementLoops - 1) {
-              console.warn(`[Orchestrator] Capítulo corto: ${contentWordCount} palabras < ${TARGET_MIN} objetivo (${TARGET_WORDS} ±15%). Reintentando...`);
+              console.warn(`[Orchestrator] Capítulo corto: ${contentWordCount} palabras < ${TARGET_MIN} objetivo. Reintentando...`);
               this.callbacks.onAgentStatus("ghostwriter", "warning", 
                 `${sectionLabel} muy corto (${contentWordCount}/${TARGET_MIN}-${TARGET_MAX} palabras). Expandiendo...`
               );
