@@ -70,7 +70,10 @@ export const projects = pgTable("projects", {
   pseudonymId: integer("pseudonym_id").references(() => pseudonyms.id, { onDelete: "set null" }),
   styleGuideId: integer("style_guide_id").references(() => styleGuides.id, { onDelete: "set null" }),
   extendedGuideId: integer("extended_guide_id").references(() => extendedGuides.id, { onDelete: "set null" }),
-  workType: text("work_type").notNull().default("standalone"),
+  workType: text("work_type").notNull().default("standalone"), // standalone | series | bookbox
+  // Bookbox structure: defines internal books within a single continuous manuscript
+  // Format: { books: [{ bookNumber, title, startChapter, endChapter, hasPrologue, hasEpilogue }] }
+  bookboxStructure: jsonb("bookbox_structure"),
   seriesId: integer("series_id").references(() => series.id, { onDelete: "set null" }),
   seriesOrder: integer("series_order"),
   status: text("status").notNull().default("idle"),
