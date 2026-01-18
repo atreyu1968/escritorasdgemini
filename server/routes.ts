@@ -4405,7 +4405,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         }
         
         // Also strip any remaining code fences that might be embedded
-        cleaned = cleaned.replace(/```(?:json|markdown|md)?\n?/g, '').replace(/```\s*$/g, '');
+        cleaned = cleaned.replace(/```(?:json|markdown|md|text)?\n?/g, '').replace(/```\s*$/g, '');
         
         // Check if content is a JSON object with translated_text field
         if (cleaned.startsWith('{') && cleaned.includes('"translated_text"')) {
@@ -4415,15 +4415,20 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
               cleaned = parsed.translated_text;
             }
           } catch {
-            // Not valid JSON, continue with original content
+            // Not valid JSON, try regex extraction
+            const jsonMatch = cleaned.match(/"translated_text"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"(?:source_|target_|notes)|\s*"\s*})/);
+            if (jsonMatch) {
+              cleaned = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+            }
           }
         }
         
         // Remove any style guide contamination from AI output
         cleaned = removeStyleGuideContamination(cleaned);
         
-        // Extract the first markdown heading if present (## or # at start)
-        const headingMatch = cleaned.match(/^(#{1,2})\s*(.+?)\n+/);
+        // Extract the first markdown heading if present (# to #### at start, with or without trailing newline)
+        // Improved regex: matches 1-4 hashes, optional whitespace/newline before title, captures title until newline or end
+        const headingMatch = cleaned.match(/^(#{1,4})\s*\n?\s*(.+?)(?:\n+|$)/);
         let bodyText = cleaned;
         let extractedHeading: string | null = null;
         
@@ -4433,9 +4438,20 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           bodyText = cleaned.slice(headingMatch[0].length).trim();
         }
         
-        // Remove any duplicate headers from the start of body (AI sometimes includes them twice)
-        // Includes all supported languages: en, es, fr, de, it, pt, ca
-        bodyText = bodyText.replace(/^(#{1,2})\s*(CHAPTER|Chapter|CAPÍTULO|Capítulo|CHAPITRE|Chapitre|KAPITEL|Kapitel|CAPITOLO|Capitolo|CAPÍTOL|Capítol|Prologue|PROLOGUE|Prólogo|PRÓLOGO|Prolog|PROLOG|Prologo|PROLOGO|Pròleg|PRÒLEG|Epilogue|EPILOGUE|Epílogo|EPÍLOGO|Epilog|EPILOG|Epilogo|EPILOGO|Epíleg|EPÍLEG|Author'?s?\s*Note|AUTHOR'?S?\s*NOTE|Nota\s*del?\s*Autor|NOTA\s*DEL?\s*AUTOR|Note\s*de\s*l'Auteur|NOTE\s*DE\s*L'AUTEUR|Anmerkung\s*des\s*Autors|ANMERKUNG\s*DES\s*AUTORS|Nota\s*dell'?Autore|NOTA\s*DELL'?AUTORE|Nota\s*de\s*l'Autor|NOTA\s*DE\s*L'AUTOR)[^\n]*\n+/i, '');
+        // Aggressively remove ALL chapter-like headers from the start of body (AI sometimes includes them multiple times)
+        // This pattern catches any heading (1-4 hashes) that looks like a chapter/prologue/epilogue header
+        const chapterHeaderPattern = /^#{1,4}\s*\n?\s*(CHAPTER|Chapter|CAPÍTULO|Capítulo|CHAPITRE|Chapitre|KAPITEL|Kapitel|CAPITOLO|Capitolo|CAPÍTOL|Capítol|Prologue|PROLOGUE|Prólogo|PRÓLOGO|Prolog|PROLOG|Prologo|PROLOGO|Pròleg|PRÒLEG|Epilogue|EPILOGUE|Epílogo|EPÍLOGO|Epilog|EPILOG|Epilogo|EPILOGO|Epíleg|EPÍLEG|Author'?s?\s*Note|AUTHOR'?S?\s*NOTE|Nota\s*del?\s*Autor|NOTA\s*DEL?\s*AUTOR|Note\s*de\s*l'Auteur|NOTE\s*DE\s*L'AUTEUR|Anmerkung\s*des\s*Autors|ANMERKUNG\s*DES\s*AUTORS|Nota\s*dell'?Autore|NOTA\s*DELL'?AUTORE|Nota\s*de\s*l'Autor|NOTA\s*DE\s*L'AUTOR)[^\n]*(?:\n+|$)/i;
+        
+        // Remove up to 3 duplicate headers (in case AI triplicates)
+        for (let i = 0; i < 3; i++) {
+          const before = bodyText;
+          bodyText = bodyText.replace(chapterHeaderPattern, '');
+          if (bodyText === before) break;
+        }
+        
+        // Also remove headers that are just the chapter number without "Chapter" prefix
+        // e.g., "## 1: El Comienzo" or "# 5 - The Journey"
+        bodyText = bodyText.replace(/^#{1,4}\s*\n?\s*\d+\s*[:\-–—]?\s*[^\n]*(?:\n+|$)/i, '').trim();
         
         // Remove trailing dividers (---, ***) from the end
         bodyText = bodyText.replace(/\n*[-*]{3,}\s*$/, '').trim();
@@ -6165,14 +6181,19 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       };
       const lang = reeditLabels[targetLanguage as string] || reeditLabels.en;
       
-      // Helper to clean code fences and JSON artifacts from translated content
-      const cleanTranslatedContent = (content: string): string => {
+      // Helper to clean code fences, JSON artifacts, and duplicate headers from translated content
+      const cleanTranslatedContent = (content: string, chapterNum: number): string => {
         let cleaned = content.trim();
-        // Strip markdown code block wrapper if present (```json ... ``` or ``` ... ```)
-        const codeBlockMatch = cleaned.match(/^```(?:json|markdown|md)?\s*([\s\S]*?)```\s*$/);
+        
+        // Strip markdown code block wrapper if present
+        const codeBlockMatch = cleaned.match(/^```(?:json|markdown|md|text)?\s*([\s\S]*?)```\s*$/);
         if (codeBlockMatch) {
           cleaned = codeBlockMatch[1].trim();
         }
+        
+        // Also strip any remaining code fences
+        cleaned = cleaned.replace(/```(?:json|markdown|md|text)?\n?/g, '').replace(/```\s*$/g, '');
+        
         // If it's still JSON with translated_text field, extract it
         if (cleaned.startsWith('{') && cleaned.includes('"translated_text"')) {
           try {
@@ -6181,10 +6202,31 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
               cleaned = parsed.translated_text;
             }
           } catch {
-            // Not valid JSON, continue with content as-is
+            // Try regex extraction for malformed JSON
+            const jsonMatch = cleaned.match(/"translated_text"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"(?:source_|target_|notes)|\s*"\s*})/);
+            if (jsonMatch) {
+              cleaned = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+            }
           }
         }
-        return cleaned.trim();
+        
+        // Remove chapter-like headers from the start (AI includes them but we add our own)
+        const chapterHeaderPattern = /^#{1,4}\s*\n?\s*(CHAPTER|Chapter|CAPÍTULO|Capítulo|CHAPITRE|Chapitre|KAPITEL|Kapitel|CAPITOLO|Capitolo|CAPÍTOL|Capítol|Prologue|PROLOGUE|Prólogo|PRÓLOGO|Prolog|PROLOG|Prologo|PROLOGO|Pròleg|PRÒLEG|Epilogue|EPILOGUE|Epílogo|EPÍLOGO|Epilog|EPILOG|Epilogo|EPILOGO|Epíleg|EPÍLEG|Author'?s?\s*Note|AUTHOR'?S?\s*NOTE|Nota\s*del?\s*Autor|NOTA\s*DEL?\s*AUTOR|Note\s*de\s*l'Auteur|NOTE\s*DE\s*L'AUTEUR|Anmerkung\s*des\s*Autors|ANMERKUNG\s*DES\s*AUTORS|Nota\s*dell'?Autore|NOTA\s*DELL'?AUTORE|Nota\s*de\s*l'Autor|NOTA\s*DE\s*L'AUTOR)[^\n]*(?:\n+|$)/i;
+        
+        // Remove up to 3 duplicate headers
+        for (let i = 0; i < 3; i++) {
+          const before = cleaned;
+          cleaned = cleaned.replace(chapterHeaderPattern, '');
+          if (cleaned === before) break;
+        }
+        
+        // Also remove headers that are just the chapter number
+        cleaned = cleaned.replace(/^#{1,4}\s*\n?\s*\d+\s*[:\-–—]?\s*[^\n]*(?:\n+|$)/i, '').trim();
+        
+        // Remove trailing dividers
+        cleaned = cleaned.replace(/\n*[-*]{3,}\s*$/, '').trim();
+        
+        return cleaned;
       };
       
       for (let i = 0; i < translatedChapters.length; i++) {
@@ -6197,8 +6239,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
                           ch.chapterNumber === 999 ? lang.authorNote :
                           `${lang.chapter} ${ch.chapterNumber}`;
         
-        // Clean the translated content (remove code fences, JSON artifacts)
-        const cleanedContent = cleanTranslatedContent(ch.translatedContent);
+        // Clean the translated content (remove code fences, JSON artifacts, duplicate headers)
+        const cleanedContent = cleanTranslatedContent(ch.translatedContent, ch.chapterNumber);
         
         finalMarkdown += `## ${ch.title || titleLabel}\n\n`;
         finalMarkdown += cleanedContent + "\n\n";
