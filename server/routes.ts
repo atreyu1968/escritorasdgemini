@@ -4224,6 +4224,30 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
       
+      // Retry helper with exponential backoff for resilient translations
+      const translateWithRetry = async (input: any, maxRetries = 3): Promise<any> => {
+        let lastError: Error | null = null;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const result = await translator.execute(input);
+            if (result.result && result.result.translated_text && result.result.translated_text.length > 50) {
+              return result;
+            }
+            console.warn(`[Translation] Attempt ${attempt}: Empty or short result, retrying...`);
+          } catch (error) {
+            lastError = error as Error;
+            console.error(`[Translation] Attempt ${attempt} failed:`, error);
+          }
+          if (attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+            console.log(`[Translation] Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+        console.error(`[Translation] All ${maxRetries} attempts failed`);
+        return { result: null, error: lastError?.message || "Translation failed after retries" };
+      };
+      
       const translatedChapters: Array<{
         chapterNumber: number;
         title: string;
@@ -4265,7 +4289,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         
         console.log(`[Translate] Translating ${chapterLabel}: ${chapter.title}`);
         
-        const result = await translator.execute({
+        const result = await translateWithRetry({
           content: chapter.content || "",
           sourceLanguage,
           targetLanguage,
@@ -4274,14 +4298,22 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           projectId,
         });
         
-        if (result.result) {
+        if (result.result && result.result.translated_text) {
           translatedChapters.push({
             chapterNumber: chapter.chapterNumber,
             title: chapter.title || chapterLabel,
             translatedContent: result.result.translated_text,
-            notes: result.result.notes,
+            notes: result.result.notes || "",
           });
-          completedCount++; // Increment AFTER successful translation
+          completedCount++;
+        } else {
+          // Chapter failed after retries - send error event but continue with remaining chapters
+          console.error(`[Translate] Chapter ${chapter.chapterNumber} failed permanently, skipping`);
+          sendEvent("chapterError", {
+            chapterNumber: chapter.chapterNumber,
+            chapterTitle: chapter.title || chapterLabel,
+            error: result.error || "Translation failed after multiple retries",
+          });
         }
         
         totalInputTokens += (result as any).inputTokens || 0;
@@ -4818,6 +4850,30 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
 
+      // Retry helper with exponential backoff for resilient translations
+      const translateWithRetry = async (input: any, maxRetries = 3): Promise<any> => {
+        let lastError: Error | null = null;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const result = await translator.execute(input);
+            if (result.result && result.result.translated_text && result.result.translated_text.length > 50) {
+              return result;
+            }
+            console.warn(`[Resume] Attempt ${attempt}: Empty or short result, retrying...`);
+          } catch (error) {
+            lastError = error as Error;
+            console.error(`[Resume] Attempt ${attempt} failed:`, error);
+          }
+          if (attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+            console.log(`[Resume] Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+        console.error(`[Resume] All ${maxRetries} attempts failed`);
+        return { result: null, error: lastError?.message || "Translation failed after retries" };
+      };
+
       const translatedChapters: Array<{
         chapterNumber: number;
         title: string;
@@ -4851,7 +4907,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
         console.log(`[Resume] Translating ${chapterLabel}: ${chapter.title}`);
 
-        const result = await translator.execute({
+        const result = await translateWithRetry({
           content: chapter.content || "",
           sourceLanguage,
           targetLanguage,
@@ -4860,14 +4916,23 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           projectId,
         });
 
-        if (result.result) {
+        if (result.result && result.result.translated_text) {
           translatedChapters.push({
             chapterNumber: chapter.chapterNumber,
             title: chapter.title || chapterLabel,
             translatedContent: result.result.translated_text,
-            notes: result.result.notes,
+            notes: result.result.notes || "",
           });
           completedCount++;
+        } else {
+          // Chapter failed after retries - send error event but continue
+          console.error(`[Resume] Chapter ${chapter.chapterNumber} failed permanently, skipping`);
+          sendEvent("chapterError", {
+            chapterNumber: chapter.chapterNumber,
+            chapterTitle: chapter.title || chapterLabel,
+            error: result.error || "Translation failed after multiple retries",
+            resumed: true,
+          });
         }
 
         totalInputTokens += (result as any).inputTokens || 0;
