@@ -23,6 +23,8 @@ import {
   X,
   Search,
   Play,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 interface TranslationProgress {
@@ -150,6 +152,14 @@ function clearTranslationState(): void {
   try {
     localStorage.removeItem(TRANSLATION_STATE_KEY);
   } catch {}
+}
+
+function isTranslationFrozen(translation: SavedTranslation): boolean {
+  if (translation.status !== "translating") return false;
+  const savedState = loadTranslationState();
+  if (!savedState) return true;
+  if (savedState.projectId !== translation.projectId) return true;
+  return false;
 }
 
 export default function ExportPage() {
@@ -922,7 +932,12 @@ export default function ExportPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-medium truncate">{translation.projectTitle}</p>
-                      {translation.status === "translating" ? (
+                      {translation.status === "translating" && isTranslationFrozen(translation) ? (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-200">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Congelado
+                        </Badge>
+                      ) : translation.status === "translating" ? (
                         <Badge variant="outline" className="animate-pulse bg-blue-500/10 text-blue-600 border-blue-200">
                           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                           Procesando...
@@ -963,6 +978,22 @@ export default function ExportPage() {
                           <Download className="h-4 w-4 mr-2" />
                         )}
                         Descargar
+                      </Button>
+                    ) : translation.status === "translating" && isTranslationFrozen(translation) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => resumeTranslation(translation.id, translation.projectTitle)}
+                        disabled={translationProgress.isTranslating}
+                        className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                        data-testid={`button-retry-frozen-${translation.id}`}
+                      >
+                        {translationProgress.isTranslating ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                        )}
+                        Reintentar
                       </Button>
                     ) : translation.status === "translating" ? (
                       <Button
