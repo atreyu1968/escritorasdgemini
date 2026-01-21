@@ -30,112 +30,270 @@ const LANGUAGE_NAMES: Record<string, string> = {
 
 const LANGUAGE_EDITORIAL_RULES: Record<string, string> = {
   es: `
-NORMAS EDITORIALES Y DE FLUIDEZ - ESPAÑOL:
-[TIPOGRAFÍA]
-- DIÁLOGOS: Usar raya (—) para introducir diálogos. Ejemplo: —Hola —dijo María—. ¿Cómo estás?
-- COMILLAS: Usar comillas angulares « » para citas textuales. Comillas inglesas " " solo para citas dentro de citas.
-- PUNTUACIÓN: Los signos de interrogación y exclamación van al principio (¿?) y al final (?).
-- NÚMEROS: Escribir con letras del uno al nueve, cifras del 10 en adelante.
+══════════════════════════════════════════════════════════════════════════════
+NORMAS EDITORIALES Y DE FLUIDEZ - ESPAÑOL LITERARIO PROFESIONAL (OBLIGATORIO)
+══════════════════════════════════════════════════════════════════════════════
 
-[FLUIDEZ Y NATURALIDAD]
-- ORACIONES: Máximo 40-45 palabras por oración. Dividir oraciones largas con punto y seguido.
-- GERUNDIOS: Evitar más de un gerundio por oración. Convertir a subordinadas: "caminando hacia" → "mientras caminaba hacia".
-- REPETICIONES: No repetir la misma palabra en oraciones consecutivas. Usar sinónimos o reestructurar.
-- LEÍSMO: Evitar "le" como complemento directo masculino. Usar "lo": "lo vi" en lugar de "le vi".
-- VOZ PASIVA: Limitar construcciones pasivas. Preferir voz activa: "fue visto por María" → "María lo vio".
-- FLUIDEZ: La prosa debe sonar natural, como si un nativo la hubiera escrito originalmente.`,
+[TIPOGRAFÍA - CRÍTICO]
+- DIÁLOGOS: Usar EXCLUSIVAMENTE raya (—) para introducir diálogos. NUNCA comillas.
+  ✓ CORRECTO: —Hola —dijo María—. ¿Cómo estás?
+  ✗ INCORRECTO: "Hola" dijo María. / «Hola» dijo María.
+- INCISOS: La raya cierra el inciso: —No sé —respondió él—. Quizá mañana.
+- PUNTUACIÓN: Signos de apertura ¿¡ SIEMPRE. El punto va DESPUÉS de la raya de cierre.
+- COMILLAS: Solo « » para citas textuales o pensamientos. " " para citas dentro de citas.
+- NÚMEROS: Letras del uno al nueve, cifras del 10 en adelante.
+
+[PRONOMBRES - CRÍTICO PARA LA LEGIBILIDAD]
+- EVITAR ARCAÍSMOS: No usar "éste", "ése", "aquél" con tilde (RAE 2010 recomienda sin tilde).
+- LEÍSMO: NUNCA "le" como complemento directo masculino.
+  ✗ "Le vi ayer" → ✓ "Lo vi ayer"
+- SUJETO IMPLÍCITO: El español permite omitir el sujeto. ¡USARLO!
+  ✓ "Entró en la habitación y se sentó." (NO "Él entró en la habitación y él se sentó.")
+- PREFERIR EL NOMBRE: Cuando haya ambigüedad, repetir el nombre del personaje.
+
+[CONSTRUCCIONES A EVITAR - CRÍTICO]
+- NO CALCOS DEL INGLÉS:
+  ✗ "Estaba siendo perseguido" → ✓ "Lo perseguían"
+  ✗ "Hacer sentido" → ✓ "Tener sentido"
+  ✗ "En orden a" → ✓ "Para"
+- NO GERUNDIOS ENCADENADOS:
+  ✗ "Caminando, pensando, mirando..." → ✓ Dividir en oraciones
+- NO ORACIONES LARGAS:
+  Máximo 35-40 palabras por oración. Oraciones de más de 45 palabras DEBEN dividirse.
+- NO VOZ PASIVA EXCESIVA:
+  ✗ "La puerta fue abierta por él" → ✓ "Abrió la puerta"
+- NO QUEÍSMO/DEQUEÍSMO:
+  ✗ "Pienso de que..." → ✓ "Pienso que..."
+  ✗ "Me alegro que..." → ✓ "Me alegro de que..."
+
+[FLUIDEZ Y NATURALIDAD - ESENCIAL]
+- RITMO: Alternar oraciones cortas (acción, tensión) con oraciones más largas (descripción).
+- CONECTORES NATURALES: Usar "luego", "entonces", "así que", "por eso" de forma natural.
+- ORDEN FLEXIBLE: El español permite orden flexible. Usarlo para énfasis y ritmo.
+  ✓ "A casa volvió solo a medianoche" (énfasis en "a casa")
+- REPETICIONES: Evitar la misma palabra en oraciones consecutivas.
+- REGISTRO: Mantener un registro literario moderno, ni académico ni demasiado coloquial.
+- EXPRESIONES IDIOMÁTICAS: Traducir el SENTIDO, no las palabras.
+
+[VERIFICACIÓN FINAL OBLIGATORIA]
+Releer mentalmente en voz alta. Si suena a traducción, REESCRIBIR.
+El texto DEBE parecer escrito ORIGINALMENTE en español por un autor nativo.`,
 
   en: `
-ENGLISH EDITORIAL & FLUENCY STANDARDS:
-[TYPOGRAPHY]
-- DIALOGUE: Use quotation marks for dialogue. Example: "Hello," said Mary. "How are you?"
-- QUOTES: Use double quotes " " for dialogue and direct speech. Single quotes ' ' for quotes within quotes.
-- PUNCTUATION: Periods and commas go inside quotation marks. Question marks and exclamation points go inside only if part of the quote.
-- NUMBERS: Spell out one through nine, use numerals for 10 and above.
-- CONTRACTIONS: Preserve natural contractions (don't, can't, won't) in dialogue.
+══════════════════════════════════════════════════════════════════════════════
+ENGLISH EDITORIAL & FLUENCY STANDARDS - PROFESSIONAL LITERARY (MANDATORY)
+══════════════════════════════════════════════════════════════════════════════
 
-[FLUENCY & NATURALNESS]
-- SENTENCES: Maximum 35-40 words per sentence. Break long sentences naturally.
-- ACTIVE VOICE: Prefer active over passive: "was seen by John" → "John saw".
-- WORD REPETITION: Avoid repeating the same word in consecutive sentences. Vary vocabulary.
-- ADVERBS: Use sparingly. Show don't tell: "walked slowly" → "ambled" or "shuffled".
-- RHYTHM: Vary sentence length for natural flow. Mix short punchy sentences with longer ones.
-- IDIOMS: Use natural English idioms and expressions, not literal translations.`,
+[TYPOGRAPHY - CRITICAL]
+- DIALOGUE: Use double quotation marks EXCLUSIVELY for dialogue.
+  ✓ CORRECT: "Hello," said Mary. "How are you?"
+  ✗ WRONG: 'Hello,' said Mary. (British style - use only for en-GB)
+- PUNCTUATION: Periods and commas ALWAYS inside quotation marks.
+  Question/exclamation marks inside only if part of the quote.
+- NUMBERS: Spell out one through nine, numerals for 10+.
+- CONTRACTIONS: Use natural contractions in dialogue (don't, can't, won't, I'm, you're).
+
+[AVOID AI-SOUNDING PROSE - CRITICAL]
+- FORBIDDEN WORDS: NEVER use these AI crutch words:
+  ✗ "suddenly", "shrouded", "unfold", "crucial", "pivotal", "amidst", "whilst"
+  ✗ "endeavor", "plethora", "myriad", "utilize", "facilitate", "commence"
+  ✗ "enigmatic", "palpable", "tangible", "visceral", "resonate", "unravel"
+- SHOW DON'T TELL: Replace weak constructions:
+  ✗ "He felt angry" → ✓ "His jaw tightened"
+  ✗ "walked slowly" → ✓ "ambled" or "shuffled"
+  ✗ "said angrily" → ✓ "snapped" or "growled"
+
+[SENTENCE STRUCTURE - CRITICAL]
+- LENGTH: Maximum 35-40 words per sentence. Break longer sentences.
+- RHYTHM: Vary sentence length deliberately.
+  Short sentences = tension, action, impact.
+  Longer sentences = description, reflection, flow.
+- ACTIVE VOICE: Prefer active over passive.
+  ✗ "The door was opened by him" → ✓ "He opened the door"
+- NO REPETITION: Never repeat the same word in consecutive sentences.
+- SUBJECT VARIATION: Don't start consecutive sentences with the same word.
+  ✗ "He walked. He stopped. He turned." → ✓ Vary the structure.
+
+[FLUENCY & NATURALNESS - ESSENTIAL]
+- IDIOMS: Use natural English expressions, never literal translations.
+- DIALOGUE: Make it sound like real speech - fragmented, interrupted, natural.
+- TRANSITIONS: Use subtle connectors (then, still, yet, though) not formal ones.
+- REGISTER: Maintain consistent literary register - neither too formal nor too casual.
+
+[FINAL CHECK - MANDATORY]
+Read aloud mentally. If it sounds translated, REWRITE.
+The text MUST read as if ORIGINALLY WRITTEN in English by a native author.`,
 
   "en-US": `
-AMERICAN ENGLISH EDITORIAL & FLUENCY STANDARDS:
-[AMERICAN SPELLING & VOCABULARY]
-- SPELLING: Use American spelling consistently: color (not colour), center (not centre), realize (not realise), traveled (not travelled), defense (not defence), theater (not theatre), gray (not grey), catalog (not catalogue).
-- VOCABULARY: Use American terms: apartment (not flat), elevator (not lift), truck (not lorry), gasoline (not petrol), sidewalk (not pavement), cookie (not biscuit), faucet (not tap), fall (not autumn), mom (not mum), pants (not trousers), sneakers (not trainers), vacation (not holiday).
-- DATES: Use MM/DD/YYYY format in context. Write "March 15" not "15 March".
-- MEASUREMENTS: Use imperial by default (feet, miles, pounds, Fahrenheit) unless context demands metric.
+══════════════════════════════════════════════════════════════════════════════
+AMERICAN ENGLISH EDITORIAL STANDARDS - PROFESSIONAL LITERARY (MANDATORY)
+══════════════════════════════════════════════════════════════════════════════
 
-[TYPOGRAPHY]
-- DIALOGUE: Use double quotation marks for dialogue. Example: "Hello," said Mary. "How are you?"
-- QUOTES: Double quotes " " for dialogue. Single quotes ' ' for quotes within quotes.
-- PUNCTUATION: Periods and commas ALWAYS go inside quotation marks. Question marks and exclamation points go inside only if part of the quote.
-- NUMBERS: Spell out one through nine, use numerals for 10 and above.
+[AMERICAN SPELLING & VOCABULARY - CRITICAL]
+- SPELLING: Use American spelling CONSISTENTLY:
+  ✓ color, center, realize, traveled, defense, theater, gray, catalog, favor, honor
+  ✗ NEVER: colour, centre, realise, travelled, defence, theatre, grey, catalogue
+- VOCABULARY: Use American terms EXCLUSIVELY:
+  ✓ apartment, elevator, truck, gasoline, sidewalk, cookie, faucet, fall, mom, pants, sneakers, vacation
+  ✗ NEVER: flat, lift, lorry, petrol, pavement, biscuit, tap, autumn, mum, trousers, trainers, holiday
+- DATES: "March 15" (NOT "15 March"). Format: Month DD, YYYY.
+- MEASUREMENTS: Imperial default (feet, miles, pounds, Fahrenheit).
 
-[FLUENCY & NATURALNESS]
-- SENTENCES: Maximum 35-40 words per sentence. Break long sentences naturally.
-- CONTRACTIONS: Use natural American contractions (don't, can't, won't, gonna, wanna in very casual dialogue).
-- ACTIVE VOICE: Prefer active over passive.
-- IDIOMS: Use American idioms and expressions naturally.
-- RHYTHM: Vary sentence length for natural flow.`,
+[TYPOGRAPHY - CRITICAL]
+- DIALOGUE: Double quotation marks " " EXCLUSIVELY.
+  ✓ "Hello," said Mary. "How are you?"
+- PUNCTUATION: Periods and commas ALWAYS inside quotation marks.
+- NUMBERS: Spell out one through nine, numerals for 10+.
+
+[AVOID AI-SOUNDING PROSE - CRITICAL]
+- FORBIDDEN WORDS: Same as general English - no "suddenly", "shrouded", "endeavor", etc.
+- SHOW DON'T TELL: Replace weak constructions with strong verbs.
+- CONTRACTIONS: Use natural American contractions freely (don't, can't, won't, I'm, you're).
+  In very casual dialogue: gonna, wanna, gotta are acceptable.
+
+[SENTENCE STRUCTURE - CRITICAL]
+- LENGTH: Maximum 35-40 words. Vary deliberately.
+- RHYTHM: Short sentences for action/tension. Longer for description.
+- ACTIVE VOICE: Strongly preferred over passive.
+- NO REPETITION: Never same word in consecutive sentences.
+- SUBJECT VARIATION: Don't start consecutive sentences with same word.
+
+[FLUENCY & NATURALNESS - ESSENTIAL]
+- IDIOMS: Use American expressions naturally (e.g., "ballpark figure", "touch base").
+- DIALOGUE: Sound like real American speech - casual, contracted, natural.
+- REGISTER: Maintain consistent literary register appropriate to genre.
+
+[FINAL CHECK - MANDATORY]
+Read aloud mentally. If ANY British spelling/vocabulary slips through, fix it.
+The text MUST read as if ORIGINALLY WRITTEN by an American author.`,
 
   "en-GB": `
-BRITISH ENGLISH EDITORIAL & FLUENCY STANDARDS:
-[BRITISH SPELLING & VOCABULARY]
-- SPELLING: Use British spelling consistently: colour (not color), centre (not center), realise (not realize), travelled (not traveled), defence (not defense), theatre (not theater), grey (not gray), catalogue (not catalog), favour (not favor), honour (not honor), behaviour (not behavior).
-- VOCABULARY: Use British terms: flat (not apartment), lift (not elevator), lorry (not truck), petrol (not gasoline), pavement (not sidewalk), biscuit (not cookie), tap (not faucet), autumn (not fall), mum (not mom), trousers (not pants), trainers (not sneakers), holiday (not vacation), queue (not line), boot (car trunk), bonnet (car hood), chemist (pharmacist).
-- DATES: Use DD/MM/YYYY format in context. Write "15 March" not "March 15".
-- MEASUREMENTS: Use metric primarily (metres, kilometres, kilograms, Celsius) with imperial for colloquial uses (stones for weight, miles for distance).
+══════════════════════════════════════════════════════════════════════════════
+BRITISH ENGLISH EDITORIAL STANDARDS - PROFESSIONAL LITERARY (MANDATORY)
+══════════════════════════════════════════════════════════════════════════════
 
-[TYPOGRAPHY]
-- DIALOGUE: Use single quotation marks for dialogue. Example: 'Hello,' said Mary. 'How are you?'
-- QUOTES: Single quotes ' ' for dialogue. Double quotes " " for quotes within quotes.
-- PUNCTUATION: Periods and commas go OUTSIDE quotation marks unless part of the quoted material.
-- NUMBERS: Spell out one through nine, use numerals for 10 and above.
+[BRITISH SPELLING & VOCABULARY - CRITICAL]
+- SPELLING: Use British spelling CONSISTENTLY:
+  ✓ colour, centre, realise, travelled, defence, theatre, grey, catalogue, favour, honour, behaviour
+  ✗ NEVER: color, center, realize, traveled, defense, theater, gray, catalog
+- VOCABULARY: Use British terms EXCLUSIVELY:
+  ✓ flat, lift, lorry, petrol, pavement, biscuit, tap, autumn, mum, trousers, trainers, holiday, queue, boot, bonnet, chemist
+  ✗ NEVER: apartment, elevator, truck, gasoline, sidewalk, cookie, faucet, fall, mom, pants, sneakers, vacation
+- DATES: "15 March" (NOT "March 15"). Format: DD Month YYYY.
+- MEASUREMENTS: Metric primary (metres, kilometres, kilograms, Celsius).
+  Imperial for colloquial use (stones for weight, miles for distance).
 
-[FLUENCY & NATURALNESS]
-- SENTENCES: Maximum 35-40 words per sentence. Break long sentences naturally.
-- CONTRACTIONS: Use natural British contractions (don't, can't, shan't, won't).
+[TYPOGRAPHY - CRITICAL]
+- DIALOGUE: Single quotation marks ' ' for dialogue.
+  ✓ 'Hello,' said Mary. 'How are you?'
+  ✗ WRONG: "Hello," said Mary.
+- PUNCTUATION: Periods and commas go OUTSIDE quotation marks (unless part of quoted material).
+- NUMBERS: Spell out one through nine, numerals for 10+.
+
+[AVOID AI-SOUNDING PROSE - CRITICAL]
+- FORBIDDEN WORDS: No "suddenly", "shrouded", "endeavor" (or "endeavour"), "whilst" (use "while").
+- SHOW DON'T TELL: Replace weak constructions with strong verbs.
+- CONTRACTIONS: Use natural British contractions (don't, can't, shan't, won't, mustn't).
+
+[SENTENCE STRUCTURE - CRITICAL]
+- LENGTH: Maximum 35-40 words. Vary deliberately.
+- RHYTHM: Short sentences for action/tension. Longer for description.
+- ACTIVE VOICE: Preferred, but British English tolerates slightly more passive.
 - COLLECTIVE NOUNS: Can take plural verbs: "The team are playing well."
-- IDIOMS: Use British idioms and expressions naturally (e.g., "spot on", "brilliant", "cheers").
-- FORMAL REGISTER: British English tends slightly more formal. Avoid overly casual Americanisms.
-- RHYTHM: Vary sentence length for natural flow.`,
+- NO REPETITION: Never same word in consecutive sentences.
+
+[FLUENCY & NATURALNESS - ESSENTIAL]
+- IDIOMS: Use British expressions naturally (e.g., "spot on", "brilliant", "cheers", "sorted").
+- REGISTER: Slightly more formal than American. Avoid overly casual Americanisms.
+- DIALOGUE: Sound authentically British - understatement, politeness markers.
+
+[FINAL CHECK - MANDATORY]
+Read aloud mentally. If ANY American spelling/vocabulary slips through, fix it.
+The text MUST read as if ORIGINALLY WRITTEN by a British author.`,
 
   fr: `
-NORMES ÉDITORIALES ET FLUIDITÉ - FRANÇAIS:
-[TYPOGRAPHIE]
-- DIALOGUES: Utiliser les guillemets français « » avec espaces insécables. Tiret cadratin (—) pour les incises.
-- PONCTUATION: Espace insécable avant : ; ! ? et après « et avant ».
-- NOMBRES: Écrire en lettres de un à neuf, chiffres à partir de 10.
-- MAJUSCULES: Les noms de langues, nationalités s'écrivent en minuscules (français, anglais).
+══════════════════════════════════════════════════════════════════════════════
+NORMES ÉDITORIALES ET FLUIDITÉ - FRANÇAIS LITTÉRAIRE PROFESSIONNEL (OBLIGATOIRE)
+══════════════════════════════════════════════════════════════════════════════
 
-[FLUIDITÉ ET NATUREL]
-- PHRASES: Maximum 40-45 mots par phrase. Diviser les phrases longues.
-- PASSÉ SIMPLE: Utiliser le passé simple pour la narration littéraire, pas le passé composé.
-- PRONOMS: Éviter l'ambiguïté des pronoms. Clarifier les référents.
-- RÉPÉTITIONS: Éviter de répéter le même mot dans des phrases consécutives.
-- REGISTRE: Maintenir un registre littéraire cohérent, éviter les anglicismes.
-- LIAISONS: Utiliser des transitions naturelles entre les phrases.`,
+[TYPOGRAPHIE - CRITIQUE]
+- DIALOGUES: Guillemets français « » avec espaces insécables OU tiret cadratin (—).
+  ✓ CORRECT: « Bonjour », dit Marie. « Comment vas-tu ? »
+  ✓ CORRECT: — Bonjour, dit Marie. Comment vas-tu ?
+- PONCTUATION: Espace insécable AVANT : ; ! ? et APRÈS « et AVANT ».
+- NOMBRES: Lettres de un à neuf, chiffres à partir de 10.
+- MAJUSCULES: Langues et nationalités en minuscules (français, anglais).
+
+[TEMPS VERBAUX - CRITIQUE]
+- NARRATION LITTÉRAIRE: Passé simple OBLIGATOIRE, pas passé composé.
+  ✓ "Il entra dans la pièce" (passé simple)
+  ✗ "Il est entré dans la pièce" (passé composé = oral/informel)
+- IMPARFAIT: Pour descriptions et actions continues.
+- COHÉRENCE: Ne pas mélanger passé simple et passé composé dans la narration.
+
+[CONSTRUCTIONS À ÉVITER - CRITIQUE]
+- PAS D'ANGLICISMES:
+  ✗ "Réaliser" (au sens de "se rendre compte") → ✓ "Se rendre compte", "Comprendre"
+  ✗ "Définitivement" (au sens de "certainement") → ✓ "Certainement", "Assurément"
+  ✗ "Supporter" (au sens de "soutenir") → ✓ "Soutenir", "Appuyer"
+- PAS DE LOURDEURS:
+  ✗ "Il y a le fait que..." → ✓ Construction directe
+  ✗ "Au niveau de..." → ✓ "Concernant", "Pour"
+- PHRASES MAXIMUM: 40-45 mots. Au-delà, diviser.
+- RÉPÉTITIONS: Jamais le même mot dans des phrases consécutives.
+
+[FLUIDITÉ ET NATUREL - ESSENTIEL]
+- PRONOMS: Éviter l'ambiguïté. Clarifier les référents si nécessaire.
+- TRANSITIONS: Utiliser des connecteurs naturels (puis, alors, donc, ainsi).
+- REGISTRE: Littéraire moderne, ni trop soutenu ni trop familier.
+- RYTHME: Alterner phrases courtes (tension) et longues (description).
+- EXPRESSIONS IDIOMATIQUES: Traduire le SENS, utiliser des expressions françaises authentiques.
+
+[VÉRIFICATION FINALE OBLIGATOIRE]
+Relire mentalement à haute voix. Si cela sonne comme une traduction, RÉÉCRIRE.
+Le texte DOIT sembler écrit ORIGINELLEMENT en français par un auteur francophone.`,
 
   de: `
-DEUTSCHE REDAKTIONS- UND STILSTANDARDS:
-[TYPOGRAFIE]
-- DIALOGE: Anführungszeichen „..." oder »...« verwenden. Beispiel: „Hallo", sagte Maria.
-- ZITATE: Doppelte Anführungszeichen für direkte Rede. Einfache ‚...' für Zitate im Zitat.
-- KOMPOSITA: Bindestriche bei zusammengesetzten Wörtern korrekt verwenden.
-- ZAHLEN: Eins bis neun ausschreiben, ab 10 Ziffern verwenden.
+══════════════════════════════════════════════════════════════════════════════
+DEUTSCHE REDAKTIONS- UND STILSTANDARDS - PROFESSIONELL LITERARISCH (PFLICHT)
+══════════════════════════════════════════════════════════════════════════════
 
-[FLÜSSIGKEIT UND NATÜRLICHKEIT]
-- SÄTZE: Maximum 40-45 Wörter pro Satz. Lange Sätze aufteilen.
-- SATZSTELLUNG: Natürliche deutsche Wortstellung beachten. Verb an zweiter Stelle.
-- KOMPOSITA: Zusammengesetzte Wörter natürlich verwenden, nicht zu lang.
-- WIEDERHOLUNGEN: Keine Wortwiederholungen in aufeinanderfolgenden Sätzen.
-- PASSIV: Aktive Konstruktionen bevorzugen.
-- MODALPARTIKELN: Natürliche Verwendung von ja, doch, mal, eben in Dialogen.`,
+[TYPOGRAFIE - KRITISCH]
+- DIALOGE: Anführungszeichen „..." oder »...« verwenden.
+  ✓ KORREKT: „Hallo", sagte Maria. „Wie geht es dir?"
+  ✓ KORREKT: »Hallo«, sagte Maria.
+- ZITATE: Doppelte Anführungszeichen für direkte Rede. Einfache ‚...' für Zitate im Zitat.
+- ZAHLEN: Eins bis neun ausschreiben, ab 10 Ziffern.
+
+[SATZSTRUKTUR - KRITISCH]
+- WORTSTELLUNG: Natürliche deutsche Wortstellung. Verb an ZWEITER Stelle im Hauptsatz.
+  ✓ "Gestern ging er nach Hause" (Verb an 2. Stelle)
+- NEBENSÄTZE: Verb am Ende.
+  ✓ "Er sagte, dass er müde sei"
+- SATZLÄNGE: Maximum 40-45 Wörter. Längere Sätze AUFTEILEN.
+- KLAMMERSÄTZE: Nicht zu viele Einschübe zwischen Subjekt und Verb.
+
+[ZU VERMEIDENDE KONSTRUKTIONEN - KRITISCH]
+- KEINE ANGLIZISMEN:
+  ✗ "Das macht Sinn" → ✓ "Das ergibt Sinn", "Das ist sinnvoll"
+  ✗ "Realisieren" (im Sinne von erkennen) → ✓ "Erkennen", "Begreifen"
+- KEINE SUBSTANTIVITIS:
+  ✗ "Die Durchführung der Untersuchung" → ✓ "Die Untersuchung durchführen"
+- KEINE PASSIV-HÄUFUNG:
+  ✗ "Es wurde beschlossen" → ✓ "Man beschloss", "Sie beschlossen"
+- KEINE WIEDERHOLUNGEN: Nie dasselbe Wort in aufeinanderfolgenden Sätzen.
+
+[FLÜSSIGKEIT UND NATÜRLICHKEIT - WESENTLICH]
+- KOMPOSITA: Natürlich verwenden, aber nicht zu lang (max. 3-4 Teile).
+- MODALPARTIKELN: Ja, doch, mal, eben, halt in Dialogen für Natürlichkeit.
+  ✓ "Komm doch mal her" (natürlicher Dialog)
+- KONJUNKTIV: Für indirekte Rede Konjunktiv I wenn möglich.
+- RHYTHMUS: Kurze Sätze für Spannung, längere für Beschreibung.
+- REGISTER: Literarisch modern, weder zu formell noch zu umgangssprachlich.
+
+[ENDKONTROLLE - PFLICHT]
+Mental laut lesen. Wenn es wie eine Übersetzung klingt, UMSCHREIBEN.
+Der Text MUSS klingen, als wäre er URSPRÜNGLICH von einem deutschen Muttersprachler geschrieben.`,
 
   it: `
 ══════════════════════════════════════════════════════════════════════════════
@@ -186,36 +344,93 @@ Prima di consegnare, rileggere ad alta voce mentalmente. Se suona come una tradu
 Il testo DEVE sembrare scritto ORIGINARIAMENTE in italiano da un autore madrelingua.`,
 
   pt: `
-NORMAS EDITORIAIS E FLUIDEZ - PORTUGUÊS:
-[TIPOGRAFIA]
-- DIÁLOGOS: Usar travessão (—) para introduzir diálogos. Exemplo: — Olá — disse Maria.
-- ASPAS: Usar aspas curvas " " para citações. Aspas simples ' ' para citações dentro de citações.
-- PONTUAÇÃO: Vírgula e ponto fora das aspas, exceto se fizerem parte da citação.
-- NÚMEROS: Escrever por extenso de um a nove, algarismos a partir de 10.
+══════════════════════════════════════════════════════════════════════════════
+NORMAS EDITORIAIS E FLUIDEZ - PORTUGUÊS LITERÁRIO PROFISSIONAL (OBRIGATÓRIO)
+══════════════════════════════════════════════════════════════════════════════
 
-[FLUIDEZ E NATURALIDADE]
-- FRASES: Máximo 40-45 palavras por frase. Dividir frases longas.
-- GERÚNDIOS: Evitar excesso de gerúndios. Máximo um por frase.
-- REPETIÇÕES: Não repetir a mesma palavra em frases consecutivas.
-- VOZ PASSIVA: Preferir voz ativa: "foi visto por João" → "João viu".
-- PRONOMES: Colocação pronominal correta (próclise, mesóclise, ênclise).
-- NATURALIDADE: O texto deve soar natural, como se escrito originalmente em português.`,
+[TIPOGRAFIA - CRÍTICO]
+- DIÁLOGOS: Usar EXCLUSIVAMENTE travessão (—) para introduzir diálogos.
+  ✓ CORRETO: — Olá — disse Maria. — Como estás?
+  ✗ ERRADO: "Olá" disse Maria.
+- INCISOS: O travessão fecha o inciso: — Não sei — respondeu ele. — Talvez amanhã.
+- ASPAS: Curvas " " para citações. Simples ' ' para citações dentro de citações.
+- NÚMEROS: Por extenso de um a nove, algarismos a partir de 10.
+
+[COLOCAÇÃO PRONOMINAL - CRÍTICO]
+- PRÓCLISE: Antes do verbo quando há palavra atrativa (não, nunca, que, se, etc.).
+  ✓ "Não me disse nada" / "Que te aconteceu?"
+- ÊNCLISE: Depois do verbo no início de frase e em imperativos.
+  ✓ "Disse-me que viria" / "Dá-me isso"
+- MESÓCLISE: No futuro e condicional (mais literário).
+  ✓ "Dir-lhe-ei amanhã" / "Fá-lo-ia se pudesse"
+- NUNCA começar frase com pronome átono no português europeu.
+  ✗ "Me disse" → ✓ "Disse-me"
+
+[CONSTRUÇÕES A EVITAR - CRÍTICO]
+- SEM BRASILEIRISMOS (para pt-PT) / SEM LUSITANISMOS (para pt-BR):
+  Adaptar vocabulário à variante pretendida.
+- SEM GERÚNDIOS EXCESSIVOS:
+  ✗ "Estava caminhando, pensando, olhando..." → ✓ Dividir em frases
+- SEM VOZ PASSIVA EXCESSIVA:
+  ✗ "A porta foi aberta por ele" → ✓ "Ele abriu a porta"
+- FRASES: Máximo 40-45 palavras. Acima disso, DIVIDIR.
+- REPETIÇÕES: Nunca a mesma palavra em frases consecutivas.
+
+[FLUIDEZ E NATURALIDADE - ESSENCIAL]
+- RITMO: Alternar frases curtas (tensão, ação) com longas (descrição).
+- CONECTORES: Usar "depois", "então", "assim", "por isso" naturalmente.
+- REGISTO: Literário moderno, nem demasiado formal nem coloquial.
+- EXPRESSÕES IDIOMÁTICAS: Traduzir o SENTIDO, usar expressões portuguesas autênticas.
+
+[VERIFICAÇÃO FINAL OBRIGATÓRIA]
+Reler mentalmente em voz alta. Se soar como tradução, REESCREVER.
+O texto DEVE parecer escrito ORIGINALMENTE em português por um autor nativo.`,
 
   ca: `
-NORMES EDITORIALS I FLUÏDESA - CATALÀ:
-[TIPOGRAFIA]
-- DIÀLEGS: Usar guió llarg (—) per introduir diàlegs. Exemple: —Hola —va dir Maria—. Com estàs?
-- COMETES: Usar cometes baixes « » per a citacions. Cometes altes " " per a citacions dins de citacions.
-- PUNTUACIÓ: Els signes d'interrogació i exclamació van al principi (¿?) i al final (?).
-- NÚMEROS: Escriure amb lletres de l'u al nou, xifres del 10 endavant.
+══════════════════════════════════════════════════════════════════════════════
+NORMES EDITORIALS I FLUÏDESA - CATALÀ LITERARI PROFESSIONAL (OBLIGATORI)
+══════════════════════════════════════════════════════════════════════════════
 
-[FLUÏDESA I NATURALITAT]
-- FRASES: Màxim 40-45 paraules per frase. Dividir frases llargues.
-- PRONOMS FEBLES: Usar correctament els pronoms febles (el, la, els, les, en, hi).
-- REPETICIONS: No repetir la mateixa paraula en frases consecutives.
-- VOZ PASSIVA: Preferir veu activa.
-- CASTELLANISMES: Evitar castellanismes. Usar vocabulari català genuí.
-- NATURALITAT: El text ha de sonar natural, com si fos escrit originalment en català.`,
+[TIPOGRAFIA - CRÍTIC]
+- DIÀLEGS: Usar EXCLUSIVAMENT guió llarg (—) per introduir diàlegs.
+  ✓ CORRECTE: —Hola —va dir Maria—. Com estàs?
+  ✗ INCORRECTE: "Hola" va dir Maria. / «Hola» va dir Maria.
+- INCISOS: El guió llarg tanca l'incís: —No ho sé —va respondre ell—. Potser demà.
+- COMETES: Baixes « » per a citacions. Altes " " per a citacions dins de citacions.
+- NÚMEROS: Lletres de l'u al nou, xifres del 10 endavant.
+- PUNTUACIÓ: Signes d'interrogació i exclamació només al final (no al principi com en castellà).
+  ✓ "Què vols?" (NO "¿Què vols?")
+
+[PRONOMS FEBLES - CRÍTIC]
+- COMBINACIONS: Usar correctament les combinacions de pronoms febles.
+  ✓ "Li'l donaré" / "Me'n vaig" / "T'ho he dit"
+- APOSTROFACIÓ: Apostrofar correctament davant vocal.
+  ✓ "L'he vist" / "M'ha dit" / "N'hi ha"
+- POSICIÓ: Davant el verb en indicatiu/subjuntiu, darrere en imperatiu/infinitiu/gerundi.
+  ✓ "Ho faig" vs "Fes-ho" / "Fer-ho"
+
+[CONSTRUCCIONS A EVITAR - CRÍTIC]
+- RES DE CASTELLANISMES:
+  ✗ "Doncs" (al principi de frase) → ✓ "Bé", "Així"
+  ✗ "Bueno" → ✓ "Bé", "D'acord"
+  ✗ "Vale" → ✓ "D'acord", "Molt bé"
+  ✗ "Entonces" → ✓ "Aleshores", "Llavors"
+- RES DE CALCS DEL CASTELLÀ:
+  ✗ "Fer-se passar per" → ✓ "Fer passar-se per"
+  ✗ "Tenir que" → ✓ "Haver de"
+- FRASES: Màxim 40-45 paraules. Per sobre, DIVIDIR.
+- REPETICIONS: Mai la mateixa paraula en frases consecutives.
+
+[FLUÏDESA I NATURALITAT - ESSENCIAL]
+- RITME: Alternar frases curtes (tensió, acció) amb llargues (descripció).
+- CONNECTORS: Usar "després", "aleshores", "així", "per això" naturalment.
+- REGISTRE: Literari modern, ni massa formal ni col·loquial.
+- EXPRESSIONS IDIOMÀTIQUES: Traduir el SENTIT, usar expressions catalanes autèntiques.
+- VARIETAT: Usar vocabulari català genuí, no catalanitzacions del castellà.
+
+[VERIFICACIÓ FINAL OBLIGATÒRIA]
+Rellegir mentalment en veu alta. Si sona com una traducció, REESCRIURE.
+El text HA DE semblar escrit ORIGINALMENT en català per un autor nadiu.`,
 };
 
 const AI_CRUTCH_WORDS: Record<string, string[]> = {
@@ -223,17 +438,27 @@ const AI_CRUTCH_WORDS: Record<string, string[]> = {
     "suddenly", "shrouded", "unfold", "crucial", "pivotal", "amidst", "whilst",
     "endeavor", "plethora", "myriad", "utilize", "facilitate", "commence",
     "terminate", "subsequently", "aforementioned", "nevertheless", "furthermore",
-    "enigmatic", "palpable", "tangible", "visceral", "resonate", "unravel"
+    "enigmatic", "palpable", "tangible", "visceral", "resonate", "unravel",
+    "delve", "tapestry", "intricacies", "nuanced", "multifaceted", "paradigm",
+    "synergy", "holistic", "robust", "leverage", "juxtaposition", "dichotomy"
+  ],
+  es: [
+    "de repente", "súbitamente", "crucial", "fundamental", "sin embargo",
+    "no obstante", "por consiguiente", "asimismo", "además", "enigmático",
+    "palpable", "tangible", "visceral", "desentrañar", "en aras de",
+    "cabe destacar", "es menester", "en pos de", "a la sazón", "otrora"
   ],
   fr: [
     "soudain", "crucial", "essentiel", "néanmoins", "cependant", "toutefois",
     "ainsi", "par conséquent", "en effet", "d'ailleurs", "en outre", "de plus",
-    "énigmatique", "palpable", "tangible", "viscéral", "résonner"
+    "énigmatique", "palpable", "tangible", "viscéral", "résonner",
+    "démystifier", "paradigme", "synergie", "holistique", "robuste"
   ],
   de: [
     "plötzlich", "entscheidend", "wesentlich", "nichtsdestotrotz", "jedoch",
     "dennoch", "folglich", "darüber hinaus", "außerdem", "rätselhaft",
-    "greifbar", "spürbar", "eindringlich"
+    "greifbar", "spürbar", "eindringlich", "paradigmatisch", "ganzheitlich",
+    "robust", "Synergie", "multifaktoriell", "nuanciert"
   ],
   it: [
     "improvvisamente", "cruciale", "fondamentale", "tuttavia", "nondimeno",
@@ -241,15 +466,19 @@ const AI_CRUTCH_WORDS: Record<string, string[]> = {
     "egli", "ella", "esso", "essa", "essi", "esse", "costui", "costei",
     "codesto", "suddetto", "medesimo", "siffatto", "allorché", "allorquando",
     "indi", "quivi", "onde", "laonde", "giacché", "imperocché", "avvegnaché",
-    "epperò", "altresì", "invero", "precipuamente", "segnatamente"
+    "epperò", "altresì", "invero", "precipuamente", "segnatamente",
+    "paradigmatico", "olistico", "robusto", "sinergia"
   ],
   pt: [
     "subitamente", "repentinamente", "crucial", "fundamental", "todavia",
-    "contudo", "portanto", "além disso", "enigmático", "palpável", "tangível"
+    "contudo", "portanto", "além disso", "enigmático", "palpável", "tangível",
+    "paradigmático", "holístico", "robusto", "sinergia", "multifacetado",
+    "nuançado", "outrossim", "destarte", "mister"
   ],
   ca: [
     "sobtadament", "crucial", "fonamental", "tanmateix", "no obstant això",
-    "per tant", "a més", "enigmàtic", "palpable", "tangible"
+    "per tant", "a més", "enigmàtic", "palpable", "tangible",
+    "paradigmàtic", "holístic", "robust", "sinergia", "altrament"
   ],
 };
 
