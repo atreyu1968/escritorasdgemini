@@ -1247,6 +1247,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                     );
                   }
                 }
+                
+                this.callbacks.onAgentStatus("continuity-sentinel", "completed", 
+                  `Correcciones de continuidad completadas para ${checkpointResult.chaptersToRevise.length} capítulos`
+                );
               }
             }
           }
@@ -1793,6 +1797,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                     );
                   }
                 }
+                
+                this.callbacks.onAgentStatus("continuity-sentinel", "completed", 
+                  `Correcciones de continuidad completadas para ${checkpointResult.chaptersToRevise.length} capítulos`
+                );
               }
             }
           }
