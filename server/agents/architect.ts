@@ -455,6 +455,8 @@ export class ArchitectAgent extends BaseAgent {
 
   async execute(input: ArchitectInput): Promise<AgentResponse> {
     console.log(`[Architect] execute() started for "${input.title}"`);
+    console.log(`[Architect] Using MULTI-PHASE generation for DeepSeek V3 (8192 token limit)`);
+    
     const guiaEstilo = input.guiaEstilo || `Género: ${input.genre}, Tono: ${input.tone}`;
     const ideaInicial = input.premise || input.title;
 
@@ -464,119 +466,331 @@ export class ArchitectAgent extends BaseAgent {
     if (input.hasEpilogue) sectionsInfo.push("EPÍLOGO");
     if (input.hasAuthorNote) sectionsInfo.push("NOTA DEL AUTOR");
 
-    const prompt = `
-    Basándote en esta idea: "${ideaInicial}" 
-    Y siguiendo esta Guía de Estilo: "${guiaEstilo}"
+    let totalTokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     
-    Genera el plan completo para una novela con la siguiente estructura:
-    ${sectionsInfo.join(" + ")}
-    
-    TÍTULO: ${input.title}
-    GÉNERO: ${input.genre}
-    TONO: ${input.tone}
-    
-    ${input.hasPrologue ? "NOTA: La novela incluirá un PRÓLOGO que debe establecer el tono y sembrar intriga." : ""}
-    ${input.hasEpilogue ? "NOTA: La novela terminará con un EPÍLOGO que cierre todos los arcos narrativos." : ""}
-    ${input.hasAuthorNote ? "NOTA: Incluye reflexiones para una NOTA DEL AUTOR al final." : ""}
-    
-    ${input.architectInstructions ? `
-    ═══════════════════════════════════════════════════════════════════
-    🎯🎯🎯 INSTRUCCIONES ESPECÍFICAS DEL AUTOR (PRIORIDAD ALTA) 🎯🎯🎯
-    ═══════════════════════════════════════════════════════════════════
-    El autor ha proporcionado las siguientes instrucciones que DEBES incorporar en tu planificación:
-    
-    ${input.architectInstructions}
-    
-    Estas instrucciones tienen PRIORIDAD sobre las guías generales. Asegúrate de que cada elemento solicitado se refleje en la estructura de la novela.
-    ═══════════════════════════════════════════════════════════════════
-    ` : ""}
-    
-    ${input.kindleUnlimitedOptimized ? `
-    ═══════════════════════════════════════════════════════════════════
-    ⚡⚡⚡ OPTIMIZACIÓN KINDLE UNLIMITED (ACTIVA) ⚡⚡⚡
-    ═══════════════════════════════════════════════════════════════════
-    Esta novela está OPTIMIZADA para Kindle Unlimited (KU). Aplica estas técnicas:
-    
-    1. CAPÍTULOS CORTOS Y ADICTIVOS:
-       - Capítulos de 800-1500 palabras máximo (lectores KU prefieren capítulos breves)
-       - Estructura "uno más y ya" que maximiza páginas leídas (KENPC)
-       - Cada capítulo debe poder leerse en 3-5 minutos
-    
-    2. CLIFFHANGERS OBLIGATORIOS:
-       - CADA capítulo DEBE terminar con un gancho irresistible
-       - Tipos de cliffhanger: revelación parcial, peligro inminente, pregunta sin respuesta, contradicción
-       - El lector NUNCA debe sentir que puede parar
-    
-    3. RITMO DE COCAÍNA NARRATIVA:
-       - Giros cada 3-4 capítulos (no 5-7 como en novela tradicional)
-       - Escenas cortas y dinámicas
-       - Mínima descripción, máxima acción y diálogo
-       - Conflicto constante, sin capítulos de "respiración"
-    
-    4. ESTRUCTURA PAGE-TURNER:
-       - Acto 1 (primeros 10-15%): Hook en página 1, incidente incitador antes del capítulo 3
-       - Acto 2: Escalada implacable, nunca mesetas
-       - Acto 3: Resolución satisfactoria pero rápida
-    
-    5. TÉCNICAS DE RETENCIÓN KU:
-       - Empezar in media res (en mitad de la acción)
-       - Múltiples líneas de tensión activas simultáneamente
-       - Secretos que se revelan gradualmente
-       - Protagonista en constante movimiento/decisión
-    
-    ⚠️ RECUERDA: En KU, cada página leída = ingresos. Diseña para que el lector NO PUEDA dejar el libro.
-    ═══════════════════════════════════════════════════════════════════
-    ` : ""}
-    
-    ═══════════════════════════════════════════════════════════════════
-    ⛔⛔⛔ REQUISITO ABSOLUTO E INNEGOCIABLE: EXACTAMENTE ${input.chapterCount} CAPÍTULOS ⛔⛔⛔
-    ═══════════════════════════════════════════════════════════════════
-    
-    EL NÚMERO DE CAPÍTULOS NO ES TU DECISIÓN. El autor ha solicitado ${input.chapterCount} capítulos.
-    NO puedes decidir que la historia "funciona mejor" con menos capítulos.
-    NO puedes "resumir" o "condensar" la trama.
-    
-    DEBES generar EXACTAMENTE ${input.chapterCount} entradas en "escaleta_capitulos", numeradas del 1 al ${input.chapterCount}.
-    ${input.hasPrologue ? "ADEMÁS: Prólogo como capítulo número 0." : ""}
-    ${input.hasEpilogue ? "ADEMÁS: Epílogo como capítulo número -1." : ""}
-    
-    Si la historia te parece "terminada" antes del capítulo ${input.chapterCount}:
-    - Expande subtramas existentes
-    - Añade complicaciones y obstáculos
-    - Desarrolla más los arcos de personajes secundarios
-    - Introduce nuevos conflictos que enriquezcan la trama
-    
-    CADA capítulo debe tener:
-    - ⛔ TÍTULO OBLIGATORIO: Campo "titulo" con valor literario (2-6 palabras), NUNCA vacío
-    - Beats detallados (mínimo 3-5 por capítulo)
-    - Información nueva
-    - Conflicto central
-    - Continuidad de entrada/salida
-    
-    🏷️ RECORDATORIO TÍTULOS: Si algún capítulo tiene "titulo": "" o "titulo": null, el sistema FALLARÁ.
-    Cada título debe ser evocador: "El Sabor del Oro", "Cenizas y Promesas", NO "Capítulo 1".
-    
-    ⚠️ VERIFICACIÓN FINAL: Antes de responder, CUENTA las entradas en escaleta_capitulos.
-    Si no hay EXACTAMENTE ${input.chapterCount} capítulos (del 1 al ${input.chapterCount}), tu respuesta es INVÁLIDA.
-    
-    Genera el plan completo de la novela siguiendo tus protocolos de arquitectura.
-    Responde ÚNICAMENTE con el JSON estructurado según las instrucciones.
-    `;
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 1A: Personajes principales (máx 6 personajes detallados)
+    // ═══════════════════════════════════════════════════════════════════
+    const fase1aPrompt = `
+TÍTULO: "${input.title}"
+GÉNERO: ${input.genre}
+TONO: ${input.tone}
+PREMISA: "${ideaInicial}"
+GUÍA DE ESTILO: "${guiaEstilo}"
 
-    console.log(`[Architect] Prompt built (${prompt.length} chars), calling generateContent()...`);
-    const response = await this.generateContent(prompt);
-    console.log(`[Architect] generateContent() returned`);
+${input.architectInstructions ? `INSTRUCCIONES DEL AUTOR: ${input.architectInstructions}` : ""}
+
+FASE 1A: Genera SOLO los PERSONAJES PRINCIPALES (máximo 6 personajes).
+
+Responde con JSON:
+{
+  "personajes": [
+    {
+      "nombre": "Nombre completo",
+      "rol": "protagonista/antagonista/secundario",
+      "perfil_psicologico": "descripción en 1-2 frases",
+      "arco_transformacion": "de X a Y",
+      "relaciones": ["relación con otro personaje"],
+      "vivo": true,
+      "apariencia_inmutable": "rasgos físicos clave",
+      "vestimenta_habitual": "descripción breve",
+      "modismos_habla": ["frases típicas"]
+    }
+  ],
+  "premisa": "premisa refinada de la historia"
+}
+
+⛔ MÁXIMO 6 PERSONAJES. Solo los esenciales para la trama.
+`;
+
+    console.log(`[Architect] FASE 1A: Generating characters (${fase1aPrompt.length} chars)...`);
+    const fase1aResponse = await this.generateContent(fase1aPrompt);
+    console.log(`[Architect] FASE 1A: Response received`);
+    
+    let personajes: any[] = [];
+    let premisa = ideaInicial;
     
     try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      const jsonMatch = fase1aResponse.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        JSON.parse(jsonMatch[0]);
-        response.content = jsonMatch[0];
+        const data = JSON.parse(jsonMatch[0]);
+        personajes = data.personajes || [];
+        premisa = data.premisa || ideaInicial;
+        console.log(`[Architect] FASE 1A: Parsed ${personajes.length} personajes`);
       }
     } catch (e) {
-      console.error("[Architect] Failed to parse JSON response");
+      console.error("[Architect] FASE 1A: Failed to parse JSON:", e);
+    }
+    
+    if (personajes.length === 0) {
+      console.error("[Architect] FASE 1A: No characters generated - aborting");
+      return { content: JSON.stringify({ error: "No se generaron personajes" }), tokenUsage: fase1aResponse.tokenUsage };
+    }
+    
+    if (fase1aResponse.tokenUsage) {
+      totalTokenUsage.promptTokens += fase1aResponse.tokenUsage.promptTokens || 0;
+      totalTokenUsage.completionTokens += fase1aResponse.tokenUsage.completionTokens || 0;
+      totalTokenUsage.totalTokens += fase1aResponse.tokenUsage.totalTokens || 0;
     }
 
-    return response;
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 1B: Lugares, reglas y paleta sensorial
+    // ═══════════════════════════════════════════════════════════════════
+    const personajesNombres = personajes.map(p => p.nombre).join(", ");
+    
+    const fase1bPrompt = `
+TÍTULO: "${input.title}"
+GÉNERO: ${input.genre}
+PREMISA: "${premisa}"
+PERSONAJES: ${personajesNombres}
+
+FASE 1B: Genera LUGARES, REGLAS DEL MUNDO y PALETA SENSORIAL.
+
+Responde con JSON:
+{
+  "lugares": [
+    { "nombre": "...", "descripcion_sensorial": "...", "reglas": "...", "atmosfera": "..." }
+  ],
+  "reglas_lore": [
+    { "categoria": "...", "regla": "...", "restricciones": "..." }
+  ],
+  "temas_centrales": ["tema1", "tema2"],
+  "motivos_literarios": ["motivo1", "motivo2"],
+  "vocabulario_prohibido": ["palabra1"],
+  "lexico_historico": {
+    "epoca": "...",
+    "terminos_anacronicos_prohibidos": ["..."],
+    "vocabulario_epoca_autorizado": ["..."],
+    "registro_linguistico": "...",
+    "notas_voz_historica": "..."
+  },
+  "paleta_sensorial_global": {
+    "sentidos_dominantes": ["vista", "olfato"],
+    "imagenes_recurrentes_permitidas": ["..."],
+    "imagenes_prohibidas_cliche": ["..."]
+  },
+  "watchpoints_continuidad": ["punto1", "punto2"]
+}
+
+⛔ MÁXIMO 5 LUGARES. Solo los esenciales.
+`;
+
+    console.log(`[Architect] FASE 1B: Generating world elements (${fase1bPrompt.length} chars)...`);
+    const fase1bResponse = await this.generateContent(fase1bPrompt);
+    console.log(`[Architect] FASE 1B: Response received`);
+    
+    let worldElements: any = {};
+    
+    try {
+      const jsonMatch = fase1bResponse.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        worldElements = JSON.parse(jsonMatch[0]);
+        console.log(`[Architect] FASE 1B: Parsed ${worldElements.lugares?.length || 0} lugares`);
+      }
+    } catch (e) {
+      console.error("[Architect] FASE 1B: Failed to parse JSON:", e);
+    }
+    
+    if (fase1bResponse.tokenUsage) {
+      totalTokenUsage.promptTokens += fase1bResponse.tokenUsage.promptTokens || 0;
+      totalTokenUsage.completionTokens += fase1bResponse.tokenUsage.completionTokens || 0;
+      totalTokenUsage.totalTokens += fase1bResponse.tokenUsage.totalTokens || 0;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 1C: Estructura narrativa (arcos y actos)
+    // ═══════════════════════════════════════════════════════════════════
+    const fase1cPrompt = `
+TÍTULO: "${input.title}"
+GÉNERO: ${input.genre}
+PREMISA: "${premisa}"
+PERSONAJES: ${personajesNombres}
+NÚMERO DE CAPÍTULOS: ${input.chapterCount}
+${input.hasPrologue ? "INCLUYE PRÓLOGO (capítulo 0)" : ""}
+${input.hasEpilogue ? "INCLUYE EPÍLOGO (capítulo -1)" : ""}
+
+FASE 1C: Genera la ESTRUCTURA NARRATIVA.
+
+Responde con JSON:
+{
+  "estructura_tres_actos": {
+    "acto1": { "capitulos": [1, X], "funcion": "...", "planteamiento": "...", "incidente_incitador": "...", "primer_punto_giro": "..." },
+    "acto2": { "capitulos": [X+1, Y], "funcion": "...", "accion_ascendente": "...", "punto_medio": "...", "crisis": "...", "segundo_punto_giro": "..." },
+    "acto3": { "capitulos": [Y+1, ${input.chapterCount}], "funcion": "...", "climax": "...", "resolucion": "...", "eco_tematico": "..." }
+  },
+  "matriz_arcos": {
+    "arco_principal": {
+      "descripcion": "...",
+      "puntos_giro": [{ "capitulo": 1, "evento": "...", "consecuencia": "..." }]
+    },
+    "subtramas": [
+      { "nombre": "...", "tipo": "romance/misterio/personal", "personajes_involucrados": ["..."], "capitulos_desarrollo": [1,5,10], "interseccion_trama_principal": "...", "resolucion": "..." }
+    ]
+  },
+  "momentum_plan": {
+    "curva_tension": { "acto1": "...", "acto2": "...", "acto3": "..." },
+    "catalogo_giros": [{ "capitulo": 5, "tipo": "...", "descripcion": "...", "setup_previo": "...", "impacto_emocional": "..." }],
+    "cadencia_sorpresas": "...",
+    "hooks_capitulo": { "regla": "...", "tipos_permitidos": ["cliffhanger", "revelacion", "pregunta"] }
+  },
+  "linea_temporal": [{ "momento": "...", "eventos_clave": ["..."], "capitulos": [1,2,3] }]
+}
+
+⛔ Los números de capítulo deben distribuirse correctamente en ${input.chapterCount} capítulos totales.
+`;
+
+    console.log(`[Architect] FASE 1C: Generating narrative structure (${fase1cPrompt.length} chars)...`);
+    const fase1cResponse = await this.generateContent(fase1cPrompt);
+    console.log(`[Architect] FASE 1C: Response received`);
+    
+    let narrativeStructure: any = {};
+    
+    try {
+      const jsonMatch = fase1cResponse.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        narrativeStructure = JSON.parse(jsonMatch[0]);
+        console.log(`[Architect] FASE 1C: Parsed estructura_tres_actos: ${!!narrativeStructure.estructura_tres_actos}`);
+      }
+    } catch (e) {
+      console.error("[Architect] FASE 1C: Failed to parse JSON:", e);
+    }
+    
+    if (!narrativeStructure.estructura_tres_actos) {
+      console.error("[Architect] FASE 1C: Missing estructura_tres_actos - aborting");
+      return { content: JSON.stringify({ error: "No se generó estructura narrativa" }), tokenUsage: totalTokenUsage };
+    }
+    
+    if (fase1cResponse.tokenUsage) {
+      totalTokenUsage.promptTokens += fase1cResponse.tokenUsage.promptTokens || 0;
+      totalTokenUsage.completionTokens += fase1cResponse.tokenUsage.completionTokens || 0;
+      totalTokenUsage.totalTokens += fase1cResponse.tokenUsage.totalTokens || 0;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 2: Escaleta de capítulos (en batches de 8)
+    // ═══════════════════════════════════════════════════════════════════
+    const personajesResumen = personajes.map((p: any) => 
+      `- ${p.nombre} (${p.rol}): ${p.arco_transformacion || 'sin arco definido'}`
+    ).join('\n');
+    
+    const arcoPrincipal = narrativeStructure.matriz_arcos?.arco_principal?.descripcion || 'Trama principal';
+    const puntosGiro = narrativeStructure.matriz_arcos?.arco_principal?.puntos_giro?.map((p: any) => 
+      `Cap ${p.capitulo}: ${p.evento}`
+    ).join(', ') || 'Sin puntos de giro definidos';
+
+    const totalChapters = input.chapterCount + (input.hasPrologue ? 1 : 0) + (input.hasEpilogue ? 1 : 0);
+    
+    // Use smaller batches to stay within 8K tokens
+    const CHAPTERS_PER_BATCH = 8;
+    const batches = Math.ceil(input.chapterCount / CHAPTERS_PER_BATCH);
+    
+    let allEscaleta: any[] = [];
+    
+    for (let batch = 0; batch < batches; batch++) {
+      const startChapter = batch * CHAPTERS_PER_BATCH + 1;
+      const endChapter = Math.min((batch + 1) * CHAPTERS_PER_BATCH, input.chapterCount);
+      
+      const includesPrologue = batch === 0 && input.hasPrologue;
+      const includesEpilogue = batch === batches - 1 && input.hasEpilogue;
+      
+      const fase2Prompt = `
+FASE 2 (Lote ${batch + 1}/${batches}): Genera ESCALETA para capítulos ${includesPrologue ? '0 (Prólogo), ' : ''}${startChapter}-${endChapter}${includesEpilogue ? ', -1 (Epílogo)' : ''}
+
+CONTEXTO:
+- Premisa: "${premisa}"
+- Personajes: ${personajesResumen}
+- Arco principal: ${arcoPrincipal}
+- Puntos de giro: ${puntosGiro}
+- Acto 1: caps ${JSON.stringify(narrativeStructure.estructura_tres_actos?.acto1?.capitulos)}
+- Acto 2: caps ${JSON.stringify(narrativeStructure.estructura_tres_actos?.acto2?.capitulos)}
+- Acto 3: caps ${JSON.stringify(narrativeStructure.estructura_tres_actos?.acto3?.capitulos)}
+
+Responde con JSON:
+{
+  "escaleta_capitulos": [
+    {
+      "numero": 1,
+      "titulo": "Título evocador (2-5 palabras)",
+      "acto": "1",
+      "cronologia": "momento temporal",
+      "ubicacion": "lugar",
+      "elenco_presente": ["personaje1"],
+      "funcion_estructural": "función en la trama",
+      "informacion_nueva": "qué descubre el lector",
+      "conflicto_central": { "tipo": "interno/externo", "descripcion": "...", "stakes": "..." },
+      "beats": [
+        { "tipo": "apertura", "descripcion": "..." },
+        { "tipo": "desarrollo", "descripcion": "..." },
+        { "tipo": "tension", "descripcion": "..." },
+        { "tipo": "reflexion", "descripcion": "..." },
+        { "tipo": "escalada", "descripcion": "..." },
+        { "tipo": "cierre_hook", "descripcion": "..." }
+      ],
+      "giro_emocional": { "emocion_inicio": "...", "emocion_final": "..." },
+      "continuidad_entrada": "estado al iniciar",
+      "continuidad_salida": "estado al terminar",
+      "bestseller_elements": { "nivel_tension": 7, "tipo_hook_final": "cliffhanger", "hook_descripcion": "..." }
+    }
+  ]
+}
+
+⛔ TÍTULOS OBLIGATORIOS: "Cenizas y Promesas", "La Sombra del Pasado". NUNCA "Capítulo 1" ni vacío.
+⛔ Número 0 = Prólogo, Número -1 = Epílogo.
+`;
+      
+      console.log(`[Architect] FASE 2 (batch ${batch + 1}/${batches}): Generating chapters ${startChapter}-${endChapter} (${fase2Prompt.length} chars)...`);
+      const fase2Response = await this.generateContent(fase2Prompt);
+      console.log(`[Architect] FASE 2 (batch ${batch + 1}/${batches}): Response received`);
+      
+      try {
+        const jsonMatch = fase2Response.content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const batchData = JSON.parse(jsonMatch[0]);
+          if (batchData.escaleta_capitulos && Array.isArray(batchData.escaleta_capitulos)) {
+            allEscaleta = allEscaleta.concat(batchData.escaleta_capitulos);
+            console.log(`[Architect] FASE 2 (batch ${batch + 1}/${batches}): Added ${batchData.escaleta_capitulos.length} chapters (total: ${allEscaleta.length})`);
+          }
+        }
+      } catch (e) {
+        console.error(`[Architect] FASE 2 (batch ${batch + 1}/${batches}): Failed to parse JSON:`, e);
+      }
+      
+      if (fase2Response.tokenUsage) {
+        totalTokenUsage.promptTokens += fase2Response.tokenUsage.promptTokens || 0;
+        totalTokenUsage.completionTokens += fase2Response.tokenUsage.completionTokens || 0;
+        totalTokenUsage.totalTokens += fase2Response.tokenUsage.totalTokens || 0;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COMBINE: Merge all phases into final World Bible
+    // ═══════════════════════════════════════════════════════════════════
+    const finalWorldBible = {
+      world_bible: {
+        personajes: personajes,
+        lugares: worldElements.lugares || [],
+        reglas_lore: worldElements.reglas_lore || [],
+        watchpoints_continuidad: worldElements.watchpoints_continuidad || [],
+        temas_centrales: worldElements.temas_centrales || [],
+        motivos_literarios: worldElements.motivos_literarios || [],
+        vocabulario_prohibido: worldElements.vocabulario_prohibido || [],
+        lexico_historico: worldElements.lexico_historico || {},
+        paleta_sensorial_global: worldElements.paleta_sensorial_global || {},
+      },
+      matriz_arcos: narrativeStructure.matriz_arcos || {},
+      momentum_plan: narrativeStructure.momentum_plan || {},
+      estructura_tres_actos: narrativeStructure.estructura_tres_actos,
+      premisa: premisa,
+      linea_temporal: narrativeStructure.linea_temporal || [],
+      escaleta_capitulos: allEscaleta,
+    };
+    
+    console.log(`[Architect] COMBINED: ${personajes.length} personajes, ${worldElements.lugares?.length || 0} lugares, ${allEscaleta.length} capítulos`);
+    console.log(`[Architect] Total tokens used: ${totalTokenUsage.totalTokens}`);
+
+    return {
+      content: JSON.stringify(finalWorldBible),
+      tokenUsage: totalTokenUsage,
+    };
   }
 }

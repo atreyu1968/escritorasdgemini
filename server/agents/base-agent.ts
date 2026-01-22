@@ -250,8 +250,9 @@ export abstract class BaseAgent {
           // R1 uses max_completion_tokens and doesn't support temperature
           requestParams.max_completion_tokens = 16000;
         } else {
-          // V3: No token limit - let the model respond as needed
-          // Only set temperature (0-2 range for V3)
+          // V3: max_tokens limit is 8192 - this is a hard API limit
+          // For large outputs like World Bible, we need to use streaming or split requests
+          requestParams.max_tokens = 8192;
           requestParams.temperature = Math.min(temperature, 2.0);
         }
         
