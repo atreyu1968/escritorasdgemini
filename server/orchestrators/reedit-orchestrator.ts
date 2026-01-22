@@ -64,7 +64,7 @@ RESPOND WITH JSON ONLY:
   "suggestions": ["Suggestion 1"],
   "pacingNotes": "Notes about pacing"
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
@@ -117,7 +117,7 @@ RESPOND WITH JSON ONLY:
   "changesLog": "Summary of changes made",
   "fluencyChanges": [{"before": "old", "after": "new", "reason": "why"}]
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-chat",
       useThinking: false,
     });
   }
@@ -221,7 +221,7 @@ RESPONDE SOLO EN JSON:
   "resumen": "Resumen general de la continuidad",
   "puntuacion": 8
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
@@ -287,7 +287,7 @@ RESPONDE SOLO EN JSON:
   },
   "puntuacion": 8
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
@@ -351,7 +351,7 @@ RESPONDE SOLO EN JSON:
   ],
   "puntuacion": 8
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
@@ -426,7 +426,7 @@ RESPONDE SOLO EN JSON:
   "resumen": "Resumen de la precisión histórica",
   "puntuacionHistorica": 8
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
@@ -513,7 +513,7 @@ RESPONDE SOLO EN JSON:
   },
   "confianza": 8
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-chat",
       useThinking: false,
     });
   }
@@ -700,7 +700,7 @@ RESPONDE SOLO EN JSON:
   "resumenEjecutivo": "Análisis arquitectónico completado...",
   "puntuacionArquitectura": 10
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
@@ -799,7 +799,7 @@ RESPONDE SOLO EN JSON:
   "resumenCambios": "Resumen ejecutivo de los cambios realizados",
   "confianzaCorreccion": 8
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-chat",
       useThinking: false,
     });
   }
@@ -1203,7 +1203,7 @@ RESPONDE ÚNICAMENTE CON JSON EN ESPAÑOL:
   "marketPotential": "alto",
   "recommendations": ["Apretar el segundo acto", "Fortalecer el final"]
 }`,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }

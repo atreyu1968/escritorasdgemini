@@ -64,18 +64,27 @@ export const AGENT_DEEPSEEK_MODELS: Record<string, DeepSeekModel> = {
   "ghostwriter": "deepseek-chat",      // V3 for fluent prose
   "editor": "deepseek-reasoner",        // R1 for deep analysis
   "final-reviewer": "deepseek-reasoner", // R1 for critical evaluation
+  "final_reviewer": "deepseek-reasoner", // R1 for reedit final reviewer
   "copyeditor": "deepseek-chat",        // V3 for fast corrections
   "continuity-validator": "deepseek-reasoner", // R1 for detecting issues
   "chapter-expansion-analyzer": "deepseek-chat", // V3 for analysis
   "chapter-expander": "deepseek-chat",  // V3 for prose expansion
   "new-chapter-generator": "deepseek-chat", // V3 for prose generation
+  "qa_continuity": "deepseek-reasoner", // R1 for continuity analysis
+  "qa_voice": "deepseek-reasoner",      // R1 for voice/rhythm analysis
+  "qa_semantic": "deepseek-reasoner",   // R1 for semantic analysis
+  "qa_anachronism": "deepseek-reasoner", // R1 for anachronism detection
+  "world_bible_extractor": "deepseek-chat", // V3 for extraction
+  "narrative_rewriter": "deepseek-chat", // V3 for rewriting
 };
+
+export type AIModel = GeminiModel | DeepSeekModel;
 
 export interface AgentConfig {
   name: string;
   role: string;
   systemPrompt: string;
-  model?: GeminiModel;
+  model?: AIModel;
   useThinking?: boolean;
 }
 
