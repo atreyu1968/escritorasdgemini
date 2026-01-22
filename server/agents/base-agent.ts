@@ -243,7 +243,7 @@ export abstract class BaseAgent {
           model: deepseekModel,
           messages,
           temperature: Math.min(temperature, 2.0), // DeepSeek max is 2.0
-          max_tokens: 16384, // Increased for longer outputs like World Bible
+          max_tokens: 8192, // DeepSeek max is 8192
           stream: false,
         });
 

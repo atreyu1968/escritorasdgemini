@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { queueManager } from "./queue-manager";
 import { autoResumeReeditProjects, startWatchdog } from "./reedit-auto-resume";
+import { autoResumeTranslations, startTranslationWatchdog } from "./translation-auto-resume";
 
 // Production diagnostics: Log process signals and memory usage
 process.on("SIGTERM", () => {
@@ -137,18 +138,21 @@ app.use((req, res, next) => {
         log(`Queue manager initialization error: ${error}`, "queue");
       }
       
-      // Auto-resume reedit projects that were in processing state
+      // Auto-resume reedit projects and translations that were in processing state
       try {
         setTimeout(async () => {
           log("Checking for reedit projects to auto-resume...", "reedit");
           await autoResumeReeditProjects();
-          
-          // Start the watchdog to detect frozen processes
           startWatchdog();
           log("Reedit watchdog started", "reedit");
-        }, 3000); // Wait 3 seconds for server to fully initialize
+          
+          log("Checking for translations to auto-resume...", "translation");
+          await autoResumeTranslations();
+          startTranslationWatchdog();
+          log("Translation watchdog started", "translation");
+        }, 3000);
       } catch (error) {
-        log(`Reedit auto-resume error: ${error}`, "reedit");
+        log(`Auto-resume error: ${error}`, "system");
       }
     },
   );
