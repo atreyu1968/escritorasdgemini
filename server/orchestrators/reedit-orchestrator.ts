@@ -988,7 +988,7 @@ FORMATO DE RESPUESTA (JSON):
   },
   "resumenEjecutivo": "Descripción concisa de todas las correcciones realizadas"
 }`,
-      model: "gemini-3-pro-preview",
+      model: "deepseek-chat",
       useThinking: true,
     });
   }
