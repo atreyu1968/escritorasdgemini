@@ -485,7 +485,7 @@ export abstract class BaseAgent {
             maxOutputTokens: 65536,
             ...(useThinking && modelToUse === "gemini-3-pro-preview" ? {
               thinkingConfig: {
-                thinkingBudget: 2048,
+                thinkingBudget: 10000,
                 includeThoughts: true,
               },
             } : {}),
