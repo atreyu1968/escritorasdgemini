@@ -4684,6 +4684,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         outputTokens: t.outputTokens,
         status: t.status || "completed",
         createdAt: t.createdAt,
+        heartbeatAt: t.heartbeatAt,
       }));
       res.json(translationsWithoutMarkdown);
     } catch (error) {

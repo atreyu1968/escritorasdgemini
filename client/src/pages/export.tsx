@@ -70,6 +70,7 @@ interface SavedTranslation {
   outputTokens: number;
   status: "pending" | "translating" | "completed" | "error";
   createdAt: string;
+  heartbeatAt?: string | null;
 }
 
 interface ExportResult {
@@ -156,10 +157,24 @@ function clearTranslationState(): void {
 
 function isTranslationFrozen(translation: SavedTranslation): boolean {
   if (translation.status !== "translating") return false;
-  const savedState = loadTranslationState();
-  if (!savedState) return true;
-  if (savedState.projectId !== translation.projectId) return true;
-  return false;
+  
+  // Use server heartbeat to determine if translation is frozen
+  // A translation is considered frozen if no heartbeat in the last 3 minutes
+  const FROZEN_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+  
+  if (!translation.heartbeatAt) {
+    // No heartbeat recorded, check local state as fallback
+    const savedState = loadTranslationState();
+    if (!savedState) return true;
+    if (savedState.projectId !== translation.projectId) return true;
+    return false;
+  }
+  
+  const lastHeartbeat = new Date(translation.heartbeatAt).getTime();
+  const now = Date.now();
+  const timeSinceHeartbeat = now - lastHeartbeat;
+  
+  return timeSinceHeartbeat > FROZEN_THRESHOLD_MS;
 }
 
 export default function ExportPage() {
