@@ -250,9 +250,8 @@ export abstract class BaseAgent {
           // R1 uses max_completion_tokens and doesn't support temperature
           requestParams.max_completion_tokens = 16000;
         } else {
-          // V3 uses max_tokens and supports temperature
-          // Increased from 8192 to 16384 for World Bible generation with 35+ chapters
-          requestParams.max_tokens = 16384;
+          // V3: No token limit - let the model respond as needed
+          // Only set temperature (0-2 range for V3)
           requestParams.temperature = Math.min(temperature, 2.0);
         }
         
