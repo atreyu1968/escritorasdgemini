@@ -4329,14 +4329,17 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           outputTokens: totalOutputTokens
         });
 
-        // Update the database record with partial progress so the UI sees it
+        // Update the database record with partial progress AND markdown so resume can continue
         if (translationRecordId) {
           try {
+            // Save markdown progressively so resume can pick up from where we left off
+            const partialMarkdown = translatedChapters.map(tc => tc.translatedContent).join("\n\n---\n\n");
             await storage.updateTranslation(translationRecordId, {
               chaptersTranslated: completedCount,
+              markdown: partialMarkdown,
               status: "translating"
             });
-            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${completedCount}/${totalChapters}`);
+            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${completedCount}/${totalChapters} chapters, ${partialMarkdown.length} chars of markdown saved`);
           } catch (err) {
             console.error("[Translation] Progress DB update failed:", err);
           }
