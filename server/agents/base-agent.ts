@@ -50,15 +50,11 @@ export type GeminiModel = "gemini-3-pro-preview" | "gemini-2.5-flash" | "gemini-
 export type DeepSeekModel = "deepseek-reasoner" | "deepseek-chat";
 
 // Map Gemini models to DeepSeek equivalents
+// Using deepseek-chat (V3) for all tasks - more stable and faster for long prompts
+// R1 (reasoner) can hang on prompts > 10k tokens
 function mapGeminiToDeepSeek(geminiModel: GeminiModel): DeepSeekModel {
-  switch (geminiModel) {
-    case "gemini-3-pro-preview":
-      return "deepseek-reasoner"; // R1 for deep reasoning/creative tasks
-    case "gemini-2.5-flash":
-    case "gemini-2.0-flash":
-    default:
-      return "deepseek-chat"; // V3 for fast analysis tasks
-  }
+  // Force V3 for stability - R1 times out on large prompts like Architect's 20k char system prompt
+  return "deepseek-chat";
 }
 
 export interface AgentConfig {
