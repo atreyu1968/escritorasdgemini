@@ -455,6 +455,276 @@ export class ArchitectAgent extends BaseAgent {
 
   async execute(input: ArchitectInput): Promise<AgentResponse> {
     console.log(`[Architect] execute() started for "${input.title}"`);
+    // Use batched generation: characters first, then chapters in small batches
+    console.log(`[Architect] Using BATCHED generation (characters + chapter batches)`);
+    return this.executeBatchedGeneration(input);
+  }
+  
+  /**
+   * BATCHED GENERATION STRATEGY:
+   * 1. Generate World Bible (characters, places, metadata) - single call
+   * 2. Generate chapters in batches of 8-10 chapters each - multiple calls
+   * This avoids Gemini truncation by keeping each response manageable
+   */
+  async executeBatchedGeneration(input: ArchitectInput): Promise<AgentResponse> {
+    console.log(`[Architect] executeBatchedGeneration() started for "${input.title}"`);
+    
+    const guiaEstilo = input.guiaEstilo || `Género: ${input.genre}, Tono: ${input.tone}`;
+    const ideaInicial = input.premise || input.title;
+    
+    // Calculate total chapters needed
+    const totalChapters: number[] = [];
+    if (input.hasPrologue) totalChapters.push(0);
+    for (let i = 1; i <= input.chapterCount; i++) totalChapters.push(i);
+    if (input.hasEpilogue) totalChapters.push(-1);
+    
+    console.log(`[Architect] Total chapters to generate: ${totalChapters.length} (${totalChapters.join(', ')})`);
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 1: Generate World Bible (characters, places, rules) - NO chapters
+    // ═══════════════════════════════════════════════════════════════════
+    const worldBiblePrompt = `
+TÍTULO: "${input.title}"
+GÉNERO: ${input.genre}
+TONO: ${input.tone}
+PREMISA: "${ideaInicial}"
+GUÍA DE ESTILO: "${guiaEstilo}"
+NÚMERO DE CAPÍTULOS: ${input.chapterCount} + ${input.hasPrologue ? 'prólogo' : ''} + ${input.hasEpilogue ? 'epílogo' : ''}
+
+${input.architectInstructions ? `INSTRUCCIONES DEL AUTOR: ${input.architectInstructions}` : ""}
+
+═══════════════════════════════════════════════════════════════════
+GENERA SOLO EL WORLD BIBLE (SIN CAPÍTULOS)
+═══════════════════════════════════════════════════════════════════
+
+Responde con un JSON que incluya SOLO estas secciones (los capítulos se generarán después):
+
+{
+  "personajes": [
+    {
+      "nombre": "Nombre completo",
+      "rol": "protagonista/antagonista/aliado/secundario",
+      "perfil_psicologico": "descripción detallada en 2-3 frases",
+      "arco_transformacion": {
+        "estado_inicial": "cómo empieza",
+        "catalizador_cambio": "qué lo transforma",
+        "punto_crisis": "momento crítico",
+        "estado_final": "cómo termina"
+      },
+      "relaciones": [{"con": "nombre", "tipo": "tipo", "evolucion": "cómo cambia"}],
+      "vivo": true,
+      "apariencia_inmutable": {
+        "ojos": "color y descripción",
+        "cabello": "descripción",
+        "piel": "descripción",
+        "altura": "altura aprox",
+        "rasgos_distintivos": ["rasgo1", "rasgo2"],
+        "voz": "descripción"
+      },
+      "vestimenta_habitual": "descripción",
+      "modismos_habla": ["frase típica 1", "frase típica 2"]
+    }
+  ],
+  "lugares": [
+    {"nombre": "Nombre", "descripcion": "desc", "atmosfera": "ambiente"}
+  ],
+  "reglas_lore": ["regla 1", "regla 2"],
+  "watchpoints_continuidad": ["punto 1", "punto 2"],
+  "temas_centrales": ["tema 1", "tema 2"],
+  "motivos_literarios": ["motivo 1", "motivo 2"],
+  "vocabulario_prohibido": ["palabra1", "palabra2"],
+  "paleta_sensorial_global": {
+    "olores": ["olor1"], "sonidos": ["sonido1"], "texturas": ["textura1"], "colores": ["color1"]
+  },
+  "estructura_tres_actos": {
+    "acto_1": {"capitulos": [0,1,2,3,4,5,6,7,8,9,10,11,12], "funcion": "Establecimiento"},
+    "acto_2": {"capitulos": [13,14,15,16,17,18,19,20,21,22,23,24,25], "funcion": "Desarrollo"},
+    "acto_3": {"capitulos": [26,27,28,29,30,31,32,33,34,35,-1], "funcion": "Clímax y resolución"}
+  },
+  "matriz_arcos": {
+    "trama_principal": {"descripcion": "trama A", "puntos_giro": ["giro1", "giro2", "giro3"]},
+    "subtramas": [{"nombre": "B", "descripcion": "...", "interseccion_capitulos": [5,15,25]}]
+  },
+  "premisa": "premisa refinada"
+}
+
+⛔ NO incluyas "escaleta_capitulos" - se generará después.
+⛔ MÁXIMO 6 PERSONAJES principales.
+⛔ Responde SOLO con el JSON, sin explicaciones.
+`;
+
+    console.log(`[Architect] STEP 1: Generating World Bible (${worldBiblePrompt.length} chars)...`);
+    const worldBibleResponse = await this.generateContent(worldBiblePrompt, undefined, { forceProvider: "gemini" });
+    
+    if (worldBibleResponse.error) {
+      console.error(`[Architect] STEP 1 failed: ${worldBibleResponse.error}`);
+      return { content: JSON.stringify({ error: worldBibleResponse.error }), tokenUsage: worldBibleResponse.tokenUsage };
+    }
+    
+    console.log(`[Architect] STEP 1: Response length: ${worldBibleResponse.content?.length || 0}`);
+    
+    // Parse World Bible
+    let worldBible: any;
+    try {
+      let content = worldBibleResponse.content
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim();
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        worldBible = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error("No JSON found in World Bible response");
+      }
+    } catch (e) {
+      console.error(`[Architect] STEP 1 parse error: ${e}`);
+      return { content: JSON.stringify({ error: `World Bible parse error: ${e}` }), tokenUsage: worldBibleResponse.tokenUsage };
+    }
+    
+    console.log(`[Architect] STEP 1 SUCCESS: ${worldBible.personajes?.length || 0} characters parsed`);
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 2: Generate chapters in batches
+    // ═══════════════════════════════════════════════════════════════════
+    const BATCH_SIZE = 8;
+    const allChapters: any[] = [];
+    const characterNames = (worldBible.personajes || []).map((p: any) => p.nombre).join(", ");
+    const placeNames = (worldBible.lugares || []).map((l: any) => l.nombre).join(", ");
+    
+    // Split chapters into batches
+    const batches: number[][] = [];
+    for (let i = 0; i < totalChapters.length; i += BATCH_SIZE) {
+      batches.push(totalChapters.slice(i, i + BATCH_SIZE));
+    }
+    
+    console.log(`[Architect] STEP 2: Generating ${totalChapters.length} chapters in ${batches.length} batches`);
+    
+    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+      const batch = batches[batchIdx];
+      const isFirstBatch = batchIdx === 0;
+      const isLastBatch = batchIdx === batches.length - 1;
+      
+      // Build context from previously generated chapters
+      const previousChaptersSummary = allChapters.length > 0
+        ? allChapters.slice(-3).map(c => `Cap ${c.numero}: ${c.titulo} - ${c.funcion_estructural}`).join("\n")
+        : "Ninguno (primer lote)";
+      
+      const chapterBatchPrompt = `
+CONTEXTO DEL PROYECTO:
+- TÍTULO: "${input.title}"
+- GÉNERO: ${input.genre}
+- TONO: ${input.tone}
+- PREMISA: "${worldBible.premisa || ideaInicial}"
+- PERSONAJES: ${characterNames}
+- LUGARES: ${placeNames}
+
+CAPÍTULOS ANTERIORES (para continuidad):
+${previousChaptersSummary}
+
+═══════════════════════════════════════════════════════════════════
+GENERA LOS CAPÍTULOS: ${batch.map(n => n === 0 ? 'Prólogo (0)' : n === -1 ? 'Epílogo (-1)' : `Cap ${n}`).join(', ')}
+${isFirstBatch ? '(INICIO de la novela - establece el gancho)' : ''}
+${isLastBatch ? '(FINAL de la novela - cierra todos los arcos)' : ''}
+═══════════════════════════════════════════════════════════════════
+
+Responde con un JSON array con EXACTAMENTE ${batch.length} capítulos:
+
+[
+  {
+    "numero": ${batch[0]},
+    "titulo": "Título evocador",
+    "ubicacion": "lugar donde transcurre",
+    "elenco_presente": ["personaje1", "personaje2"],
+    "funcion_estructural": "hook inicial/desarrollo/clímax/etc",
+    "informacion_nueva": "qué aprende el lector",
+    "conflicto_central": {
+      "tipo": "interno/externo/interpersonal",
+      "descripcion": "descripción del conflicto",
+      "stakes": "qué está en juego"
+    },
+    "beats": [
+      {"tipo": "apertura", "descripcion": "cómo abre el capítulo"},
+      {"tipo": "desarrollo", "descripcion": "eventos principales"},
+      {"tipo": "cierre", "descripcion": "cómo cierra con tensión"}
+    ],
+    "gancho_siguiente": "conexión con siguiente capítulo",
+    "tono_capitulo": "tono específico",
+    "metafora_visual": "imagen clave del capítulo",
+    "tension": 7
+  }
+]
+
+⚠️ GENERA EXACTAMENTE ${batch.length} CAPÍTULOS (números: ${batch.join(', ')})
+⛔ Responde SOLO con el JSON array, sin explicaciones.
+`;
+
+      console.log(`[Architect] STEP 2.${batchIdx + 1}: Generating batch ${batchIdx + 1}/${batches.length} (chapters ${batch.join(', ')})...`);
+      
+      const batchResponse = await this.generateContent(chapterBatchPrompt, undefined, { forceProvider: "gemini" });
+      
+      if (batchResponse.error) {
+        console.error(`[Architect] STEP 2.${batchIdx + 1} failed: ${batchResponse.error}`);
+        // Continue with what we have so far
+        break;
+      }
+      
+      console.log(`[Architect] STEP 2.${batchIdx + 1}: Response length: ${batchResponse.content?.length || 0}`);
+      
+      // Parse batch chapters
+      try {
+        let content = batchResponse.content
+          .replace(/```json\s*/gi, '')
+          .replace(/```\s*/g, '')
+          .trim();
+        
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const batchChapters = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(batchChapters)) {
+            allChapters.push(...batchChapters);
+            console.log(`[Architect] STEP 2.${batchIdx + 1} SUCCESS: Added ${batchChapters.length} chapters (total: ${allChapters.length})`);
+          }
+        } else {
+          console.error(`[Architect] STEP 2.${batchIdx + 1}: No JSON array found`);
+        }
+      } catch (e) {
+        console.error(`[Architect] STEP 2.${batchIdx + 1} parse error: ${e}`);
+        // Continue with next batch
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 3: Assemble final World Bible
+    // ═══════════════════════════════════════════════════════════════════
+    console.log(`[Architect] STEP 3: Assembling final World Bible with ${allChapters.length} chapters`);
+    
+    const finalWorldBible = {
+      world_bible: {
+        personajes: worldBible.personajes || [],
+        lugares: worldBible.lugares || [],
+        reglas_lore: worldBible.reglas_lore || [],
+        watchpoints_continuidad: worldBible.watchpoints_continuidad || [],
+        temas_centrales: worldBible.temas_centrales || [],
+        motivos_literarios: worldBible.motivos_literarios || [],
+        vocabulario_prohibido: worldBible.vocabulario_prohibido || [],
+        paleta_sensorial_global: worldBible.paleta_sensorial_global || {}
+      },
+      estructura_tres_actos: worldBible.estructura_tres_actos || {},
+      matriz_arcos: worldBible.matriz_arcos || {},
+      premisa: worldBible.premisa || ideaInicial,
+      escaleta_capitulos: allChapters
+    };
+    
+    console.log(`[Architect] FINAL RESULT: ${finalWorldBible.world_bible.personajes.length} characters, ${finalWorldBible.escaleta_capitulos.length} chapters`);
+    
+    return {
+      content: JSON.stringify(finalWorldBible, null, 2),
+      tokenUsage: worldBibleResponse.tokenUsage
+    };
+  }
+  
+  async executeSingleCall(input: ArchitectInput): Promise<AgentResponse> {
+    console.log(`[Architect] executeSingleCall() started for "${input.title}"`);
     console.log(`[Architect] Using GEMINI (65K token limit) - SINGLE CALL generation`);
     
     const guiaEstilo = input.guiaEstilo || `Género: ${input.genre}, Tono: ${input.tone}`;
@@ -623,6 +893,12 @@ REQUISITOS OBLIGATORIOS
     }
     
     console.log(`[Architect] Response received - content length: ${response.content?.length || 0}`);
+    console.log(`[Architect] Response preview (first 500 chars): ${response.content?.substring(0, 500) || 'EMPTY'}`);
+    
+    if (!response.content || response.content.length < 100) {
+      console.error(`[Architect] Response too short or empty: ${response.content?.length || 0} chars`);
+      return { content: JSON.stringify({ error: `Response too short: ${response.content?.length || 0} chars` }), tokenUsage: response.tokenUsage };
+    }
     
     // Parse the response
     let worldBible: any = null;
@@ -632,6 +908,9 @@ REQUISITOS OBLIGATORIOS
         .replace(/```json\s*/gi, '')
         .replace(/```\s*/g, '')
         .trim();
+      
+      console.log(`[Architect] After cleaning fences: ${content.length} chars`);
+      console.log(`[Architect] Content ends with: ${content.slice(-200)}`);
       
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -643,7 +922,53 @@ REQUISITOS OBLIGATORIOS
           .replace(/,\s*]/g, ']')
           .replace(/[\u200B-\u200D\uFEFF]/g, '');
         
-        worldBible = JSON.parse(cleanedJson);
+        console.log(`[Architect] Cleaned JSON length: ${cleanedJson.length}`);
+        console.log(`[Architect] JSON ends with: ${cleanedJson.slice(-300)}`);
+        
+        // Try to repair truncated JSON
+        try {
+          worldBible = JSON.parse(cleanedJson);
+        } catch (parseErr: any) {
+          console.error(`[Architect] First parse failed: ${parseErr.message}`);
+          
+          // Attempt to repair truncated JSON by balancing brackets
+          let repaired = cleanedJson;
+          let openBraces = (repaired.match(/\{/g) || []).length;
+          let closeBraces = (repaired.match(/\}/g) || []).length;
+          let openBrackets = (repaired.match(/\[/g) || []).length;
+          let closeBrackets = (repaired.match(/\]/g) || []).length;
+          
+          console.log(`[Architect] Bracket analysis: {} = ${openBraces}/${closeBraces}, [] = ${openBrackets}/${closeBrackets}`);
+          
+          // If JSON is truncated, try to close it properly
+          if (openBraces > closeBraces || openBrackets > closeBrackets) {
+            // Remove trailing incomplete content (after last complete property)
+            repaired = repaired.replace(/,\s*"[^"]*"?\s*$/, '');
+            repaired = repaired.replace(/,\s*$/, '');
+            
+            // Close any open strings
+            const lastQuote = repaired.lastIndexOf('"');
+            const quoteCount = (repaired.match(/"/g) || []).length;
+            if (quoteCount % 2 !== 0) {
+              repaired += '"';
+            }
+            
+            // Close brackets
+            while ((repaired.match(/\[/g) || []).length > (repaired.match(/\]/g) || []).length) {
+              repaired += ']';
+            }
+            // Close braces
+            while ((repaired.match(/\{/g) || []).length > (repaired.match(/\}/g) || []).length) {
+              repaired += '}';
+            }
+            
+            console.log(`[Architect] Repaired JSON ends with: ${repaired.slice(-200)}`);
+            worldBible = JSON.parse(repaired);
+            console.log(`[Architect] JSON repair successful!`);
+          } else {
+            throw parseErr;
+          }
+        }
       }
     } catch (e: any) {
       console.error(`[Architect] JSON parse error: ${e.message}`);
