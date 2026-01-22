@@ -280,6 +280,19 @@ export default function ExportPage() {
       });
     });
 
+    eventSource.addEventListener("chapterError", (event) => {
+      const data = JSON.parse(event.data);
+      toast({
+        title: `Error en capítulo ${data.chapterNumber}`,
+        description: `${data.chapterTitle}: ${data.error}. Continuando con el resto...`,
+        variant: "destructive",
+      });
+      setTranslationProgress(prev => ({
+        ...prev,
+        chapterTitle: `Error en ${data.chapterTitle}, continuando...`,
+      }));
+    });
+
     eventSource.addEventListener("saving", () => {
       setTranslationProgress(prev => ({
         ...prev,
@@ -538,6 +551,19 @@ export default function ExportPage() {
           : `Completado: ${data.chapterTitle}`,
         inputTokens: data.inputTokens || prev.inputTokens,
         outputTokens: data.outputTokens || prev.outputTokens,
+      }));
+    });
+
+    eventSource.addEventListener("chapterError", (event) => {
+      const data = JSON.parse(event.data);
+      toast({
+        title: `Error en capítulo ${data.chapterNumber}`,
+        description: `${data.chapterTitle}: ${data.error}. Continuando con el resto...`,
+        variant: "destructive",
+      });
+      setTranslationProgress(prev => ({
+        ...prev,
+        chapterTitle: `Error en ${data.chapterTitle}, continuando...`,
       }));
     });
 
