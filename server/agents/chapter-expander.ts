@@ -263,7 +263,7 @@ export class ChapterExpanderAgent extends BaseAgent {
       name: "Chapter Expander",
       role: "chapter_expander",
       systemPrompt: EXPANSION_SYSTEM_PROMPT,
-      model: "gemini-3-pro-preview",
+      model: "deepseek-chat",
       useThinking: true,
     });
   }
@@ -360,7 +360,7 @@ export class NewChapterGeneratorAgent extends BaseAgent {
       name: "New Chapter Generator",
       role: "new_chapter_generator",
       systemPrompt: NEW_CHAPTER_SYSTEM_PROMPT,
-      model: "gemini-3-pro-preview",
+      model: "deepseek-chat",
       useThinking: true,
     });
   }

@@ -82,7 +82,7 @@ export class ItalianReviewerAgent extends BaseAgent {
       name: "Revisore Italiano",
       role: "italian-reviewer",
       systemPrompt: SYSTEM_PROMPT,
-      model: "gemini-2.5-flash",
+      model: "deepseek-reasoner",
       useThinking: false,
     });
   }
