@@ -35,10 +35,9 @@ export function ChapterList({ chapters, selectedChapterId, onSelectChapter, onRe
   }
 
   const isChapterEmpty = (chapter: Chapter) => {
-    const wordCount = chapter.wordCount || 0;
     const content = chapter.content || "";
     const contentWords = content.trim().split(/\s+/).filter(w => w.length > 0).length;
-    return wordCount < 50 || contentWords < 50;
+    return contentWords < 50;
   };
 
   return (
