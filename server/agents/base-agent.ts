@@ -99,12 +99,10 @@ export const AGENT_DEEPSEEK_MODELS: Record<string, DeepSeekModel> = {
   "qa_semantic": "deepseek-reasoner",   // R1 for semantic analysis
   "qa_anachronism": "deepseek-reasoner", // R1 for anachronism detection
   "world_bible_extractor": "deepseek-chat", // V3 for extraction
-  "narrative_rewriter": "deepseek-chat", // V3 for rewriting
+  "narrative_rewriter": "deepseek-reasoner", // R1 for deep rewriting
   "manuscript-analyzer": "deepseek-reasoner", // R1 for deep manuscript analysis
   "arc-validator": "deepseek-reasoner", // R1 for series arc validation
   "series-thread-fixer": "deepseek-chat", // V3 for series thread fixes
-  "editor": "deepseek-reasoner", // R1 for editorial analysis
-  "copyeditor": "deepseek-chat", // V3 for creative polish
   "continuity-sentinel": "deepseek-reasoner", // R1 for continuity analysis
   "voice-rhythm-auditor": "deepseek-reasoner", // R1 for voice/rhythm analysis
   "semantic-repetition-detector": "deepseek-reasoner", // R1 for semantic analysis
@@ -114,8 +112,6 @@ export const AGENT_DEEPSEEK_MODELS: Record<string, DeepSeekModel> = {
   "italian-reviewer": "deepseek-reasoner", // R1 for Italian review
   "chapter_expander": "deepseek-chat", // V3 for chapter expansion
   "new_chapter_generator": "deepseek-chat", // V3 for new chapter generation
-  "ghostwriter": "deepseek-chat", // V3 for creative writing
-  "final-reviewer": "deepseek-reasoner", // R1 for final review analysis
 };
 
 export type AIModel = GeminiModel | DeepSeekModel;
@@ -403,11 +399,39 @@ export abstract class BaseAgent {
             console.log(`[${this.config.name}] Found JSON in reasoning_content, extracting...`);
             content = jsonMatch[1].trim();
           } else {
-            // Try to find raw JSON object in reasoning
-            const rawJsonMatch = thoughtSignature.match(/(\{[\s\S]*"world_bible"[\s\S]*\})/);
-            if (rawJsonMatch) {
-              console.log(`[${this.config.name}] Found raw JSON in reasoning_content, extracting...`);
-              content = rawJsonMatch[1];
+            // Try to find raw JSON object in reasoning - look for various patterns
+            // Support world_bible, veredicto, puntuacion_global, bestsellerScore, etc.
+            const jsonPatterns = [
+              /(\{[\s\S]*"world_bible"[\s\S]*\})/,
+              /(\{[\s\S]*"veredicto"[\s\S]*\})/,
+              /(\{[\s\S]*"puntuacion_global"[\s\S]*\})/,
+              /(\{[\s\S]*"bestsellerScore"[\s\S]*\})/,
+              /(\{[\s\S]*"issues"[\s\S]*\})/,
+              /(\{[\s\S]*"capituloReescrito"[\s\S]*\})/,
+              /(\{[\s\S]*"erroresContinuidad"[\s\S]*\})/,
+            ];
+            
+            for (const pattern of jsonPatterns) {
+              const rawJsonMatch = thoughtSignature.match(pattern);
+              if (rawJsonMatch) {
+                console.log(`[${this.config.name}] Found raw JSON in reasoning_content, extracting...`);
+                content = rawJsonMatch[1];
+                break;
+              }
+            }
+            
+            // Last resort: try to find any valid JSON object
+            if (content.length === 0) {
+              const anyJsonMatch = thoughtSignature.match(/(\{[\s\S]*\})/);
+              if (anyJsonMatch) {
+                try {
+                  JSON.parse(anyJsonMatch[1]);
+                  console.log(`[${this.config.name}] Found valid JSON in reasoning_content via generic match, extracting...`);
+                  content = anyJsonMatch[1];
+                } catch {
+                  // Not valid JSON, ignore
+                }
+              }
             }
           }
         }

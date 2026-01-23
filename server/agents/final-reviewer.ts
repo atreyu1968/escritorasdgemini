@@ -419,13 +419,33 @@ El objetivo es alcanzar 9+ puntos. No apruebes con puntuación inferior.`;
     const response = await this.generateContent(prompt);
     
     try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      // Try to find JSON in the response content
+      let jsonContent = response.content;
+      
+      // If content is empty but thoughtSignature has content, try to extract from there
+      if ((!jsonContent || jsonContent.trim().length === 0) && response.thoughtSignature) {
+        console.log("[FinalReviewer] Content empty, checking thoughtSignature for JSON...");
+        const jsonInThought = response.thoughtSignature.match(/\{[\s\S]*\}/);
+        if (jsonInThought) {
+          jsonContent = jsonInThought[0];
+          console.log("[FinalReviewer] Found JSON in thoughtSignature");
+        }
+      }
+      
+      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]) as FinalReviewerResult;
-        return { ...response, result };
+        // Validate we have a valid score
+        if (result.puntuacion_global !== undefined && result.puntuacion_global > 0) {
+          console.log(`[FinalReviewer] Successfully parsed response: score ${result.puntuacion_global}/10`);
+          return { ...response, result };
+        } else {
+          console.warn(`[FinalReviewer] Parsed JSON but puntuacion_global is ${result.puntuacion_global}, treating as parse error`);
+        }
       }
     } catch (e) {
-      console.error("[FinalReviewer] Failed to parse JSON response");
+      console.error("[FinalReviewer] Failed to parse JSON response:", e);
+      console.error("[FinalReviewer] Content preview:", response.content?.substring(0, 500) || "EMPTY");
     }
 
     console.error("[FinalReviewer] FALLBACK ACTIVADO - forzando REQUIERE_REVISION para reintento (sin reescritura de capítulos)");
