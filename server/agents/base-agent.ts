@@ -591,6 +591,13 @@ export abstract class BaseAgent {
         
         const elapsedMs = Date.now() - startTime;
         console.log(`[${this.config.name}] Gemini API call completed in ${Math.round(elapsedMs / 1000)}s`);
+        
+        // DETAILED LOGGING: Log raw response structure
+        console.log(`[${this.config.name}] Response candidates count: ${response.candidates?.length || 0}`);
+        if (response.candidates?.[0]) {
+          console.log(`[${this.config.name}] Candidate[0] finishReason: ${response.candidates[0].finishReason}`);
+          console.log(`[${this.config.name}] Candidate[0] parts count: ${response.candidates[0].content?.parts?.length || 0}`);
+        }
 
         const candidate = response.candidates?.[0];
         let content = "";
@@ -604,6 +611,17 @@ export abstract class BaseAgent {
               content += part.text;
             }
           }
+        }
+        
+        // DETAILED LOGGING: Log extracted content lengths
+        console.log(`[${this.config.name}] Extracted content length: ${content.length}`);
+        console.log(`[${this.config.name}] Extracted thoughtSignature length: ${thoughtSignature.length}`);
+        
+        // Log first 500 chars of content for debugging
+        if (content.length > 0) {
+          console.log(`[${this.config.name}] Content preview (first 500 chars): ${content.substring(0, 500)}`);
+        } else {
+          console.log(`[${this.config.name}] WARNING: Content is EMPTY!`);
         }
         
         if (!thoughtSignature && candidate?.content?.parts) {
