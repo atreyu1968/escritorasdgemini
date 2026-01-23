@@ -340,6 +340,9 @@ export class FinalReviewerAgent extends BaseAgent {
   }
 
   async execute(input: FinalReviewerInput): Promise<AgentResponse & { result?: FinalReviewerResult }> {
+    console.log(`[FinalReviewer] ========== EXECUTE CALLED ==========`);
+    console.log(`[FinalReviewer] Input chapters: ${input.chapters?.length || 0}, pasadaNumero: ${input.pasadaNumero}`);
+    
     // Helper to get proper chapter label based on number
     const getChapterLabel = (num: number): string => {
       if (num === 0) return "Prólogo";
@@ -416,12 +419,11 @@ El objetivo es alcanzar 9+ puntos. No apruebes con puntuación inferior.`;
     Responde ÚNICAMENTE con el JSON estructurado según el formato especificado.
     `;
 
-    // For large manuscripts (>400K chars ≈ 100K tokens), use Gemini which has 2M token context
-    // DeepSeek has 131K token limit which is insufficient for full manuscripts
-    const useGemini = prompt.length > 400000;
-    console.log(`[FinalReviewer] Prompt size: ${prompt.length} chars, using: ${useGemini ? 'Gemini (large context)' : 'DeepSeek'}`);
+    // ALWAYS use Gemini for FinalReviewer - DeepSeek consistently fails with empty responses
+    // on full manuscripts (even below 131K token limit). Gemini has 2M token context and works reliably.
+    console.log(`[FinalReviewer] Prompt size: ${prompt.length} chars - ALWAYS using Gemini for full manuscript review`);
     
-    const response = await this.generateContent(prompt, undefined, useGemini ? { forceProvider: "gemini" } : undefined);
+    const response = await this.generateContent(prompt, undefined, { forceProvider: "gemini" });
     
     try {
       // Try to find JSON in the response content
