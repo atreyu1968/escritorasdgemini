@@ -1228,12 +1228,32 @@ Proporciona tu evaluación en formato JSON, con todos los textos en ESPAÑOL.`;
     const response = await this.generateContent(prompt);
     let result: any = { bestsellerScore: 7, strengths: [], weaknesses: [], recommendations: [], marketPotential: "moderate" };
     try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      // Try to find JSON in content first
+      let jsonContent = response.content;
+      
+      // If content is empty but thoughtSignature has content, try to extract from there
+      if ((!jsonContent || jsonContent.trim().length === 0) && response.thoughtSignature) {
+        console.log("[ReeditFinalReviewer] Content empty, checking thoughtSignature for JSON...");
+        const jsonInThought = response.thoughtSignature.match(/\{[\s\S]*\}/);
+        if (jsonInThought) {
+          jsonContent = jsonInThought[0];
+          console.log("[ReeditFinalReviewer] Found JSON in thoughtSignature");
+        }
+      }
+      
+      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.bestsellerScore !== undefined && parsed.bestsellerScore > 0) {
+          result = parsed;
+          console.log(`[ReeditFinalReviewer] Successfully parsed response: score ${result.bestsellerScore}/10`);
+        } else {
+          console.warn(`[ReeditFinalReviewer] Parsed JSON but bestsellerScore is ${parsed.bestsellerScore}`);
+        }
       }
     } catch (e) {
       console.error("[ReeditFinalReviewer] Failed to parse response:", e);
+      console.error("[ReeditFinalReviewer] Content preview:", response.content?.substring(0, 500) || "EMPTY");
     }
     result.tokenUsage = response.tokenUsage;
     return result;
