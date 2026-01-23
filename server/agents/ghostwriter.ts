@@ -288,8 +288,8 @@ export class GhostwriterAgent extends BaseAgent {
       name: "El Narrador",
       role: "ghostwriter",
       systemPrompt: SYSTEM_PROMPT,
-      model: "deepseek-chat",
-      useThinking: false,
+      model: "deepseek-reasoner",
+      useThinking: true,
     });
   }
 
