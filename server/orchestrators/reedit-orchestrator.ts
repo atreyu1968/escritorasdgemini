@@ -3632,9 +3632,12 @@ export class ReeditOrchestrator {
                 console.log(`[ReeditOrchestrator] SAVED history for chapter ${chapter.chapterNumber}: now has ${existingHistory.length} entries`);
                 
                 // PERSIST correction counts AND change history to database
+                const countsToSaveNonFRO = Object.fromEntries(chapterCorrectionCounts);
+                const historyToSaveNonFRO = Object.fromEntries(chapterChangeHistory);
+                console.log(`[ReeditOrchestrator] PERSISTING to DB - Counts: ${JSON.stringify(countsToSaveNonFRO)}, History keys: ${Object.keys(historyToSaveNonFRO).join(', ')}`);
                 await storage.updateReeditProject(projectId, {
-                  chapterCorrectionCounts: Object.fromEntries(chapterCorrectionCounts) as any,
-                  chapterChangeHistory: Object.fromEntries(chapterChangeHistory) as any,
+                  chapterCorrectionCounts: countsToSaveNonFRO as any,
+                  chapterChangeHistory: historyToSaveNonFRO as any,
                 });
                 
                 // Track corrected issues so FinalReviewer doesn't report them again
@@ -4236,6 +4239,7 @@ export class ReeditOrchestrator {
             this.trackTokens(rewriteResult);
             await this.updateHeartbeat(projectId);
 
+            console.log(`[ReeditOrchestrator] FRO Rewrite result for chapter ${chapter.chapterNumber}: has capituloReescrito=${!!rewriteResult.capituloReescrito}, length=${rewriteResult.capituloReescrito?.length || 0}`);
             if (rewriteResult.capituloReescrito) {
               const wordCount = rewriteResult.capituloReescrito.split(/\s+/).filter((w: string) => w.length > 0).length;
               await storage.updateReeditChapter(chapter.id, {
@@ -4263,9 +4267,12 @@ export class ReeditOrchestrator {
               console.log(`[ReeditOrchestrator] FRO SAVED history for chapter ${chapter.chapterNumber}: now has ${existingHistoryFRO.length} entries`);
               
               // PERSIST correction counts AND change history to database
+              const countsToSave = Object.fromEntries(chapterCorrectionCountsFRO);
+              const historyToSave = Object.fromEntries(chapterChangeHistoryFRO);
+              console.log(`[ReeditOrchestrator] FRO PERSISTING to DB - Counts: ${JSON.stringify(countsToSave)}, History keys: ${Object.keys(historyToSave).join(', ')}`);
               await storage.updateReeditProject(projectId, {
-                chapterCorrectionCounts: Object.fromEntries(chapterCorrectionCountsFRO) as any,
-                chapterChangeHistory: Object.fromEntries(chapterChangeHistoryFRO) as any,
+                chapterCorrectionCounts: countsToSave as any,
+                chapterChangeHistory: historyToSave as any,
               });
               
               // Mark these issues as resolved with hash tracking
@@ -4275,6 +4282,8 @@ export class ReeditOrchestrator {
               for (const issue of chapterIssuesFRO) {
                 correctedIssueDescriptions.push(issue.descripcion);
               }
+            } else {
+              console.log(`[ReeditOrchestrator] FRO: Chapter ${chapter.chapterNumber} rewrite SKIPPED - no capituloReescrito in result`);
             }
           } catch (err) {
             console.error(`[ReeditOrchestrator] Error fixing chapter ${chapter.chapterNumber}:`, err);
