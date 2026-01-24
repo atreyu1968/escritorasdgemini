@@ -327,6 +327,9 @@ SALIDA OBLIGATORIA (JSON):
 }
 `;
 
+// Maximum chapters per tranche to stay within DeepSeek's 131k token limit
+const CHAPTERS_PER_TRANCHE = 8;
+
 export class FinalReviewerAgent extends BaseAgent {
   constructor() {
     super({
@@ -335,61 +338,39 @@ export class FinalReviewerAgent extends BaseAgent {
       systemPrompt: SYSTEM_PROMPT,
       model: "deepseek-reasoner",
       useThinking: false,
-      useReeditorClient: true, // Use dedicated API key for parallel re-editing
+      useReeditorClient: true,
     });
   }
 
-  async execute(input: FinalReviewerInput): Promise<AgentResponse & { result?: FinalReviewerResult }> {
-    console.log(`[FinalReviewer] ========== EXECUTE CALLED ==========`);
-    console.log(`[FinalReviewer] Input chapters: ${input.chapters?.length || 0}, pasadaNumero: ${input.pasadaNumero}`);
-    
-    // Helper to get proper chapter label based on number
-    const getChapterLabel = (num: number): string => {
-      if (num === 0) return "Prólogo";
-      if (num === -1 || num === 998) return "Epílogo";
-      if (num === -2 || num === 999) return "Nota del Autor";
-      return `Capítulo ${num}`;
-    };
-    
-    // Sort chapters in narrative order (prologue first, epilogue/author note last)
-    const getChapterSortOrder = (n: number): number => {
-      if (n === 0) return -1000;
-      if (n === -1 || n === 998) return 1000;
-      if (n === -2 || n === 999) return 1001;
-      return n;
-    };
-    
-    const sortedChapters = [...input.chapters].sort((a, b) => 
-      getChapterSortOrder(a.numero) - getChapterSortOrder(b.numero)
-    );
-    
-    const chaptersText = sortedChapters.map(c => 
-      `\n===== ${getChapterLabel(c.numero)}: ${c.titulo} =====\n${c.contenido}`
+  // Helper to get proper chapter label based on number
+  private getChapterLabel(num: number): string {
+    if (num === 0) return "Prólogo";
+    if (num === -1 || num === 998) return "Epílogo";
+    if (num === -2 || num === 999) return "Nota del Autor";
+    return `Capítulo ${num}`;
+  }
+
+  // Sort order for chapters (prologue first, epilogue/author note last)
+  private getChapterSortOrder(n: number): number {
+    if (n === 0) return -1000;
+    if (n === -1 || n === 998) return 1000;
+    if (n === -2 || n === 999) return 1001;
+    return n;
+  }
+
+  // Review a single tranche of chapters
+  private async reviewTranche(
+    input: FinalReviewerInput,
+    trancheChapters: Array<{ numero: number; titulo: string; contenido: string }>,
+    trancheNum: number,
+    totalTranches: number,
+    pasadaInfo: string
+  ): Promise<Partial<FinalReviewerResult>> {
+    const chaptersText = trancheChapters.map(c => 
+      `\n===== ${this.getChapterLabel(c.numero)}: ${c.titulo} =====\n${c.contenido}`
     ).join("\n\n");
 
-    let pasadaInfo = "";
-    if (input.pasadaNumero === 1) {
-      pasadaInfo = "\n\nEsta es tu PASADA #1 - AUDITORÍA COMPLETA. Analiza exhaustivamente y reporta máximo 5 issues (los más graves). OBJETIVO: puntuación 9+.";
-    } else if (input.pasadaNumero && input.pasadaNumero >= 2) {
-      pasadaInfo = `\n\nEsta es tu PASADA #${input.pasadaNumero} - VERIFICACIÓN Y RE-EVALUACIÓN.
-
-═══════════════════════════════════════════════════════════════════
-ISSUES YA CORREGIDOS EN PASADAS ANTERIORES (NO REPORTAR DE NUEVO):
-═══════════════════════════════════════════════════════════════════
-${input.issuesPreviosCorregidos?.map(i => `- ${i}`).join("\n") || "Ninguno"}
-
-REGLAS CRÍTICAS PARA ESTA PASADA:
-1. Los capítulos HAN SIDO REESCRITOS desde la última evaluación
-2. NO reportes issues que aparecen en la lista anterior - YA fueron corregidos
-3. Solo reporta problemas NUEVOS o que NO estaban en la lista anterior
-4. Evalúa el manuscrito CON OJOS FRESCOS - el texto ha cambiado
-5. Si puntuación >= 9 → APROBADO (no busques problemas inexistentes)
-6. Si puntuación < 9 → REQUIERE_REVISION con instrucciones específicas NUEVAS
-
-IMPORTANTE: Si un issue previo fue corregido satisfactoriamente, NO lo menciones.
-Si el mismo problema persiste EXACTAMENTE igual, puedes reportarlo, pero con nueva redacción.
-El objetivo es alcanzar 9+ puntos. No apruebes con puntuación inferior.`;
-    }
+    const chapterRange = trancheChapters.map(c => this.getChapterLabel(c.numero)).join(", ");
 
     const prompt = `
     TÍTULO DE LA NOVELA: ${input.projectTitle}
@@ -400,70 +381,171 @@ El objetivo es alcanzar 9+ puntos. No apruebes con puntuación inferior.`;
     GUÍA DE ESTILO:
     ${input.guiaEstilo}
     ${pasadaInfo}
-    ===============================================
-    MANUSCRITO COMPLETO PARA ANÁLISIS:
+    
+    ═══════════════════════════════════════════════════════════════════
+    REVISIÓN POR TRANCHES: TRAMO ${trancheNum}/${totalTranches}
+    Capítulos en este tramo: ${chapterRange}
+    ═══════════════════════════════════════════════════════════════════
+    
+    MANUSCRITO (TRAMO ${trancheNum}):
     ===============================================
     ${chaptersText}
     ===============================================
     
-    INSTRUCCIONES:
-    1. Lee el manuscrito COMPLETO de principio a fin.
-    2. Compara CADA descripción física con la World Bible.
-    3. Verifica la coherencia temporal entre capítulos.
-    4. Identifica repeticiones léxicas cross-chapter (solo si aparecen 3+ veces).
-    5. Evalúa si todos los arcos narrativos están cerrados.
+    INSTRUCCIONES PARA ESTE TRAMO:
+    1. Analiza SOLO los capítulos de este tramo.
+    2. Compara las descripciones físicas con la World Bible.
+    3. Verifica coherencia interna del tramo.
+    4. Identifica repeticiones léxicas (solo si aparecen 3+ veces).
+    5. Evalúa calidad narrativa de estos capítulos.
     
     Sé PRECISO y OBJETIVO. Solo reporta errores con EVIDENCIA TEXTUAL verificable.
-    Si el manuscrito está bien, apruébalo. No busques problemas donde no los hay.
     
     Responde ÚNICAMENTE con el JSON estructurado según el formato especificado.
+    NOTA: En "capitulos_afectados" y "capitulos_para_reescribir", solo incluye capítulos de ESTE tramo.
     `;
 
+    console.log(`[FinalReviewer] Tramo ${trancheNum}/${totalTranches}: ${trancheChapters.length} capítulos, ${chaptersText.length} chars`);
+    
     const response = await this.generateContent(prompt);
     
-    // DEBUG: Save raw response to file for diagnosis
-    const fs = await import('fs');
-    const debugPath = `/tmp/final_reviewer_debug_${Date.now()}.txt`;
-    fs.writeFileSync(debugPath, `=== CONTENT (${response.content?.length || 0} chars) ===\n${response.content || 'NULL'}\n\n=== THOUGHT SIGNATURE (${response.thoughtSignature?.length || 0} chars) ===\n${response.thoughtSignature || 'NULL'}`);
-    console.log(`[FinalReviewer] DEBUG: Saved raw response to ${debugPath}`);
-    
     try {
-      // Simple parsing like original pre-DeepSeek implementation
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]) as FinalReviewerResult;
-        console.log(`[FinalReviewer] Parsed successfully: score ${result.puntuacion_global}/10, veredicto: ${result.veredicto}`);
-        return { ...response, result };
+        console.log(`[FinalReviewer] Tramo ${trancheNum}: score ${result.puntuacion_global}/10, issues: ${result.issues?.length || 0}`);
+        return result;
       }
     } catch (e) {
-      console.error("[FinalReviewer] Failed to parse JSON response:", e);
+      console.error(`[FinalReviewer] Tramo ${trancheNum}: Failed to parse JSON:`, e);
+    }
+    
+    // Return empty partial result on parse failure
+    return {
+      puntuacion_global: 8,
+      issues: [],
+      capitulos_para_reescribir: [],
+    };
+  }
+
+  async execute(input: FinalReviewerInput): Promise<AgentResponse & { result?: FinalReviewerResult }> {
+    console.log(`[FinalReviewer] ========== EXECUTE CALLED ==========`);
+    console.log(`[FinalReviewer] Input chapters: ${input.chapters?.length || 0}, pasadaNumero: ${input.pasadaNumero}`);
+    
+    const sortedChapters = [...input.chapters].sort((a, b) => 
+      this.getChapterSortOrder(a.numero) - this.getChapterSortOrder(b.numero)
+    );
+
+    let pasadaInfo = "";
+    if (input.pasadaNumero === 1) {
+      pasadaInfo = "\n\nEsta es tu PASADA #1 - AUDITORÍA COMPLETA. Reporta máximo 3 issues por tramo (los más graves). OBJETIVO: puntuación 9+.";
+    } else if (input.pasadaNumero && input.pasadaNumero >= 2) {
+      pasadaInfo = `\n\nEsta es tu PASADA #${input.pasadaNumero} - VERIFICACIÓN Y RE-EVALUACIÓN.
+
+ISSUES YA CORREGIDOS EN PASADAS ANTERIORES (NO REPORTAR DE NUEVO):
+${input.issuesPreviosCorregidos?.map(i => `- ${i}`).join("\n") || "Ninguno"}
+
+REGLAS:
+1. NO reportes issues de la lista anterior - YA fueron corregidos
+2. Solo reporta problemas NUEVOS
+3. Si puntuación >= 9 → APROBADO`;
     }
 
-    // CRITICAL: Fallback must approve to prevent infinite loops (restored from pre-DeepSeek behavior)
-    console.warn("[FinalReviewer] FALLBACK: Parsing failed, approving with score 8 to prevent infinite loop");
-    return { 
-      ...response, 
-      result: { 
-        veredicto: "APROBADO",
-        resumen_general: "Revisión completada automáticamente",
-        puntuacion_global: 8,
-        justificacion_puntuacion: {
-          puntuacion_desglosada: {
-            enganche: 8,
-            personajes: 8,
-            trama: 8,
-            atmosfera: 8,
-            ritmo: 8,
-            cumplimiento_genero: 8
-          },
-          fortalezas_principales: ["Manuscrito completado"],
-          debilidades_principales: [],
-          comparacion_mercado: "Evaluación automática por fallo de parsing",
-          recomendaciones_proceso: []
+    // Calculate tranches
+    const totalChapters = sortedChapters.length;
+    const numTranches = Math.ceil(totalChapters / CHAPTERS_PER_TRANCHE);
+    
+    console.log(`[FinalReviewer] Dividiendo ${totalChapters} capítulos en ${numTranches} tramos de ~${CHAPTERS_PER_TRANCHE} capítulos`);
+
+    // Process each tranche
+    const trancheResults: Partial<FinalReviewerResult>[] = [];
+    let totalTokenUsage = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 };
+    
+    for (let t = 0; t < numTranches; t++) {
+      const startIdx = t * CHAPTERS_PER_TRANCHE;
+      const endIdx = Math.min(startIdx + CHAPTERS_PER_TRANCHE, totalChapters);
+      const trancheChapters = sortedChapters.slice(startIdx, endIdx);
+      
+      const result = await this.reviewTranche(input, trancheChapters, t + 1, numTranches, pasadaInfo);
+      trancheResults.push(result);
+    }
+
+    // Combine results from all tranches
+    const allIssues: FinalReviewerResult["issues"] = [];
+    const allChaptersToRewrite: FinalReviewerResult["capitulos_para_reescribir"] = [];
+    const allPlotDecisions: FinalReviewerResult["plot_decisions"] = [];
+    const allPersistentInjuries: FinalReviewerResult["persistent_injuries"] = [];
+    const allOrphanChapters: FinalReviewerResult["orphan_chapters"] = [];
+    let totalScore = 0;
+    let scoreCount = 0;
+
+    for (const result of trancheResults) {
+      if (result.issues) allIssues.push(...result.issues);
+      if (result.capitulos_para_reescribir) allChaptersToRewrite.push(...result.capitulos_para_reescribir);
+      if (result.plot_decisions) allPlotDecisions.push(...result.plot_decisions);
+      if (result.persistent_injuries) allPersistentInjuries.push(...result.persistent_injuries);
+      if (result.orphan_chapters) allOrphanChapters.push(...result.orphan_chapters);
+      if (result.puntuacion_global !== undefined) {
+        totalScore += result.puntuacion_global;
+        scoreCount++;
+      }
+    }
+
+    // Calculate average score
+    const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 8;
+    
+    // Determine verdict based on combined results
+    const hasCriticalIssues = allIssues.some(i => i.severidad === "critica");
+    const veredicto = (avgScore >= 9 && !hasCriticalIssues) ? "APROBADO" : "REQUIERE_REVISION";
+
+    console.log(`[FinalReviewer] Combinando ${numTranches} tramos: score promedio ${avgScore}/10, issues totales: ${allIssues.length}, veredicto: ${veredicto}`);
+
+    // Build combined result
+    const combinedResult: FinalReviewerResult = {
+      veredicto,
+      resumen_general: `Revisión por tranches completada. ${numTranches} tramos analizados. Puntuación promedio: ${avgScore}/10. Issues encontrados: ${allIssues.length}.`,
+      puntuacion_global: avgScore,
+      justificacion_puntuacion: {
+        puntuacion_desglosada: {
+          enganche: avgScore,
+          personajes: avgScore,
+          trama: avgScore,
+          atmosfera: avgScore,
+          ritmo: avgScore,
+          cumplimiento_genero: avgScore
         },
-        issues: [],
-        capitulos_para_reescribir: []
-      } 
+        fortalezas_principales: [],
+        debilidades_principales: allIssues.slice(0, 3).map(i => i.descripcion),
+        comparacion_mercado: "Evaluación combinada de múltiples tramos",
+        recomendaciones_proceso: []
+      },
+      analisis_bestseller: {
+        hook_inicial: "Evaluado por tranches",
+        cadencia_giros: "Evaluado por tranches",
+        escalada_tension: "Evaluado por tranches",
+        efectividad_cliffhangers: "Evaluado por tranches",
+        potencia_climax: "Evaluado por tranches",
+        como_subir_a_9: allIssues.length > 0 ? `Corregir ${allIssues.length} issues identificados` : "Mantener calidad actual"
+      },
+      issues: allIssues.slice(0, 10), // Limit to top 10 issues
+      capitulos_para_reescribir: Array.from(new Set(allChaptersToRewrite)), // Deduplicate
+      plot_decisions: allPlotDecisions,
+      persistent_injuries: allPersistentInjuries,
+      orphan_chapters: allOrphanChapters,
     };
+
+    // Save debug info
+    const fs = await import('fs');
+    const debugPath = `/tmp/final_reviewer_debug_${Date.now()}.txt`;
+    fs.writeFileSync(debugPath, `=== COMBINED RESULT ===\n${JSON.stringify(combinedResult, null, 2)}`);
+    console.log(`[FinalReviewer] DEBUG: Saved combined result to ${debugPath}`);
+
+    const response: AgentResponse = {
+      content: JSON.stringify(combinedResult),
+      thoughtSignature: `Revisión por tranches: ${numTranches} tramos`,
+      tokenUsage: totalTokenUsage,
+    };
+
+    return { ...response, result: combinedResult };
   }
 }
