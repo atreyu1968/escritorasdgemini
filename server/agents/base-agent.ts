@@ -225,15 +225,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Enhanced withTimeout that also supports aborting the underlying request
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  operationName: string
+  operationName: string,
+  abortController?: AbortController
 ): Promise<T> {
   let timeoutId: NodeJS.Timeout;
   
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
+      // Abort the underlying request when timeout expires
+      if (abortController) {
+        console.log(`[withTimeout] Aborting request for ${operationName} after ${timeoutMs}ms`);
+        abortController.abort();
+      }
       reject(new Error(`TIMEOUT: ${operationName} exceeded ${timeoutMs}ms`));
     }, timeoutMs);
   });
@@ -372,14 +379,20 @@ export abstract class BaseAgent {
         console.log(`  - userPrompt length: ${userPromptLength} chars`);
         console.log(`  - total prompt chars: ${systemPromptLength + userPromptLength}`);
         
-        const generatePromise = deepseek.chat.completions.create(requestParams);
+        // Create AbortController to cancel hanging requests
+        const requestAbortController = new AbortController();
+        
+        const generatePromise = deepseek.chat.completions.create(requestParams, {
+          signal: requestAbortController.signal as any, // Pass abort signal to cancel hanging connections
+        });
 
         console.log(`[${this.config.name}] DeepSeek request created, awaiting response (timeout: ${effectiveTimeout/1000}s)...`);
 
         const response = await withTimeout(
           generatePromise,
           effectiveTimeout,
-          `${this.config.name} DeepSeek generation`
+          `${this.config.name} DeepSeek generation`,
+          requestAbortController
         );
         
         const elapsedMs = Date.now() - startTime;
