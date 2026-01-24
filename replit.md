@@ -63,6 +63,11 @@ Preferred communication style: Simple, everyday language.
 - **Translation Export Improvements**: Markdown exports now: (1) strip code fences/JSON artifacts from AI output, (2) omit trailing dividers after the last chapter, and (3) use localized chapter labels (Prologue, Epilogue, Author's Note, Chapter) based on project language for 7 languages (es, en, fr, de, it, pt, ca).
 - **Immediate Continuity Validation**: Validates each chapter immediately after writing, before the Editor stage. Detects dead characters acting, ignored injuries, and location inconsistencies. If violations are found, forces a targeted rewrite with specific correction instructions before proceeding.
 - **Mandatory Continuity Constraints**: The Ghostwriter now receives prominent, structured constraints at the top of its context listing dead characters, active injuries, and last known locations, with clear warnings that violations will trigger automatic rejection.
+- **DeepSeek-Based FinalReviewer with Tranche System**: The FinalReviewer uses DeepSeek-reasoner (131k token limit) instead of Gemini for cost efficiency. Full manuscripts are divided into tranches of 8 chapters each, processed sequentially with accumulated context passed between tranches to ensure consistency. Features include:
+  - **Accumulated Context**: Each tranche receives a summary of issues found in previous tranches to avoid duplicate reports and detect cross-tranche inconsistencies.
+  - **Intelligent Deduplication**: Similar issues from different tranches are merged, with affected chapters combined and issues sorted by severity (critical first).
+  - **WorldBible Sync**: After review, plotDecisions and persistentInjuries are saved to WorldBible for continuity enforcement.
+  - **Ghostwriter Integration**: Issues with detailed correction instructions are passed to the Ghostwriter, which receives the full context for surgical rewrites.
 
 ## External Dependencies
 

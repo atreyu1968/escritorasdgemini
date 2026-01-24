@@ -358,19 +358,77 @@ export class FinalReviewerAgent extends BaseAgent {
     return n;
   }
 
+  // Deduplicate similar issues from different tranches
+  private deduplicateIssues(issues: FinalReviewerResult["issues"]): FinalReviewerResult["issues"] {
+    if (!issues || issues.length === 0) return [];
+    
+    const uniqueIssues: FinalReviewerResult["issues"] = [];
+    const seenHashes = new Set<string>();
+    
+    for (const issue of issues) {
+      // Create a hash based on category and key words from description
+      const descWords = issue.descripcion.toLowerCase()
+        .replace(/[^a-záéíóúñ\s]/g, "")
+        .split(/\s+/)
+        .filter(w => w.length > 4)
+        .slice(0, 5)
+        .sort()
+        .join("-");
+      
+      const hash = `${issue.categoria}-${descWords}`;
+      
+      if (!seenHashes.has(hash)) {
+        seenHashes.add(hash);
+        uniqueIssues.push(issue);
+      } else {
+        // Merge chapters from duplicate issue into existing one
+        const existing = uniqueIssues.find(i => {
+          const existingHash = `${i.categoria}-${i.descripcion.toLowerCase()
+            .replace(/[^a-záéíóúñ\s]/g, "")
+            .split(/\s+/)
+            .filter(w => w.length > 4)
+            .slice(0, 5)
+            .sort()
+            .join("-")}`;
+          return existingHash === hash;
+        });
+        if (existing) {
+          // Merge affected chapters
+          const mergedChapters = Array.from(new Set([...existing.capitulos_afectados, ...issue.capitulos_afectados]));
+          existing.capitulos_afectados = mergedChapters;
+        }
+      }
+    }
+    
+    // Sort by severity (critical first)
+    const severityOrder = { critica: 0, mayor: 1, menor: 2 };
+    return uniqueIssues.sort((a, b) => 
+      (severityOrder[a.severidad] || 2) - (severityOrder[b.severidad] || 2)
+    );
+  }
+
   // Review a single tranche of chapters
   private async reviewTranche(
     input: FinalReviewerInput,
     trancheChapters: Array<{ numero: number; titulo: string; contenido: string }>,
     trancheNum: number,
     totalTranches: number,
-    pasadaInfo: string
+    pasadaInfo: string,
+    previousTrancheContext: string = ""
   ): Promise<Partial<FinalReviewerResult>> {
     const chaptersText = trancheChapters.map(c => 
       `\n===== ${this.getChapterLabel(c.numero)}: ${c.titulo} =====\n${c.contenido}`
     ).join("\n\n");
 
     const chapterRange = trancheChapters.map(c => this.getChapterLabel(c.numero)).join(", ");
+
+    // Build context from previous tranches to ensure consistency
+    const previousContext = previousTrancheContext ? `
+    ═══════════════════════════════════════════════════════════════════
+    CONTEXTO DE TRANCHES ANTERIORES (NO REPORTAR ESTOS ISSUES DE NUEVO):
+    ${previousTrancheContext}
+    ═══════════════════════════════════════════════════════════════════
+    ` : "";
 
     const prompt = `
     TÍTULO DE LA NOVELA: ${input.projectTitle}
@@ -381,7 +439,7 @@ export class FinalReviewerAgent extends BaseAgent {
     GUÍA DE ESTILO:
     ${input.guiaEstilo}
     ${pasadaInfo}
-    
+    ${previousContext}
     ═══════════════════════════════════════════════════════════════════
     REVISIÓN POR TRANCHES: TRAMO ${trancheNum}/${totalTranches}
     Capítulos en este tramo: ${chapterRange}
@@ -398,6 +456,8 @@ export class FinalReviewerAgent extends BaseAgent {
     3. Verifica coherencia interna del tramo.
     4. Identifica repeticiones léxicas (solo si aparecen 3+ veces).
     5. Evalúa calidad narrativa de estos capítulos.
+    6. NO reportes issues que ya se mencionaron en tranches anteriores.
+    7. Si detectas una contradicción con un tranche anterior, REPÓRTALA como issue de consistencia.
     
     Sé PRECISO y OBJETIVO. Solo reporta errores con EVIDENCIA TEXTUAL verificable.
     
@@ -457,17 +517,33 @@ REGLAS:
     
     console.log(`[FinalReviewer] Dividiendo ${totalChapters} capítulos en ${numTranches} tramos de ~${CHAPTERS_PER_TRANCHE} capítulos`);
 
-    // Process each tranche
+    // Process each tranche with accumulated context from previous tranches
     const trancheResults: Partial<FinalReviewerResult>[] = [];
     let totalTokenUsage = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 };
+    let accumulatedIssuesSummary = "";
     
     for (let t = 0; t < numTranches; t++) {
       const startIdx = t * CHAPTERS_PER_TRANCHE;
       const endIdx = Math.min(startIdx + CHAPTERS_PER_TRANCHE, totalChapters);
       const trancheChapters = sortedChapters.slice(startIdx, endIdx);
       
-      const result = await this.reviewTranche(input, trancheChapters, t + 1, numTranches, pasadaInfo);
+      // Pass accumulated issues from previous tranches to ensure consistency
+      const result = await this.reviewTranche(input, trancheChapters, t + 1, numTranches, pasadaInfo, accumulatedIssuesSummary);
       trancheResults.push(result);
+      
+      // Build context summary for next tranche
+      if (result.issues && result.issues.length > 0) {
+        const issuesSummary = result.issues.map(i => 
+          `- [${i.severidad}] Cap ${i.capitulos_afectados.join(",")}: ${i.descripcion.substring(0, 100)}`
+        ).join("\n");
+        accumulatedIssuesSummary += `\nTRAMO ${t + 1}:\n${issuesSummary}`;
+      }
+      if (result.plot_decisions && result.plot_decisions.length > 0) {
+        const plotSummary = result.plot_decisions.map(d => 
+          `- Decisión en cap ${d.capitulo_establecido}: ${d.decision}`
+        ).join("\n");
+        accumulatedIssuesSummary += `\nDECISIONES DE TRAMA (Tramo ${t + 1}):\n${plotSummary}`;
+      }
     }
 
     // Combine results from all tranches
@@ -494,11 +570,14 @@ REGLAS:
     // Calculate average score
     const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 8;
     
+    // Deduplicate similar issues (same category and overlapping chapters)
+    const deduplicatedIssues = this.deduplicateIssues(allIssues);
+    
     // Determine verdict based on combined results
-    const hasCriticalIssues = allIssues.some(i => i.severidad === "critica");
+    const hasCriticalIssues = deduplicatedIssues.some(i => i.severidad === "critica");
     const veredicto = (avgScore >= 9 && !hasCriticalIssues) ? "APROBADO" : "REQUIERE_REVISION";
 
-    console.log(`[FinalReviewer] Combinando ${numTranches} tramos: score promedio ${avgScore}/10, issues totales: ${allIssues.length}, veredicto: ${veredicto}`);
+    console.log(`[FinalReviewer] Combinando ${numTranches} tramos: score promedio ${avgScore}/10, issues totales: ${allIssues.length} (${deduplicatedIssues.length} únicos), veredicto: ${veredicto}`);
 
     // Build combined result
     const combinedResult: FinalReviewerResult = {
@@ -527,7 +606,7 @@ REGLAS:
         potencia_climax: "Evaluado por tranches",
         como_subir_a_9: allIssues.length > 0 ? `Corregir ${allIssues.length} issues identificados` : "Mantener calidad actual"
       },
-      issues: allIssues.slice(0, 10), // Limit to top 10 issues
+      issues: deduplicatedIssues.slice(0, 10), // Limit to top 10 unique issues
       capitulos_para_reescribir: Array.from(new Set(allChaptersToRewrite)), // Deduplicate
       plot_decisions: allPlotDecisions,
       persistent_injuries: allPersistentInjuries,
