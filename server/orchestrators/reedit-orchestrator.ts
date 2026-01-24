@@ -3263,6 +3263,7 @@ export class ReeditOrchestrator {
       const chapterChangeHistory: Map<number, ChangeEntry[]> = new Map(
         Object.entries(loadedHistory).map(([k, v]) => [parseInt(k), v])
       );
+      console.log(`[ReeditOrchestrator] LOADED change history: ${chapterChangeHistory.size} chapters with history. Keys: [${Array.from(chapterChangeHistory.keys()).join(', ')}]`);
       const issueValidator = new IssueResolutionValidatorAgent();
       
       while (revisionCycle < this.maxFinalReviewCycles) {
@@ -3536,6 +3537,7 @@ export class ReeditOrchestrator {
 
             // INTELLIGENT VALIDATION: Check if issues were already resolved based on change history
             const chapterHistory = chapterChangeHistory.get(chapter.chapterNumber) || [];
+            console.log(`[ReeditOrchestrator] Chapter ${chapter.chapterNumber} - History entries: ${chapterHistory.length}, Issues to validate: ${chapterIssues.length}`);
             if (chapterHistory.length > 0 && chapterIssues.length > 0) {
               const validatedIssues: typeof chapterIssues = [];
               for (const issue of chapterIssues) {
@@ -3627,6 +3629,7 @@ export class ReeditOrchestrator {
                 // Keep only last 10 entries to prevent bloat
                 if (existingHistory.length > 10) existingHistory = existingHistory.slice(-10);
                 chapterChangeHistory.set(chapter.chapterNumber, existingHistory);
+                console.log(`[ReeditOrchestrator] SAVED history for chapter ${chapter.chapterNumber}: now has ${existingHistory.length} entries`);
                 
                 // PERSIST correction counts AND change history to database
                 await storage.updateReeditProject(projectId, {
@@ -3934,6 +3937,7 @@ export class ReeditOrchestrator {
     const chapterChangeHistoryFRO: Map<number, ChangeEntryFRO[]> = new Map(
       Object.entries(loadedHistoryFRO).map(([k, v]) => [parseInt(k), v])
     );
+    console.log(`[ReeditOrchestrator] FRO LOADED change history: ${chapterChangeHistoryFRO.size} chapters with history. Keys: [${Array.from(chapterChangeHistoryFRO.keys()).join(', ')}]`);
     const issueValidatorFRO = new IssueResolutionValidatorAgent();
     
     while (revisionCycle < this.maxFinalReviewCycles) {
@@ -4164,6 +4168,7 @@ export class ReeditOrchestrator {
 
           // INTELLIGENT VALIDATION: Check if issues were already resolved based on change history
           const chapterHistoryFRO = chapterChangeHistoryFRO.get(chapter.chapterNumber) || [];
+          console.log(`[ReeditOrchestrator] FRO Chapter ${chapter.chapterNumber} - History entries: ${chapterHistoryFRO.length}, Issues to validate: ${chapterIssuesFRO.length}`);
           if (chapterHistoryFRO.length > 0 && chapterIssuesFRO.length > 0) {
             const validatedIssuesFRO: typeof chapterIssuesFRO = [];
             for (const issue of chapterIssuesFRO) {
@@ -4255,6 +4260,7 @@ export class ReeditOrchestrator {
               // Keep only last 10 entries to prevent bloat
               if (existingHistoryFRO.length > 10) existingHistoryFRO = existingHistoryFRO.slice(-10);
               chapterChangeHistoryFRO.set(chapter.chapterNumber, existingHistoryFRO);
+              console.log(`[ReeditOrchestrator] FRO SAVED history for chapter ${chapter.chapterNumber}: now has ${existingHistoryFRO.length} entries`);
               
               // PERSIST correction counts AND change history to database
               await storage.updateReeditProject(projectId, {
