@@ -4289,14 +4289,15 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Keepalive heartbeat every 15 seconds to prevent connection timeout
+    // Keepalive heartbeat every 8 seconds to prevent proxy/load balancer timeouts in production
     const heartbeatInterval = setInterval(() => {
       try {
         res.write(`:heartbeat\n\n`);
       } catch (e) {
+        console.log(`[Translation] Heartbeat failed, connection likely closed`);
         clearInterval(heartbeatInterval);
       }
-    }, 15000);
+    }, 8000);
 
     // Clean up function
     const cleanup = () => {
@@ -4337,6 +4338,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
     
     try {
+      console.log(`[Translation] Starting translation for project ${projectId}: ${sourceLanguage} -> ${targetLanguage}`);
+      
       if (!targetLanguage) {
         sendEvent("error", { error: "targetLanguage is required" });
         cleanup();
@@ -4344,6 +4347,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return;
       }
       
+      console.log(`[Translation] Fetching chapters for project ${projectId}...`);
       const chapters = await storage.getChaptersByProject(projectId);
       if (chapters.length === 0) {
         sendEvent("error", { error: "No chapters found in project" });
@@ -4351,6 +4355,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         res.end();
         return;
       }
+      console.log(`[Translation] Found ${chapters.length} chapters`);
       
       const sortedChapters = [...chapters].sort((a, b) => {
         const orderA = a.chapterNumber === 0 ? -1000 : a.chapterNumber === -1 ? 1000 : a.chapterNumber === -2 ? 1001 : a.chapterNumber;
@@ -4360,6 +4365,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       
       const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
       const totalChapters = chaptersWithContent.length;
+      console.log(`[Translation] ${totalChapters} chapters with content ready for translation`);
       
       sendEvent("start", { 
         projectTitle: project.title,
@@ -4368,8 +4374,18 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         targetLanguage
       });
       
+      // Update heartbeat immediately to mark translation as active
+      if (translationRecordId) {
+        await storage.updateTranslation(translationRecordId, {
+          heartbeatAt: new Date(),
+        } as any);
+        console.log(`[Translation] Initial heartbeat set for record ${translationRecordId}`);
+      }
+      
+      console.log(`[Translation] Initializing TranslatorAgent...`);
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
+      console.log(`[Translation] TranslatorAgent initialized, starting translation loop...`);
       
       // Retry helper with exponential backoff for resilient translations
       const translateWithRetry = async (input: any, maxRetries = 3): Promise<any> => {
@@ -6360,14 +6376,15 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Keep-alive heartbeat
+    // Keep-alive heartbeat every 8 seconds to prevent proxy/load balancer timeouts in production
     const heartbeatInterval = setInterval(() => {
       try {
         res.write(": heartbeat\n\n");
       } catch {
+        console.log(`[Translation-Reedit] Heartbeat failed, connection likely closed`);
         clearInterval(heartbeatInterval);
       }
-    }, 15000);
+    }, 8000);
 
     const cleanup = () => {
       clearInterval(heartbeatInterval);
@@ -6406,6 +6423,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
     
     try {
+      console.log(`[Translation-Reedit] Starting translation for reedit project ${projectId}: ${sourceLanguage} -> ${targetLanguage}`);
+      
       if (!targetLanguage) {
         sendEvent("error", { error: "targetLanguage is required" });
         cleanup();
@@ -6413,6 +6432,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return;
       }
       
+      console.log(`[Translation-Reedit] Fetching chapters for reedit project ${projectId}...`);
       const chapters = await storage.getReeditChaptersByProject(projectId);
       if (chapters.length === 0) {
         sendEvent("error", { error: "No chapters found in project" });
@@ -6420,6 +6440,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         res.end();
         return;
       }
+      console.log(`[Translation-Reedit] Found ${chapters.length} chapters`);
       
       const getReeditChapterSortOrder4 = (n: number) => n === 0 ? -1000 : n === -1 || n === 998 ? 1000 : n === -2 || n === 999 ? 1001 : n;
       const sortedChapters = [...chapters].sort((a, b) => getReeditChapterSortOrder4(a.chapterNumber) - getReeditChapterSortOrder4(b.chapterNumber));
@@ -6427,6 +6448,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         (c.editedContent || c.originalContent)?.trim().length > 0
       );
       const totalChapters = chaptersWithContent.length;
+      console.log(`[Translation-Reedit] ${totalChapters} chapters with content ready for translation`);
       
       sendEvent("start", { 
         projectTitle: project.title,
@@ -6435,8 +6457,18 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         targetLanguage
       });
       
+      // Update heartbeat immediately to mark translation as active
+      if (translationRecordId) {
+        await storage.updateTranslation(translationRecordId, {
+          heartbeatAt: new Date(),
+        } as any);
+        console.log(`[Translation-Reedit] Initial heartbeat set for record ${translationRecordId}`);
+      }
+      
+      console.log(`[Translation-Reedit] Initializing TranslatorAgent...`);
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
+      console.log(`[Translation-Reedit] TranslatorAgent initialized, starting translation loop...`);
       
       const translatedChapters: Array<{
         chapterNumber: number;

@@ -34,6 +34,7 @@ interface TranslationProgress {
   chapterTitle: string;
   inputTokens: number;
   outputTokens: number;
+  status?: "active" | "reconnecting" | "background" | "error";
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -194,6 +195,7 @@ export default function ExportPage() {
     chapterTitle: savedState ? `Reconectando a "${savedState.projectTitle}"...` : "",
     inputTokens: savedState?.inputTokens || 0,
     outputTokens: savedState?.outputTokens || 0,
+    status: savedState ? "reconnecting" : undefined,
   });
 
   const { data: completedProjects = [], isLoading } = useQuery<CompletedProject[]>({
@@ -225,6 +227,7 @@ export default function ExportPage() {
       chapterTitle: "Iniciando...",
       inputTokens: 0,
       outputTokens: 0,
+      status: "active",
     });
     
     saveTranslationState({
@@ -380,16 +383,37 @@ export default function ExportPage() {
       if (eventSource.readyState !== EventSource.CLOSED) {
         eventSource.close();
         setEventSourceRef(null);
-        saveTranslationState(null);
         
-        setTranslationProgress({
-          isTranslating: false,
-          currentChapter: 0,
-          totalChapters: 0,
-          chapterTitle: "",
-          inputTokens: 0,
-          outputTokens: 0,
+        // Don't clear translation state - the server continues processing
+        // The watchdog will auto-resume and complete the translation
+        setTranslationProgress(prev => ({
+          ...prev,
+          status: "background",
+          chapterTitle: "Procesando en segundo plano...",
+        }));
+        
+        // Show toast to inform user
+        toast({
+          title: "Conexión interrumpida",
+          description: "La traducción continúa en segundo plano. Revisa el repositorio en unos minutos.",
+          variant: "default",
         });
+        
+        // Clear UI state after a short delay
+        setTimeout(() => {
+          saveTranslationState(null);
+          setTranslationProgress({
+            isTranslating: false,
+            currentChapter: 0,
+            totalChapters: 0,
+            chapterTitle: "",
+            inputTokens: 0,
+            outputTokens: 0,
+            status: undefined,
+          });
+          // Refresh translations list to show current status
+          queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
+        }, 3000);
       }
     };
   }, [toast, completedProjects, eventSourceRef]);
@@ -866,21 +890,44 @@ export default function ExportPage() {
                   )}
 
                   {translationProgress.isTranslating && (
-                    <div className="space-y-3 p-3 bg-muted rounded-md">
+                    <div className={`space-y-3 p-3 rounded-md ${
+                      translationProgress.status === "background" 
+                        ? "bg-orange-100 dark:bg-orange-950 border border-orange-300 dark:border-orange-800" 
+                        : "bg-muted"
+                    }`}>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">Traduciendo...</span>
+                        <span className="font-medium flex items-center gap-2">
+                          {translationProgress.status === "background" ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin text-orange-600" />
+                              <span className="text-orange-700 dark:text-orange-400">En segundo plano</span>
+                            </>
+                          ) : translationProgress.status === "reconnecting" ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                              <span className="text-blue-700 dark:text-blue-400">Reconectando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Traduciendo...
+                            </>
+                          )}
+                        </span>
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">
                             {translationProgress.currentChapter}/{translationProgress.totalChapters}
                           </span>
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            onClick={cancelTranslation}
-                            data-testid="button-cancel-translation"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          {translationProgress.status !== "background" && (
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={cancelTranslation}
+                              data-testid="button-cancel-translation"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <Progress 
@@ -890,10 +937,14 @@ export default function ExportPage() {
                         } 
                         className="h-2"
                       />
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className={`text-xs truncate ${
+                        translationProgress.status === "background" 
+                          ? "text-orange-600 dark:text-orange-400" 
+                          : "text-muted-foreground"
+                      }`}>
                         {translationProgress.chapterTitle}
                       </p>
-                      {translationProgress.inputTokens > 0 && (
+                      {translationProgress.inputTokens > 0 && translationProgress.status !== "background" && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <DollarSign className="h-3 w-3" />
                           <span>

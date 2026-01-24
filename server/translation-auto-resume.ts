@@ -4,8 +4,8 @@ import type { Translation } from "@shared/schema";
 
 const activeTranslations = new Map<number, boolean>();
 
-const WATCHDOG_INTERVAL_MS = 2 * 60 * 1000;
-const FROZEN_THRESHOLD_MS = 12 * 60 * 1000;
+const WATCHDOG_INTERVAL_MS = 1 * 60 * 1000; // Check every 1 minute
+const FROZEN_THRESHOLD_MS = 5 * 60 * 1000; // Consider frozen after 5 minutes (faster detection)
 
 let watchdogInterval: NodeJS.Timeout | null = null;
 
