@@ -2638,76 +2638,126 @@ ${chapterSummaries || "Sin capítulos disponibles"}
       const completedChapters = chapters.filter(c => c.status === "completed" && c.content);
       
       if (completedChapters.length > 0) {
-        this.callbacks.onAgentStatus("voice-auditor", "analyzing", 
-          `Ejecutando análisis de voz y ritmo antes de revisión final...`
-        );
+        // Check if voice audit was already completed to prevent infinite loops
+        const currentProjectForVoice = await storage.getProject(project.id);
+        const voiceAlreadyDone = (currentProjectForVoice as any)?.voiceAuditCompleted === true;
         
-        const trancheSize = 10;
-        const totalTranches = Math.ceil(completedChapters.length / trancheSize);
-        
-        for (let t = 0; t < totalTranches; t++) {
-          const trancheChapters = completedChapters.slice(t * trancheSize, (t + 1) * trancheSize);
-          if (trancheChapters.length > 0) {
-            const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
-            
-            if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
-              this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                `Corrigiendo ${voiceResult.chaptersToRevise.length} capítulos con issues de voz/ritmo...`
-              );
+        if (voiceAlreadyDone) {
+          this.callbacks.onAgentStatus("voice-auditor", "skipped", 
+            `Auditor de voz omitido - ya completado previamente`
+          );
+          console.log(`[Orchestrator:runFinalReviewOnly] Skipping voice auditor for project ${project.id} - already completed`);
+        } else {
+          this.callbacks.onAgentStatus("voice-auditor", "analyzing", 
+            `Ejecutando análisis de voz y ritmo antes de revisión final...`
+          );
+          
+          // Mark voice audit as completed BEFORE corrections to prevent re-running on interruption
+          await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
+          console.log(`[Orchestrator:runFinalReviewOnly] Voice audit marked complete BEFORE corrections for project ${project.id}`);
+          
+          const trancheSize = 10;
+          const totalTranches = Math.ceil(completedChapters.length / trancheSize);
+          let voiceCorrectionsApplied = false;
+          
+          for (let t = 0; t < totalTranches; t++) {
+            const trancheChapters = completedChapters.slice(t * trancheSize, (t + 1) * trancheSize);
+            if (trancheChapters.length > 0) {
+              const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
               
-              for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
-                // Check cancellation before each chapter correction
-                if (await isProjectCancelledFromDb(project.id)) {
-                  console.log(`[Orchestrator] Voice corrections cancelled at chapter ${idx + 1}/${voiceResult.chaptersToRevise.length} (runFinalReviewOnly)`);
-                  return;
-                }
+              if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
+                voiceCorrectionsApplied = true;
+                this.callbacks.onAgentStatus("voice-auditor", "editing", 
+                  `Corrigiendo ${voiceResult.chaptersToRevise.length} capítulos con issues de voz/ritmo...`
+                );
                 
-                const chapterNum = voiceResult.chaptersToRevise[idx];
-                const chapter = chapters.find(c => c.chapterNumber === chapterNum);
-                const sectionData = allSections.find(s => s.numero === chapterNum);
-                if (chapter && sectionData) {
-                  this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                    `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${voiceResult.chaptersToRevise.length})`
-                  );
-                  const correctionInstructions = voiceResult.issues.join("\n");
-                  await this.rewriteChapterForQA(project, chapter, sectionData, worldBibleData, guiaEstilo, "voice", correctionInstructions);
+                for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
+                  // Check cancellation before each chapter correction
+                  if (await isProjectCancelledFromDb(project.id)) {
+                    console.log(`[Orchestrator] Voice corrections cancelled at chapter ${idx + 1}/${voiceResult.chaptersToRevise.length} (runFinalReviewOnly)`);
+                    return;
+                  }
+                  
+                  const chapterNum = voiceResult.chaptersToRevise[idx];
+                  const chapter = chapters.find(c => c.chapterNumber === chapterNum);
+                  const sectionData = allSections.find(s => s.numero === chapterNum);
+                  if (chapter && sectionData) {
+                    this.callbacks.onAgentStatus("voice-auditor", "editing", 
+                      `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${voiceResult.chaptersToRevise.length})`
+                    );
+                    const correctionInstructions = voiceResult.issues.join("\n");
+                    await this.rewriteChapterForQA(project, chapter, sectionData, worldBibleData, guiaEstilo, "voice", correctionInstructions);
+                  }
                 }
               }
             }
           }
+          
+          if (voiceCorrectionsApplied) {
+            this.callbacks.onAgentStatus("voice-auditor", "completed", 
+              `Correcciones de voz/ritmo completadas`
+            );
+          } else {
+            this.callbacks.onAgentStatus("voice-auditor", "complete", 
+              `Análisis de voz aprobado`
+            );
+          }
         }
         
-        this.callbacks.onAgentStatus("semantic-detector", "analyzing", 
-          `Ejecutando análisis semántico antes de revisión final...`
-        );
+        // Check if semantic check was already completed to prevent infinite loops
+        const currentProjectForSemantic = await storage.getProject(project.id);
+        const semanticAlreadyDone = (currentProjectForSemantic as any)?.semanticCheckCompleted === true;
         
-        const semanticResult = await this.runSemanticRepetitionAnalysis(project, completedChapters, worldBibleData);
-        
-        if (!semanticResult.passed && semanticResult.chaptersToRevise.length > 0) {
-          this.callbacks.onAgentStatus("semantic-detector", "editing", 
-            `Corrigiendo ${semanticResult.chaptersToRevise.length} capítulos con repeticiones semánticas...`
+        if (semanticAlreadyDone) {
+          this.callbacks.onAgentStatus("semantic-detector", "skipped", 
+            `Detector semántico omitido - ya completado previamente`
+          );
+          console.log(`[Orchestrator:runFinalReviewOnly] Skipping semantic detector for project ${project.id} - already completed`);
+        } else {
+          this.callbacks.onAgentStatus("semantic-detector", "analyzing", 
+            `Ejecutando análisis semántico antes de revisión final...`
           );
           
-          for (let idx = 0; idx < semanticResult.chaptersToRevise.length; idx++) {
-            // Check cancellation before each chapter correction
-            if (await isProjectCancelledFromDb(project.id)) {
-              console.log(`[Orchestrator] Semantic corrections cancelled at chapter ${idx + 1}/${semanticResult.chaptersToRevise.length} (runFinalReviewOnly)`);
-              return;
+          const semanticResult = await this.runSemanticRepetitionAnalysis(project, completedChapters, worldBibleData);
+          
+          // Mark as completed BEFORE corrections to prevent re-running on interruption
+          await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
+          console.log(`[Orchestrator:runFinalReviewOnly] Semantic check marked complete for project ${project.id}`);
+          
+          if (!semanticResult.passed && semanticResult.chaptersToRevise.length > 0) {
+            this.callbacks.onAgentStatus("semantic-detector", "editing", 
+              `Corrigiendo ${semanticResult.chaptersToRevise.length} capítulos con repeticiones semánticas...`
+            );
+            
+            for (let idx = 0; idx < semanticResult.chaptersToRevise.length; idx++) {
+              // Check cancellation before each chapter correction
+              if (await isProjectCancelledFromDb(project.id)) {
+                console.log(`[Orchestrator] Semantic corrections cancelled at chapter ${idx + 1}/${semanticResult.chaptersToRevise.length} (runFinalReviewOnly)`);
+                return;
+              }
+              
+              const chapterNum = semanticResult.chaptersToRevise[idx];
+              const chapter = chapters.find(c => c.chapterNumber === chapterNum);
+              const sectionData = allSections.find(s => s.numero === chapterNum);
+              if (chapter && sectionData) {
+                this.callbacks.onAgentStatus("semantic-detector", "editing", 
+                  `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${semanticResult.chaptersToRevise.length})`
+                );
+                const semanticIssues = semanticResult.clusters
+                  .filter(c => c.capitulos_afectados?.includes(chapterNum))
+                  .map(c => `Repetición semántica: "${c.concepto}" aparece ${c.frecuencia} veces`);
+                const correctionInstructions = semanticIssues.join("\n");
+                await this.rewriteChapterForQA(project, chapter, sectionData, worldBibleData, guiaEstilo, "semantic", correctionInstructions);
+              }
             }
             
-            const chapterNum = semanticResult.chaptersToRevise[idx];
-            const chapter = chapters.find(c => c.chapterNumber === chapterNum);
-            const sectionData = allSections.find(s => s.numero === chapterNum);
-            if (chapter && sectionData) {
-              this.callbacks.onAgentStatus("semantic-detector", "editing", 
-                `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${semanticResult.chaptersToRevise.length})`
-              );
-              const semanticIssues = semanticResult.clusters
-                .filter(c => c.capitulos_afectados?.includes(chapterNum))
-                .map(c => `Repetición semántica: "${c.concepto}" aparece ${c.frecuencia} veces`);
-              const correctionInstructions = semanticIssues.join("\n");
-              await this.rewriteChapterForQA(project, chapter, sectionData, worldBibleData, guiaEstilo, "semantic", correctionInstructions);
-            }
+            this.callbacks.onAgentStatus("semantic-detector", "completed", 
+              `Correcciones semánticas completadas para ${semanticResult.chaptersToRevise.length} capítulos`
+            );
+          } else {
+            this.callbacks.onAgentStatus("semantic-detector", "complete", 
+              `Análisis semántico aprobado`
+            );
           }
         }
       }
