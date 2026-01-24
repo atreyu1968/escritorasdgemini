@@ -343,11 +343,14 @@ export class FinalReviewerAgent extends BaseAgent {
   }
 
   // Helper to get proper chapter label based on number
+  // IMPORTANT: Include the actual number so AI uses the correct one in responses
   private getChapterLabel(num: number): string {
-    if (num === 0) return "Prólogo";
-    if (num === -1 || num === 998) return "Epílogo";
-    if (num === -2 || num === 999) return "Nota del Autor";
-    return `Capítulo ${num}`;
+    if (num === 0) return "Prólogo (número: 0)";
+    if (num === -1) return "Epílogo (número: -1)";
+    if (num === 998) return "Epílogo (número: 998)";
+    if (num === -2) return "Nota del Autor (número: -2)";
+    if (num === 999) return "Nota del Autor (número: 999)";
+    return `Capítulo ${num} (número: ${num})`;
   }
 
   // Sort order for chapters (prologue first, epilogue/author note last)
@@ -462,6 +465,13 @@ export class FinalReviewerAgent extends BaseAgent {
     Sé PRECISO y OBJETIVO. Solo reporta errores con EVIDENCIA TEXTUAL verificable.
     
     Responde ÚNICAMENTE con el JSON estructurado según el formato especificado.
+    
+    ⚠️ IMPORTANTE SOBRE NÚMEROS DE CAPÍTULO:
+    - Usa EXACTAMENTE el número que aparece entre paréntesis después de cada encabezado de capítulo.
+    - Ejemplo: "Epílogo (número: 998)" → usa 998 en capitulos_afectados, NO uses -1.
+    - Ejemplo: "Prólogo (número: 0)" → usa 0 en capitulos_afectados.
+    - Ejemplo: "Capítulo 5 (número: 5)" → usa 5 en capitulos_afectados.
+    
     NOTA: En "capitulos_afectados" y "capitulos_para_reescribir", solo incluye capítulos de ESTE tramo.
     `;
 
