@@ -237,18 +237,30 @@ export class QueueManager {
   
   private async checkForFrozenProjects(): Promise<void> {
     try {
-      // Get all projects in "generating" status OR projects that failed final review (they might need retry)
+      // Get all projects in active processing states that might freeze
       const projects = await storage.getAllProjects();
-      const monitoredStatuses = ["generating", "failed_final_review", "paused"];
+      // Extended list: include all states where generation could be happening
+      const monitoredStatuses = ["generating", "failed_final_review", "paused", "awaiting_instructions"];
       const generatingProjects = projects.filter((p: Project) => monitoredStatuses.includes(p.status));
+      
+      // Debug log every 5 minutes (every 5th check)
+      if (Date.now() % (5 * 60 * 1000) < 60 * 1000) {
+        console.log(`[QueueManager] Frozen monitor: ${generatingProjects.length} projects in monitored states (${monitoredStatuses.join(", ")})`);
+      }
       
       for (const project of generatingProjects) {
         const lastActivity = await storage.getLastActivityLogTime(project.id);
         
-        if (lastActivity) {
-          const timeSinceActivity = Date.now() - lastActivity.getTime();
-          
-          if (timeSinceActivity > HEARTBEAT_TIMEOUT_MS) {
+        // Handle projects with no activity logs - use project creation date or current time
+        const activityTime = lastActivity || project.createdAt;
+        if (!activityTime) {
+          console.warn(`[QueueManager] Project ${project.id} "${project.title}" has no activity or creation time`);
+          continue;
+        }
+        
+        const timeSinceActivity = Date.now() - new Date(activityTime).getTime();
+        
+        if (timeSinceActivity > HEARTBEAT_TIMEOUT_MS) {
             console.log(`[QueueManager] FROZEN PROJECT DETECTED: "${project.title}" (ID: ${project.id}) - no activity for ${Math.round(timeSinceActivity / 60000)} minutes`);
             
             // Log the recovery event
@@ -345,7 +357,6 @@ export class QueueManager {
             }, 3000);
             
             break; // Handle one frozen project at a time
-          }
         }
       }
     } catch (error) {

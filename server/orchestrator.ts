@@ -1221,6 +1221,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         );
         console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - voiceAuditCompleted=${(projectStateForVoice as any)?.voiceAuditCompleted}, revisionCycle=${projectStateForVoice?.revisionCycle}`);
       } else {
+        // CRITICAL: Mark voice audit complete IMMEDIATELY BEFORE any analysis to prevent infinite loops on freeze
+        await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
+        console.log(`[Orchestrator:generateNovel] Voice audit marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
+        
         const allCompletedChapters = await storage.getChaptersByProject(project.id);
         const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
         
@@ -1237,10 +1241,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                 this.callbacks.onAgentStatus("voice-auditor", "editing", 
                   `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
                 );
-                
-                // Mark voice audit complete BEFORE corrections to prevent re-running on interruption
-                await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
-                console.log(`[Orchestrator] Voice audit marked complete BEFORE corrections for project ${project.id} (generateNovel)`);
                 
                 for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
                   // Check cancellation before each chapter correction
@@ -1291,6 +1291,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         );
         console.log(`[Orchestrator] Skipping semantic detector for project ${project.id} - semanticCheckCompleted=${(currentProjectState as any)?.semanticCheckCompleted}, revisionCycle=${currentProjectState?.revisionCycle}`);
       } else {
+        // CRITICAL: Mark semantic check complete IMMEDIATELY to prevent infinite loops on freeze
+        await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
+        console.log(`[Orchestrator:generateNovel] Semantic check marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
+        
         let semanticAttempt = 0;
         let semanticPassed = false;
         let semanticActuallyRan = false;
@@ -1318,9 +1322,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           
           if (semanticResult.passed) {
             semanticPassed = true;
-            // Mark completed IMMEDIATELY when analysis passes
-            await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-            console.log(`[Orchestrator] Semantic check PASSED and marked for project ${project.id}`);
+            console.log(`[Orchestrator] Semantic check PASSED for project ${project.id}`);
             this.callbacks.onAgentStatus("semantic-detector", "complete", 
               `Análisis semántico aprobado`
             );
@@ -1840,6 +1842,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         );
         console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - voiceAuditCompleted=${(projectForVoiceCheck as any)?.voiceAuditCompleted}, revisionCycle=${projectForVoiceCheck?.revisionCycle}`);
       } else {
+        // CRITICAL: Mark voice audit complete IMMEDIATELY BEFORE any analysis to prevent infinite loops on freeze
+        await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
+        console.log(`[Orchestrator:resumeNovel] Voice audit marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
+        
         const allCompletedChapters = await storage.getChaptersByProject(project.id);
         const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
         
@@ -1856,10 +1862,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                 this.callbacks.onAgentStatus("voice-auditor", "editing", 
                   `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
                 );
-                
-                // Mark voice audit complete BEFORE corrections to prevent re-running on interruption
-                await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
-                console.log(`[Orchestrator] Voice audit marked complete BEFORE corrections for project ${project.id} (resumeNovel)`);
                 
                 for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
                   // Check cancellation before each chapter correction
@@ -1911,6 +1913,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         );
         console.log(`[Orchestrator] Skipping semantic detector for project ${project.id} - semanticCheckCompleted=${semanticAlreadyCompleted}, revisionCycle=${updatedProject?.revisionCycle}`);
       } else {
+        // CRITICAL: Mark semantic check complete IMMEDIATELY to prevent infinite loops on freeze
+        await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
+        console.log(`[Orchestrator:resumeNovel] Semantic check marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
+        
         let semanticAttemptResume = 0;
         let semanticPassedResume = false;
         let semanticActuallyRanResume = false;
@@ -1938,9 +1944,7 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           
           if (semanticResult.passed) {
             semanticPassedResume = true;
-            // Mark completed IMMEDIATELY when analysis passes
-            await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-            console.log(`[Orchestrator:Resume] Semantic check PASSED and marked for project ${project.id}`);
+            console.log(`[Orchestrator:Resume] Semantic check PASSED for project ${project.id}`);
             this.callbacks.onAgentStatus("semantic-detector", "complete", 
               `Análisis semántico aprobado`
             );
@@ -2724,11 +2728,11 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             `Ejecutando análisis semántico antes de revisión final...`
           );
           
-          const semanticResult = await this.runSemanticRepetitionAnalysis(project, completedChapters, worldBibleData);
-          
-          // Mark as completed BEFORE corrections to prevent re-running on interruption
+          // CRITICAL: Mark as completed BEFORE analysis to prevent infinite loops on freeze
           await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-          console.log(`[Orchestrator:runFinalReviewOnly] Semantic check marked complete for project ${project.id}`);
+          console.log(`[Orchestrator:runFinalReviewOnly] Semantic check marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
+          
+          const semanticResult = await this.runSemanticRepetitionAnalysis(project, completedChapters, worldBibleData);
           
           if (!semanticResult.passed && semanticResult.chaptersToRevise.length > 0) {
             this.callbacks.onAgentStatus("semantic-detector", "editing", 
