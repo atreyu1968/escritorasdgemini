@@ -681,6 +681,33 @@ export const insertReeditAuditReportSchema = createInsertSchema(reeditAuditRepor
   createdAt: true,
 });
 
+export const reeditIssues = pgTable("reedit_issues", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => reeditProjects.id, { onDelete: "cascade" }),
+  chapterNumber: integer("chapter_number").notNull(),
+  category: text("category").notNull(), // continuidad, voz_ritmo, estructura, anacronismo, narrativa, etc.
+  severity: text("severity").notNull().default("mayor"), // critica, mayor, menor
+  description: text("description").notNull(),
+  textCitation: text("text_citation"), // Fragmento exacto del texto con el problema
+  correctionInstruction: text("correction_instruction"), // Instrucción FIND/REPLACE para corregir
+  source: text("source").notNull().default("qa"), // qa, architect, final_reviewer
+  reviewCycle: integer("review_cycle").default(0), // En qué ciclo se detectó
+  status: text("status").notNull().default("pending"), // pending, approved, rejected, resolved
+  resolvedAt: timestamp("resolved_at"),
+  rejectionReason: text("rejection_reason"), // Si el usuario rechaza, por qué
+  issueHash: text("issue_hash"), // Hash único para evitar duplicados
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertReeditIssueSchema = createInsertSchema(reeditIssues).omit({
+  id: true,
+  createdAt: true,
+  resolvedAt: true,
+});
+
+export type ReeditIssue = typeof reeditIssues.$inferSelect;
+export type InsertReeditIssue = z.infer<typeof insertReeditIssueSchema>;
+
 export type ReeditProject = typeof reeditProjects.$inferSelect;
 export type InsertReeditProject = z.infer<typeof insertReeditProjectSchema>;
 export type ReeditChapter = typeof reeditChapters.$inferSelect;
