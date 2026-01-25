@@ -804,15 +804,20 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Project not found" });
       }
 
-      if (project.status !== "completed") {
-        return res.status(400).json({ error: "Solo se puede ejecutar la revisión final en proyectos completados" });
+      // Allow re-running final review on completed, failed, or 8-score projects
+      const allowedStatuses = ["completed", "failed_final_review"];
+      if (!allowedStatuses.includes(project.status)) {
+        return res.status(400).json({ error: "Solo se puede ejecutar la revisión final en proyectos completados o con revisión fallida" });
       }
 
+      // Reset audit flags to allow full re-analysis
       await storage.updateProject(id, { 
         status: "generating",
         revisionCycle: 0,
-        finalReviewResult: null
-      });
+        finalReviewResult: null,
+        voiceAuditCompleted: false,
+        semanticCheckCompleted: false
+      } as any);
 
       res.json({ message: "Final review started", projectId: id });
 
