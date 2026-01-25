@@ -128,6 +128,11 @@ class ReeditCopyEditorAgent extends BaseAgent {
       role: "copyeditor",
       systemPrompt: `You are a professional copy editor improving manuscript text for fluency and naturalness.
 
+🔬 LASER SURGERY MODE - MINIMAL CHANGES ONLY 🔬
+
+CRITICAL RULE: Copy 95% of the original text UNCHANGED.
+Only modify specific sentences that violate fluency rules.
+
 LANGUAGE-SPECIFIC FLUENCY RULES:
 - ITALIAN: NEVER use "Egli/Ella/Esso/Essa" - use proper names or lui/lei/loro
 - ALL LANGUAGES: Maximum 45 words per sentence. Break longer sentences.
@@ -135,13 +140,26 @@ LANGUAGE-SPECIFIC FLUENCY RULES:
 - Prefer active voice over passive
 - Maintain consistent narrative voice
 
-Return the improved text and a log of changes made.
+EDITING PROCESS:
+1. Read the entire chapter
+2. Identify ONLY sentences that violate the rules above
+3. Copy the text paragraph by paragraph
+4. When you find a violation → apply the MINIMUM fix
+5. Continue copying the rest WITHOUT CHANGES
+
+FORBIDDEN:
+- Rewriting paragraphs that work fine
+- Changing vocabulary for "improvement" if rules aren't violated
+- Reorganizing sentence order
+- Adding unnecessary flourishes
+
+The result MUST have ±50 words of the original.
 
 RESPOND WITH JSON ONLY:
 {
-  "editedContent": "The full improved text...",
-  "changesLog": "Summary of changes made",
-  "fluencyChanges": [{"before": "old", "after": "new", "reason": "why"}]
+  "editedContent": "The full text with surgical fixes only...",
+  "changesLog": "Summary of specific changes made",
+  "fluencyChanges": [{"before": "exact original", "after": "exact fix", "reason": "rule violated"}]
 }`,
       model: "deepseek-chat",
       useThinking: false,
@@ -1078,18 +1096,34 @@ CAPÍTULO A REESCRIBIR:
 ${chapterContent}
 
 ═══════════════════════════════════════════════════════════════
-INSTRUCCIONES FINALES - OBJETIVO: PERFECCIÓN 10/10
+🔬 MODO CIRUGÍA LÁSER - CAMBIOS MÍNIMOS OBLIGATORIOS 🔬
 ═══════════════════════════════════════════════════════════════
-1. Analiza profundamente cada problema y su impacto narrativo
-2. Diseña la solución más elegante y natural
-3. Reescribe el capítulo COMPLETO integrando las correcciones
-4. Verifica que no introduces nuevos problemas
-5. El texto nuevo debe ser INDISTINGUIBLE del original en calidad
-6. CADA problema debe quedar COMPLETAMENTE resuelto - sin rastro
-7. Tu corrección debe hacer que el revisor no encuentre NADA que criticar
 
-CRITERIO DE ÉXITO: Si después de tu corrección el revisor todavía encuentra
-el mismo problema, has fallado. Asegúrate de que cada corrección sea DEFINITIVA.
+⚠️ REGLA CRÍTICA: NO reescribas el capítulo completo.
+⚠️ COPIA el 95% del texto original y modifica SOLO lo estrictamente necesario.
+
+PROCESO OBLIGATORIO:
+1. Lee el capítulo completo
+2. Identifica las frases/párrafos EXACTOS que causan cada problema
+3. COPIA el texto párrafo por párrafo
+4. Cuando llegues a un problema → aplica el cambio MÍNIMO necesario
+5. Continúa copiando el resto SIN MODIFICAR
+
+TIPOS DE CAMBIOS PERMITIDOS:
+- REEMPLAZAR: Cambiar 1-3 frases específicas
+- INSERTAR: Añadir 1-2 frases de transición/explicación  
+- ELIMINAR: Quitar frases contradictorias
+
+PROHIBIDO:
+- Reescribir párrafos enteros que funcionan bien
+- Cambiar el estilo o vocabulario del autor original
+- Reorganizar la estructura del capítulo
+- Añadir más contenido del estrictamente necesario
+
+OBJETIVO: El resultado debe tener ±100 palabras del original.
+Si el problema solo requiere cambiar UNA palabra, cambia SOLO esa palabra.
+
+CRITERIO DE ÉXITO: El cambio debe ser INVISIBLE - como si siempre hubiera estado ahí.
 
 RESPONDE ÚNICAMENTE CON JSON VÁLIDO.`;
 
