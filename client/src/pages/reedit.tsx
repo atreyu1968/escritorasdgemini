@@ -36,7 +36,10 @@ import {
   RotateCcw,
   Pause,
   Unlock,
-  MessageSquare
+  MessageSquare,
+  Check,
+  X,
+  XCircle
 } from "lucide-react";
 import type { ReeditProject, ReeditChapter, ReeditAuditReport } from "@shared/schema";
 
@@ -88,6 +91,7 @@ function getStatusBadge(status: string) {
     completed: "Completado",
     error: "Error",
     awaiting_instructions: "Esperando Instrucciones",
+    awaiting_issue_approval: "Revisión de Problemas",
   };
   const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle }> = {
     pending: { variant: "outline", icon: Clock },
@@ -95,11 +99,12 @@ function getStatusBadge(status: string) {
     completed: { variant: "default", icon: CheckCircle },
     error: { variant: "destructive", icon: AlertCircle },
     awaiting_instructions: { variant: "outline", icon: Pause },
+    awaiting_issue_approval: { variant: "outline", icon: AlertCircle },
   };
   const config = variants[status] || variants.pending;
   const IconComponent = config.icon;
   return (
-    <Badge variant={config.variant} className={`flex items-center gap-1 ${status === 'awaiting_instructions' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : ''}`}>
+    <Badge variant={config.variant} className={`flex items-center gap-1 ${status === 'awaiting_instructions' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : ''} ${status === 'awaiting_issue_approval' ? 'border-orange-500 text-orange-600 dark:text-orange-400' : ''}`}>
       <IconComponent className={`h-3 w-3 ${status === 'processing' ? 'animate-spin' : ''}`} />
       {statusLabels[status] || status}
     </Badge>
@@ -1026,6 +1031,19 @@ export default function ReeditPage() {
     refetchInterval: 5000,
   });
 
+  // Fetch issues for awaiting_issue_approval state
+  const { data: issuesList = [] } = useQuery<any[]>({
+    queryKey: ["/api/reedit-projects", selectedProject, "issues"],
+    enabled: !!selectedProject,
+    refetchInterval: 3000,
+  });
+
+  const { data: issuesSummary } = useQuery<any>({
+    queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"],
+    enabled: !!selectedProject,
+    refetchInterval: 5000,
+  });
+
   const selectedProjectData = projects.find(p => p.id === selectedProject);
 
   const uploadMutation = useMutation({
@@ -1096,6 +1114,74 @@ export default function ReeditPage() {
       toast({ title: "Procesamiento Reanudado", description: "El manuscrito continúa siendo reeditado" });
       queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects"] });
       setUserInstructions("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Issue management mutations
+  const approveIssueMutation = useMutation({
+    mutationFn: async (issueId: number) => {
+      return apiRequest("POST", `/api/reedit-issues/${issueId}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const rejectIssueMutation = useMutation({
+    mutationFn: async ({ issueId, reason }: { issueId: number; reason?: string }) => {
+      return apiRequest("POST", `/api/reedit-issues/${issueId}/reject`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const approveAllIssuesMutation = useMutation({
+    mutationFn: async (projectId: number) => {
+      return apiRequest("POST", `/api/reedit-projects/${projectId}/issues/approve-all`);
+    },
+    onSuccess: () => {
+      toast({ title: "Todos Aprobados", description: "Todos los problemas han sido aprobados para corrección" });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const rejectAllIssuesMutation = useMutation({
+    mutationFn: async (projectId: number) => {
+      return apiRequest("POST", `/api/reedit-projects/${projectId}/issues/reject-all`, { reason: "Bulk rejected by user" });
+    },
+    onSuccess: () => {
+      toast({ title: "Todos Rechazados", description: "Todos los problemas han sido ignorados" });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const proceedCorrectionsMutation = useMutation({
+    mutationFn: async (projectId: number) => {
+      return apiRequest("POST", `/api/reedit-projects/${projectId}/proceed-corrections`);
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Correcciones Iniciadas", description: `Procediendo con ${data.approvedCount || 0} correcciones aprobadas` });
+      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1603,6 +1689,150 @@ export default function ReeditPage() {
                               Estas instrucciones se pasarán al agente en el próximo ciclo de corrección.
                             </p>
                           </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {selectedProjectData.status === "awaiting_issue_approval" && (
+                      <Card className="border-orange-500/50 bg-orange-50/50 dark:bg-orange-950/20">
+                        <CardContent className="pt-6 space-y-4">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-orange-800 dark:text-orange-200">Revisión de Problemas Detectados</p>
+                              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                                {selectedProjectData.pauseReason || "Se han detectado problemas que requieren tu aprobación antes de corregirlos automáticamente."}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {issuesSummary && (
+                            <div className="grid grid-cols-4 gap-2 text-center">
+                              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-md">
+                                <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{issuesSummary.pending || 0}</p>
+                                <p className="text-xs text-orange-600 dark:text-orange-400">Pendientes</p>
+                              </div>
+                              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-md">
+                                <p className="text-lg font-bold text-green-700 dark:text-green-300">{issuesSummary.approved || 0}</p>
+                                <p className="text-xs text-green-600 dark:text-green-400">Aprobados</p>
+                              </div>
+                              <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                                <p className="text-lg font-bold text-gray-700 dark:text-gray-300">{issuesSummary.rejected || 0}</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">Rechazados</p>
+                              </div>
+                              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-md">
+                                <p className="text-lg font-bold text-red-700 dark:text-red-300">{issuesSummary.bySeverity?.critical || 0}</p>
+                                <p className="text-xs text-red-600 dark:text-red-400">Críticos</p>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => selectedProjectData && approveAllIssuesMutation.mutate(selectedProjectData.id)}
+                              disabled={approveAllIssuesMutation.isPending || (issuesSummary?.pending || 0) === 0}
+                              data-testid="button-approve-all-issues"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Aprobar Todos
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => selectedProjectData && rejectAllIssuesMutation.mutate(selectedProjectData.id)}
+                              disabled={rejectAllIssuesMutation.isPending || (issuesSummary?.pending || 0) === 0}
+                              data-testid="button-reject-all-issues"
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Ignorar Todos
+                            </Button>
+                          </div>
+
+                          <ScrollArea className="h-[300px] border rounded-md p-2">
+                            <div className="space-y-2">
+                              {issuesList.filter((i: any) => i.status === "pending").map((issue: any) => (
+                                <div 
+                                  key={issue.id} 
+                                  className={`p-3 border rounded-md ${
+                                    issue.severity === "critical" ? "border-red-400 bg-red-50 dark:bg-red-950/30" :
+                                    issue.severity === "major" ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30" :
+                                    "border-gray-300 bg-gray-50 dark:bg-gray-900/30"
+                                  }`}
+                                  data-testid={`issue-card-${issue.id}`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <Badge variant={
+                                          issue.severity === "critical" ? "destructive" :
+                                          issue.severity === "major" ? "default" : "secondary"
+                                        }>
+                                          {issue.severity === "critical" ? "Crítico" :
+                                           issue.severity === "major" ? "Mayor" : "Menor"}
+                                        </Badge>
+                                        <Badge variant="outline">{issue.category}</Badge>
+                                        <span className="text-xs text-muted-foreground">Cap. {issue.chapterNumber}</span>
+                                      </div>
+                                      <p className="text-sm">{issue.description}</p>
+                                      {issue.correctionInstruction && (
+                                        <p className="text-xs text-muted-foreground mt-1 italic">
+                                          Corrección: {issue.correctionInstruction.substring(0, 150)}...
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-green-600 hover:bg-green-100"
+                                        onClick={() => approveIssueMutation.mutate(issue.id)}
+                                        disabled={approveIssueMutation.isPending}
+                                        data-testid={`button-approve-issue-${issue.id}`}
+                                      >
+                                        <Check className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-red-600 hover:bg-red-100"
+                                        onClick={() => rejectIssueMutation.mutate({ issueId: issue.id })}
+                                        disabled={rejectIssueMutation.isPending}
+                                        data-testid={`button-reject-issue-${issue.id}`}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                              {issuesList.filter((i: any) => i.status === "pending").length === 0 && (
+                                <div className="text-center py-8 text-muted-foreground">
+                                  <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                                  <p>Todos los problemas han sido revisados</p>
+                                </div>
+                              )}
+                            </div>
+                          </ScrollArea>
+
+                          {(issuesSummary?.pending || 0) === 0 && (
+                            <Button
+                              className="w-full"
+                              onClick={() => selectedProjectData && proceedCorrectionsMutation.mutate(selectedProjectData.id)}
+                              disabled={proceedCorrectionsMutation.isPending}
+                              data-testid="button-proceed-corrections"
+                            >
+                              {proceedCorrectionsMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : (
+                                <Play className="h-4 w-4 mr-2" />
+                              )}
+                              {(issuesSummary?.approved || 0) > 0 
+                                ? `Proceder con ${issuesSummary?.approved || 0} Correcciones`
+                                : "Finalizar sin Correcciones"}
+                            </Button>
+                          )}
                         </CardContent>
                       </Card>
                     )}

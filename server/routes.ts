@@ -6446,6 +6446,22 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return res.status(400).json({ error: "Project is already being processed" });
       }
       
+      // Handle case where all issues were rejected (0 approved)
+      // In this case, mark project as completed since user chose to skip all corrections
+      if (approvedIssues.length === 0) {
+        await storage.updateReeditProject(projectId, {
+          status: "completed",
+          pauseReason: null,
+          errorMessage: null,
+        });
+        
+        return res.json({ 
+          success: true, 
+          message: "No corrections approved. Project marked as completed.",
+          approvedCount: 0
+        });
+      }
+      
       // Update project status to resume processing
       await storage.updateReeditProject(projectId, {
         status: "processing",
