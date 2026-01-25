@@ -2707,12 +2707,15 @@ export class ReeditOrchestrator {
     // 1. Project was awaiting instructions with issues to fix
     // 2. Project was in "reviewing" stage (already past all earlier stages)
     // 3. Project has consecutive high scores pending confirmation
+    // 4. Project was awaiting_issue_approval (user was reviewing issues checklist)
     const isResumingFromReviewing = project.currentStage === "reviewing";
     const hasConsecutiveScoresPending = (project.consecutiveHighScores || 0) >= 1;
+    const isAwaitingIssueApproval = project.status === "awaiting_issue_approval";
     const isResumingFromPause = project.status === "awaiting_instructions" || 
+      isAwaitingIssueApproval ||
       (project.status !== "completed" && isResumingFromReviewing);
     
-    if ((hasExistingFinalReview && isResumingFromPause) || (isResumingFromReviewing && hasConsecutiveScoresPending)) {
+    if ((hasExistingFinalReview && isResumingFromPause) || (isResumingFromReviewing && hasConsecutiveScoresPending) || isAwaitingIssueApproval) {
       console.log(`[ReeditOrchestrator] FAST-TRACK RESUME: Project has finalReviewResult with issues. Skipping to corrections + final review.`);
       console.log(`  - User instructions: ${hasUserInstructions ? 'YES' : 'NO'}`);
       console.log(`  - Previous stage: ${project.currentStage}`);
@@ -3794,15 +3797,121 @@ export class ReeditOrchestrator {
           console.log(`[ReeditOrchestrator] ${filteredCount} issues ya resueltos fueron filtrados, quedan ${issues.length} nuevos`);
         }
         
-        if (issues.length > 0 || chaptersToRewrite.length > 0) {
-          // Get unique chapter numbers that need fixes
-          const chapterNumbersToFix = new Set<number>(chaptersToRewrite);
-          for (const issue of issues) {
-            if (issue.capitulos_afectados) {
-              for (const chNum of issue.capitulos_afectados) {
-                chapterNumbersToFix.add(chNum);
-              }
+        // === USER ISSUE APPROVAL FLOW (same as runFinalReviewOnly) ===
+        // If there are new issues, create records and pause for user approval
+        if (issues.length > 0) {
+          // Check if we have user-approved issues to process
+          const approvedIssues = await storage.getApprovedPendingIssues(projectId);
+          
+          if (approvedIssues.length === 0) {
+            // Check if there are pending issues awaiting user decision
+            const pendingIssues = await storage.getReeditIssuesByStatus(projectId, "pending");
+            
+            if (pendingIssues.length === 0) {
+              // No approved or pending issues - create records and pause for user review
+              await this.createIssueRecords(projectId, issues, revisionCycle);
+              
+              const criticalCount = issues.filter((i: any) => i.severidad === "critica" || i.severidad === "crítica").length;
+              const majorCount = issues.filter((i: any) => i.severidad === "mayor").length;
+              const minorCount = issues.filter((i: any) => i.severidad === "menor").length;
+              const pauseReason = `Se detectaron ${issues.length} problema(s) (${criticalCount} crítico(s), ${majorCount} mayor(es), ${minorCount} menor(es)). Por favor revisa la lista de problemas y aprueba o rechaza cada uno antes de continuar con las correcciones automáticas.`;
+              
+              console.log(`[ReeditOrchestrator] PAUSING: ${issues.length} issues detected, awaiting user approval`);
+              
+              await storage.updateReeditProject(projectId, {
+                status: "awaiting_issue_approval",
+                currentStage: "reviewing",
+                pauseReason,
+                chapterCorrectionCounts: Object.fromEntries(chapterCorrectionCounts) as any,
+              });
+              
+              this.emitProgress({
+                projectId,
+                stage: "awaiting_approval",
+                currentChapter: 0,
+                totalChapters: validChapters.length,
+                message: pauseReason,
+              });
+              
+              return; // Exit and wait for user to approve/reject issues
             }
+            
+            // There are pending issues - user hasn't decided yet, wait
+            console.log(`[ReeditOrchestrator] ${pendingIssues.length} pending issues awaiting user decision`);
+            return;
+          }
+          
+          // User has approved some issues - apply corrections for those only
+          console.log(`[ReeditOrchestrator] User approved ${approvedIssues.length} issues for correction`);
+          
+          // Apply corrections for approved issues only
+          const correctionResults = await this.applyUserApprovedCorrections(
+            projectId, 
+            approvedIssues, 
+            validChapters, 
+            worldBibleForReview, 
+            guiaEstilo, 
+            userInstructions,
+            localResolvedHashes,
+            chapterCorrectionCounts
+          );
+          
+          // Mark all approved issues as resolved in the database
+          for (const issue of approvedIssues) {
+            await storage.resolveReeditIssue(issue.id);
+          }
+          
+          // Continue to next review cycle
+          revisionCycle++;
+          continue;
+        }
+        
+        // Note: If we reach here, issues.length === 0 (approval flow already handled issues above)
+        // Handle chaptersToRewrite separately when there are no specific issues
+        if (chaptersToRewrite.length > 0) {
+          // Convert chaptersToRewrite to synthetic issues for approval flow
+          const syntheticIssues: any[] = chaptersToRewrite.map((chapNum: number) => ({
+            categoria: "calidad_general",
+            descripcion: `El capítulo ${chapNum} requiere mejoras de calidad según el revisor final.`,
+            severidad: "mayor",
+            capitulos_afectados: [chapNum],
+            elementos_a_preservar: "",
+            instrucciones_correccion: "Mejorar la calidad general del capítulo según las recomendaciones del revisor."
+          }));
+          
+          // Create issue records for user approval
+          const approvedIssuesForChapters = await storage.getApprovedPendingIssues(projectId);
+          const pendingIssuesForChapters = await storage.getReeditIssuesByStatus(projectId, "pending");
+          
+          if (approvedIssuesForChapters.length === 0 && pendingIssuesForChapters.length === 0) {
+            await this.createIssueRecords(projectId, syntheticIssues, revisionCycle);
+            
+            const pauseReason = `Se detectaron ${chaptersToRewrite.length} capítulo(s) que requieren mejoras de calidad. Por favor revisa la lista y aprueba o rechaza cada uno.`;
+            
+            console.log(`[ReeditOrchestrator] PAUSING: ${chaptersToRewrite.length} chapters to rewrite, awaiting user approval`);
+            
+            await storage.updateReeditProject(projectId, {
+              status: "awaiting_issue_approval",
+              currentStage: "reviewing",
+              pauseReason,
+              chapterCorrectionCounts: Object.fromEntries(chapterCorrectionCounts) as any,
+            });
+            
+            this.emitProgress({
+              projectId,
+              stage: "awaiting_approval",
+              currentChapter: 0,
+              totalChapters: validChapters.length,
+              message: pauseReason,
+            });
+            
+            return;
+          }
+          
+          // Get unique chapter numbers that need fixes (from approved issues if any)
+          const chapterNumbersToFix = new Set<number>();
+          for (const issue of approvedIssuesForChapters) {
+            chapterNumbersToFix.add(issue.chapterNumber);
           }
 
           // Get chapters that need improvement
