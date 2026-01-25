@@ -2394,8 +2394,14 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         consecutiveHighScores = 0; // Reset counter if score drops below 9
       }
       
-      // APROBADO: Puntuación >= 9 por N veces consecutivas
-      if (consecutiveHighScores >= this.requiredConsecutiveHighScores) {
+      // NUEVO: Verificar si hay issues críticos o mayores que DEBEN corregirse
+      const criticalOrMajorIssues = (result?.issues || []).filter(
+        issue => issue.severidad === "critica" || issue.severidad === "mayor"
+      );
+      const hasCriticalOrMajorIssues = criticalOrMajorIssues.length > 0;
+      
+      // APROBADO: Puntuación >= 9 por N veces consecutivas Y SIN issues críticos/mayores
+      if (consecutiveHighScores >= this.requiredConsecutiveHighScores && !hasCriticalOrMajorIssues) {
         const recentScores = previousScores.slice(-this.requiredConsecutiveHighScores).join(", ");
         const mensaje = result?.veredicto === "APROBADO_CON_RESERVAS"
           ? `Manuscrito APROBADO CON RESERVAS. Puntuaciones consecutivas: ${recentScores}/10.`
@@ -2404,8 +2410,28 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         return true;
       }
       
-      // Puntuación >= 9 pero aún no suficientes consecutivas
-      if (currentScore >= this.minAcceptableScore && consecutiveHighScores < this.requiredConsecutiveHighScores) {
+      // NUEVO: Si hay issues críticos/mayores, FORZAR corrección antes de aprobar
+      if (hasCriticalOrMajorIssues) {
+        this.callbacks.onAgentStatus("final-reviewer", "editing", 
+          `Puntuación ${currentScore}/10 pero hay ${criticalOrMajorIssues.length} issues CRÍTICOS/MAYORES que deben corregirse antes de aprobar.`
+        );
+        // No hacer continue - dejar que fluya hacia la sección de reescritura
+        // Asegurar que los capítulos afectados están en la lista
+        const chaptersToRewrite = result?.capitulos_para_reescribir || [];
+        criticalOrMajorIssues.forEach(issue => {
+          issue.capitulos_afectados.forEach(ch => {
+            if (!chaptersToRewrite.includes(ch)) {
+              chaptersToRewrite.push(ch);
+            }
+          });
+        });
+        if (result) {
+          result.capitulos_para_reescribir = chaptersToRewrite;
+          result.veredicto = "REQUIERE_REVISION";
+        }
+        // Continuar hacia la sección de reescritura (no hacer continue aquí)
+      } else if (currentScore >= this.minAcceptableScore && consecutiveHighScores < this.requiredConsecutiveHighScores) {
+        // Puntuación >= 9 pero aún no suficientes consecutivas, Y sin issues críticos/mayores
         this.callbacks.onAgentStatus("final-reviewer", "reviewing", 
           `Puntuación ${currentScore}/10. Necesita ${this.requiredConsecutiveHighScores - consecutiveHighScores} evaluación(es) más con 9+ para confirmar.`
         );
@@ -2437,11 +2463,22 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           ? (previousScores.reduce((a, b) => a + b, 0) / previousScores.length).toFixed(1)
           : currentScore;
         
-        if (currentScore >= this.minAcceptableScore) {
+        // NUEVO: No aprobar si hay issues críticos/mayores sin resolver
+        if (currentScore >= this.minAcceptableScore && !hasCriticalOrMajorIssues) {
           this.callbacks.onAgentStatus("final-reviewer", "completed", 
             `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado. Puntuación final: ${currentScore}/10 (promedio: ${avgScore}). APROBADO.`
           );
           return true;
+        } else if (hasCriticalOrMajorIssues) {
+          this.callbacks.onAgentStatus("final-reviewer", "error", 
+            `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado con ${criticalOrMajorIssues.length} issues CRÍTICOS/MAYORES sin resolver. Proyecto pausado para revisión manual.`
+          );
+          await storage.updateProject(project.id, {
+            status: "awaiting_instructions",
+            architectInstructions: `[PAUSA] Límite de ciclos alcanzado con issues críticos/mayores pendientes:\n${criticalOrMajorIssues.map(i => `- [${i.severidad.toUpperCase()}] ${i.descripcion}`).join("\n")}`,
+            finalScore: currentScore
+          });
+          return false;
         } else {
           this.callbacks.onAgentStatus("final-reviewer", "error", 
             `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado. Puntuación final: ${currentScore}/10 NO alcanza el mínimo de ${this.minAcceptableScore}. Proyecto NO APROBADO.`
