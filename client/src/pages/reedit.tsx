@@ -1873,6 +1873,42 @@ export default function ReeditPage() {
                       isProcessing={selectedProjectData.status === "processing"} 
                     />
 
+                    {/* Historial de correcciones resueltas - visible siempre */}
+                    {issuesList.filter((i: any) => i.status === "resolved").length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            Correcciones Aplicadas ({issuesList.filter((i: any) => i.status === "resolved").length})
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ScrollArea className="h-[200px]">
+                            <div className="space-y-1">
+                              {issuesList.filter((i: any) => i.status === "resolved").map((issue: any) => (
+                                <div 
+                                  key={issue.id} 
+                                  className="p-2 border rounded-md border-green-200 bg-green-50/50 dark:bg-green-950/20"
+                                  data-testid={`resolved-issue-${issue.id}`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <Badge variant="outline" className="text-xs">{issue.category}</Badge>
+                                        <span className="text-xs text-muted-foreground">Cap. {issue.chapterNumber}</span>
+                                      </div>
+                                      <p className="text-sm line-through text-muted-foreground">{issue.description}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {selectedProjectData.bestsellerScore && (
                       <Card className="bg-muted/50">
                         <CardContent className="pt-6">
