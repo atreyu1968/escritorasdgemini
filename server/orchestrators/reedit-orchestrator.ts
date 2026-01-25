@@ -1465,7 +1465,8 @@ export class ReeditOrchestrator {
   }
   
   /**
-   * Mark issues as resolved by adding their hashes to the project's resolved list.
+   * Mark issues as resolved by adding their hashes to the project's resolved list
+   * AND updating the status in reedit_issues table so user can see them as "tachados".
    */
   private async markIssuesResolved(projectId: number, issues: FinalReviewIssue[]): Promise<void> {
     if (issues.length === 0) return;
@@ -1481,7 +1482,18 @@ export class ReeditOrchestrator {
       resolvedIssueHashes: allHashes as any,
     });
     
-    console.log(`[ReeditOrchestrator] Marked ${newHashes.length} issues as resolved (total: ${allHashes.length})`);
+    // ALSO update reedit_issues table to mark as "resolved" so UI shows them as tachados
+    const allIssuesInDb = await storage.getReeditIssuesByProject(projectId);
+    let resolvedInDb = 0;
+    for (const hash of newHashes) {
+      const matchingIssue = allIssuesInDb.find(i => i.issueHash === hash);
+      if (matchingIssue && matchingIssue.status !== "resolved") {
+        await storage.resolveReeditIssue(matchingIssue.id);
+        resolvedInDb++;
+      }
+    }
+    
+    console.log(`[ReeditOrchestrator] Marked ${newHashes.length} issues as resolved (total hashes: ${allHashes.length}, DB records: ${resolvedInDb})`);
   }
   
   /**
@@ -1639,10 +1651,14 @@ export class ReeditOrchestrator {
           const currentCount = correctionCounts.get(chapterNum) || 0;
           correctionCounts.set(chapterNum, currentCount + 1);
           
-          // Add issue hashes to resolved list
+          // Add issue hashes to resolved list AND mark as resolved in DB
           for (const issue of chapterIssues) {
             if (issue.issueHash && !resolvedHashes.includes(issue.issueHash)) {
               resolvedHashes.push(issue.issueHash);
+            }
+            // Mark issue as resolved in DB so it shows as "tachado" in UI
+            if (issue.id) {
+              await storage.resolveReeditIssue(issue.id);
             }
           }
           
@@ -2454,13 +2470,39 @@ export class ReeditOrchestrator {
 
   private async consolidateAllProblems(
     architectProblems: any[],
-    qaFindings: Map<number, any[]>
+    qaFindings: Map<number, any[]>,
+    projectId?: number
   ): Promise<Map<number, any[]>> {
     const consolidatedByChapter = new Map<number, any[]>();
     
-    // Add architect problems (convert to unified format)
+    // Get resolved issue hashes to filter out already-fixed problems
+    let resolvedHashes: Set<string> = new Set();
+    if (projectId) {
+      const project = await storage.getReeditProject(projectId);
+      const hashes = (project?.resolvedIssueHashes as string[]) || [];
+      resolvedHashes = new Set(hashes);
+      if (resolvedHashes.size > 0) {
+        console.log(`[ReeditOrchestrator] Filtering out ${resolvedHashes.size} already-resolved issues`);
+      }
+    }
+    
+    // Add architect problems (convert to unified format), filtering resolved ones
+    // IMPORTANT: Hash must use same fields as generateIssueHash (categoria, descripcion, capitulos_afectados)
+    let skippedArchitect = 0;
     for (const problem of architectProblems) {
       const chapters = problem.capitulosAfectados || problem.capitulos || [];
+      // Generate hash with ALL affected chapters (as in original issue creation)
+      const hash = this.generateIssueHash({
+        categoria: problem.tipo || problem.categoria || "structural",
+        descripcion: problem.descripcion,
+        capitulos_afectados: chapters.filter((c: any) => typeof c === 'number')
+      });
+      
+      if (resolvedHashes.has(hash)) {
+        skippedArchitect++;
+        continue; // Skip resolved issues entirely
+      }
+      
       for (const chapNum of chapters) {
         if (typeof chapNum === 'number') {
           if (!consolidatedByChapter.has(chapNum)) {
@@ -2477,12 +2519,24 @@ export class ReeditOrchestrator {
       }
     }
     
-    // Add QA findings (already in unified format by chapter)
+    // Add QA findings (already in unified format by chapter), filtering resolved ones
+    let skippedQa = 0;
     for (const [chapNum, problems] of Array.from(qaFindings.entries())) {
       if (!consolidatedByChapter.has(chapNum)) {
         consolidatedByChapter.set(chapNum, []);
       }
       for (const problem of problems) {
+        // Generate hash matching original issue creation format
+        const hash = this.generateIssueHash({
+          categoria: problem.type || problem.source || "qa",
+          descripcion: problem.summary || problem.descripcion,
+          capitulos_afectados: [chapNum]
+        });
+        if (resolvedHashes.has(hash)) {
+          skippedQa++;
+          continue; // Skip resolved issues
+        }
+        
         consolidatedByChapter.get(chapNum)!.push({
           source: problem.source,
           tipo: problem.type,
@@ -2491,6 +2545,17 @@ export class ReeditOrchestrator {
           accionSugerida: problem.correctionHint,
         });
       }
+    }
+    
+    // Remove chapters with no problems after filtering
+    for (const [chapNum, problems] of Array.from(consolidatedByChapter.entries())) {
+      if (problems.length === 0) {
+        consolidatedByChapter.delete(chapNum);
+      }
+    }
+    
+    if (skippedArchitect > 0 || skippedQa > 0) {
+      console.log(`[ReeditOrchestrator] Skipped ${skippedArchitect} architect + ${skippedQa} QA already-resolved issues`);
     }
     
     console.log(`[ReeditOrchestrator] Consolidated problems: ${consolidatedByChapter.size} chapters with issues`);
@@ -3198,8 +3263,8 @@ export class ReeditOrchestrator {
       // Collect all problems from QA agents
       const qaFindings = await this.collectQaFindings(projectId);
       
-      // Consolidate all problems by chapter
-      const consolidatedProblems = await this.consolidateAllProblems(architectProblems, qaFindings);
+      // Consolidate all problems by chapter (filtering out already-resolved issues)
+      const consolidatedProblems = await this.consolidateAllProblems(architectProblems, qaFindings, projectId);
       
       // Check if NarrativeRewriter already completed (resume support)
       const existingRewriteReport = await storage.getReeditAuditReportByType(projectId, "narrative_rewrite");
