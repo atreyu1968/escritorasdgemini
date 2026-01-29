@@ -1,5 +1,4 @@
 import { Link, useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { 
   Sidebar, 
   SidebarContent, 
@@ -13,13 +12,6 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { 
   LayoutDashboard, 
   BookOpen, 
   Brain, 
@@ -32,12 +24,8 @@ import {
   Library,
   ListOrdered,
   DollarSign,
-  Edit3,
-  Zap,
-  Sparkles
+  Edit3
 } from "lucide-react";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 
 const mainNavItems = [
   { title: "Panel Principal", url: "/", icon: LayoutDashboard },
@@ -60,38 +48,8 @@ const settingsNavItems = [
   { title: "Configuración", url: "/config", icon: Settings },
 ];
 
-interface AIProviderInfo {
-  current: "gemini" | "deepseek";
-  available: { gemini: boolean; deepseek: boolean };
-}
-
 export function AppSidebar() {
   const [location] = useLocation();
-  const { toast } = useToast();
-  
-  const { data: providerInfo } = useQuery<AIProviderInfo>({
-    queryKey: ["/api/ai-provider"],
-  });
-  
-  const switchProviderMutation = useMutation({
-    mutationFn: async (provider: "gemini" | "deepseek") => {
-      return apiRequest("/api/ai-provider", "POST", { provider });
-    },
-    onSuccess: (_, selectedProvider) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ai-provider"] });
-      toast({
-        title: "Motor de IA actualizado",
-        description: `Ahora usando ${selectedProvider === "gemini" ? "Gemini (rápido)" : "DeepSeek (económico)"}`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "No se pudo cambiar el motor de IA",
-        variant: "destructive",
-      });
-    },
-  });
 
   return (
     <Sidebar>
@@ -175,46 +133,12 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
-        <div className="space-y-2">
-          <label className="text-xs text-muted-foreground">Motor de IA</label>
-          <Select
-            value={providerInfo?.current || "deepseek"}
-            onValueChange={(value: "gemini" | "deepseek") => {
-              switchProviderMutation.mutate(value);
-            }}
-            disabled={switchProviderMutation.isPending}
-          >
-            <SelectTrigger 
-              className="w-full h-8 text-xs"
-              data-testid="select-ai-provider"
-            >
-              <SelectValue placeholder="Seleccionar motor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem 
-                value="gemini" 
-                disabled={!providerInfo?.available?.gemini}
-              >
-                <div className="flex items-center gap-2">
-                  <Zap className="h-3 w-3 text-amber-500" />
-                  <span>Gemini (Rápido)</span>
-                </div>
-              </SelectItem>
-              <SelectItem 
-                value="deepseek"
-                disabled={!providerInfo?.available?.deepseek}
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-3 w-3 text-blue-500" />
-                  <span>DeepSeek (Económico)</span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <SidebarFooter className="border-t border-sidebar-border p-4">
+        <p className="text-xs text-muted-foreground text-center">
+          Powered by Gemini 3 Pro
+        </p>
         <p className="text-xs text-muted-foreground/60 text-center">
-          {providerInfo?.current === "gemini" ? "Gemini 3 Pro - Rápido" : "DeepSeek V3/R1 - Económico"}
+          Deep Thinking Engine
         </p>
       </SidebarFooter>
     </Sidebar>

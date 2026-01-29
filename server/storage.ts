@@ -3,7 +3,7 @@ import {
   projects, chapters, worldBibles, thoughtLogs, agentStatuses, pseudonyms, styleGuides,
   series, continuitySnapshots, importedManuscripts, importedChapters, extendedGuides, activityLogs,
   projectQueue, queueState, seriesArcMilestones, seriesPlotThreads, seriesArcVerifications,
-  aiUsageEvents, reeditProjects, reeditChapters, reeditAuditReports, reeditWorldBibles, reeditIssues,
+  aiUsageEvents, reeditProjects, reeditChapters, reeditAuditReports, reeditWorldBibles,
   chatSessions, chatMessages, chatProposals,
   type Project, type InsertProject, type Chapter, type InsertChapter,
   type WorldBible, type InsertWorldBible, type ThoughtLog, type InsertThoughtLog,
@@ -24,7 +24,6 @@ import {
   type ReeditProject, type InsertReeditProject,
   type ReeditChapter, type InsertReeditChapter,
   type ReeditAuditReport, type InsertReeditAuditReport,
-  type ReeditIssue, type InsertReeditIssue,
   type ReeditWorldBible, type InsertReeditWorldBible,
   type ChatSession, type InsertChatSession,
   type ChatMessage, type InsertChatMessage,
@@ -160,7 +159,6 @@ export interface IStorage {
   // Reedit Chapters
   createReeditChapter(data: InsertReeditChapter): Promise<ReeditChapter>;
   createReeditChapterIfNotExists(data: InsertReeditChapter): Promise<ReeditChapter>;
-  getAllReeditChapters(): Promise<ReeditChapter[]>;
   getReeditChaptersByProject(projectId: number): Promise<ReeditChapter[]>;
   getReeditChapter(id: number): Promise<ReeditChapter | undefined>;
   getReeditChapterByOriginalNumber(projectId: number, originalChapterNumber: number): Promise<ReeditChapter | undefined>;
@@ -179,18 +177,6 @@ export interface IStorage {
   getReeditWorldBibleByProject(projectId: number): Promise<ReeditWorldBible | undefined>;
   updateReeditWorldBible(id: number, data: Partial<ReeditWorldBible>): Promise<ReeditWorldBible | undefined>;
   deleteReeditWorldBible(projectId: number): Promise<void>;
-
-  // Reedit Issues (problem tracking with status)
-  createReeditIssue(data: InsertReeditIssue): Promise<ReeditIssue>;
-  getReeditIssuesByProject(projectId: number): Promise<ReeditIssue[]>;
-  getReeditIssuesByChapter(projectId: number, chapterNumber: number): Promise<ReeditIssue[]>;
-  getReeditIssuesByStatus(projectId: number, status: string): Promise<ReeditIssue[]>;
-  updateReeditIssue(id: number, data: Partial<ReeditIssue>): Promise<ReeditIssue | undefined>;
-  approveReeditIssue(id: number): Promise<ReeditIssue | undefined>;
-  rejectReeditIssue(id: number, reason?: string): Promise<ReeditIssue | undefined>;
-  resolveReeditIssue(id: number): Promise<ReeditIssue | undefined>;
-  deleteReeditIssuesByProject(projectId: number): Promise<void>;
-  getApprovedPendingIssues(projectId: number): Promise<ReeditIssue[]>;
 
   // Chat Sessions
   createChatSession(data: InsertChatSession): Promise<ChatSession>;
@@ -949,10 +935,6 @@ export class DatabaseStorage implements IStorage {
     return this.createReeditChapter(data);
   }
 
-  async getAllReeditChapters(): Promise<ReeditChapter[]> {
-    return db.select().from(reeditChapters).orderBy(asc(reeditChapters.id));
-  }
-
   async getReeditChaptersByProject(projectId: number): Promise<ReeditChapter[]> {
     return db.select().from(reeditChapters)
       .where(eq(reeditChapters.projectId, projectId))
@@ -1048,82 +1030,6 @@ export class DatabaseStorage implements IStorage {
   async deleteReeditWorldBible(projectId: number): Promise<void> {
     await db.delete(reeditWorldBibles)
       .where(eq(reeditWorldBibles.projectId, projectId));
-  }
-
-  // Reedit Issues
-  async createReeditIssue(data: InsertReeditIssue): Promise<ReeditIssue> {
-    const [issue] = await db.insert(reeditIssues).values(data).returning();
-    return issue;
-  }
-
-  async getReeditIssuesByProject(projectId: number): Promise<ReeditIssue[]> {
-    return db.select().from(reeditIssues)
-      .where(eq(reeditIssues.projectId, projectId))
-      .orderBy(asc(reeditIssues.chapterNumber), desc(reeditIssues.severity));
-  }
-
-  async getReeditIssuesByChapter(projectId: number, chapterNumber: number): Promise<ReeditIssue[]> {
-    return db.select().from(reeditIssues)
-      .where(and(
-        eq(reeditIssues.projectId, projectId),
-        eq(reeditIssues.chapterNumber, chapterNumber)
-      ))
-      .orderBy(desc(reeditIssues.severity));
-  }
-
-  async getReeditIssuesByStatus(projectId: number, status: string): Promise<ReeditIssue[]> {
-    return db.select().from(reeditIssues)
-      .where(and(
-        eq(reeditIssues.projectId, projectId),
-        eq(reeditIssues.status, status)
-      ))
-      .orderBy(asc(reeditIssues.chapterNumber));
-  }
-
-  async updateReeditIssue(id: number, data: Partial<ReeditIssue>): Promise<ReeditIssue | undefined> {
-    const [updated] = await db.update(reeditIssues)
-      .set(data)
-      .where(eq(reeditIssues.id, id))
-      .returning();
-    return updated;
-  }
-
-  async approveReeditIssue(id: number): Promise<ReeditIssue | undefined> {
-    const [updated] = await db.update(reeditIssues)
-      .set({ status: "approved" })
-      .where(eq(reeditIssues.id, id))
-      .returning();
-    return updated;
-  }
-
-  async rejectReeditIssue(id: number, reason?: string): Promise<ReeditIssue | undefined> {
-    const [updated] = await db.update(reeditIssues)
-      .set({ status: "rejected", rejectionReason: reason || null })
-      .where(eq(reeditIssues.id, id))
-      .returning();
-    return updated;
-  }
-
-  async resolveReeditIssue(id: number): Promise<ReeditIssue | undefined> {
-    const [updated] = await db.update(reeditIssues)
-      .set({ status: "resolved", resolvedAt: new Date() })
-      .where(eq(reeditIssues.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteReeditIssuesByProject(projectId: number): Promise<void> {
-    await db.delete(reeditIssues)
-      .where(eq(reeditIssues.projectId, projectId));
-  }
-
-  async getApprovedPendingIssues(projectId: number): Promise<ReeditIssue[]> {
-    return db.select().from(reeditIssues)
-      .where(and(
-        eq(reeditIssues.projectId, projectId),
-        eq(reeditIssues.status, "approved")
-      ))
-      .orderBy(asc(reeditIssues.chapterNumber));
   }
 
   // Chat Sessions

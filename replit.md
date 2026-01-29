@@ -41,15 +41,9 @@ Preferred communication style: Simple, everyday language.
 - **Key Tables**: `projects`, `chapters`, `worldBibles`, `thoughtLogs`, `agentStatuses`, `series`, `continuitySnapshots`, `importedManuscripts`, `importedChapters`. These tables store project metadata, chapter content, world-building elements, AI process logs, real-time status, series information, continuity summaries, and details on imported manuscripts.
 
 ### AI Integration
-- **Default Provider**: DeepSeek (cost-efficient), with Gemini as optional high-speed alternative.
-- **DeepSeek Models**:
-  - `deepseek-chat` (V3): Fast model (10-60s response), used for prose generation, editing, translation, and QA checks.
-  - `deepseek-reasoner` (R1): Slow reasoning model (5-15min), reserved only for Final Review.
-- **Gemini Models**: `gemini-3-pro-preview` for creative, `gemini-2.5-flash` for analysis.
-- **Provider Switching**: Users can switch between DeepSeek (economic) and Gemini (fast) via the sidebar selector.
-- **Performance Optimization**: Most agents now use V3 (fast) instead of R1 (slow) to reduce processing time from hours to minutes.
-- **Configuration**: Uses `temperature: 1.0` for creative output.
-- **Client Setup**: Utilizes the `@google/genai` SDK for Gemini or OpenAI-compatible API for DeepSeek.
+- **Model**: Gemini 3 Pro Preview, accessed via Replit AI Integrations.
+- **Configuration**: Uses `thinkingBudget: 10000` for deep reasoning and `temperature: 1.0`, `topP: 0.95` for creative output.
+- **Client Setup**: Utilizes the `@google/genai` SDK with Replit's proxy, eliminating the need for an external API key.
 
 ### Build System
 - **Development**: `tsx` for TypeScript execution with hot reload.
@@ -65,22 +59,15 @@ Preferred communication style: Simple, everyday language.
 - **Issue Hash Tracking System**: Prevents re-reporting of already resolved issues by generating and tracking unique hashes for issues.
 - **Improved Cancellation**: Allows for immediate cancellation of processes, with checks implemented before each chapter correction.
 - **Fast-Track Resume System**: Optimizes project resumption from `awaiting_instructions` by skipping unnecessary pipeline stages and directly engaging `runFinalReviewOnly()` with user instructions.
-- **Robust Server Restart Recovery**: When the server restarts during active generation, the QueueManager automatically marks incomplete projects as "paused", ensuring `resumeNovel()` is used instead of `generateNovel()`. This prevents regenerating the World Bible from scratch on each restart and allows chapter generation to continue from where it left off.
 - **Translation Export Improvements**: Markdown exports now: (1) strip code fences/JSON artifacts from AI output, (2) omit trailing dividers after the last chapter, and (3) use localized chapter labels (Prologue, Epilogue, Author's Note, Chapter) based on project language for 7 languages (es, en, fr, de, it, pt, ca).
 - **Immediate Continuity Validation**: Validates each chapter immediately after writing, before the Editor stage. Detects dead characters acting, ignored injuries, and location inconsistencies. If violations are found, forces a targeted rewrite with specific correction instructions before proceeding.
 - **Mandatory Continuity Constraints**: The Ghostwriter now receives prominent, structured constraints at the top of its context listing dead characters, active injuries, and last known locations, with clear warnings that violations will trigger automatic rejection.
-- **DeepSeek-Based FinalReviewer with Tranche System**: The FinalReviewer uses DeepSeek-reasoner (131k token limit) instead of Gemini for cost efficiency. Full manuscripts are divided into tranches of 8 chapters each, processed sequentially with accumulated context passed between tranches to ensure consistency. Features include:
-  - **Accumulated Context**: Each tranche receives a summary of issues found in previous tranches to avoid duplicate reports and detect cross-tranche inconsistencies.
-  - **Intelligent Deduplication**: Similar issues from different tranches are merged, with affected chapters combined and issues sorted by severity (critical first).
-  - **WorldBible Sync**: After review, plotDecisions and persistentInjuries are saved to WorldBible for continuity enforcement.
-  - **Ghostwriter Integration**: Issues with detailed correction instructions are passed to the Ghostwriter, which receives the full context for surgical rewrites.
 
 ## External Dependencies
 
 ### AI Services
-- **DeepSeek**: Primary AI provider for cost efficiency. Uses `DEEPSEEK_API_KEY` environment variable. Optional separate keys: `DEEPSEEK_TRANSLATOR_API_KEY`, `DEEPSEEK_REEDITOR_API_KEY`.
 - **Replit AI Integrations**: Provides access to the Gemini API using `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL` environment variables.
-- **Models**: `deepseek-chat` (V3) and `deepseek-reasoner` (R1) for DeepSeek; `gemini-3-pro-preview` for text generation, `gemini-2.5-flash-image` for image generation.
+- **Models**: `gemini-3-pro-preview` for text generation, `gemini-2.5-flash-image` for image generation.
 
 ### Database
 - **PostgreSQL**: Accessed via the `DATABASE_URL` environment variable.

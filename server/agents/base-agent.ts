@@ -1,61 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
 import { calculateRealCost, formatCostForStorage } from "../cost-calculator";
 import { storage } from "../storage";
 
-// AI Provider configuration
-export type AIProvider = "gemini" | "deepseek";
-
-// Get current AI provider from environment
-export function getAIProvider(): AIProvider {
-  const provider = process.env.AI_PROVIDER?.toLowerCase();
-  if (provider === "gemini") return "gemini";
-  return "deepseek"; // Default to DeepSeek (more cost-effective)
-}
-
-// Gemini client - Use user's own API key if provided, otherwise fall back to Replit integration
-const userGeminiApiKey = process.env.GEMINI_API_KEY;
-const geminiClient = new GoogleGenAI({
-  apiKey: userGeminiApiKey || process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: userGeminiApiKey ? undefined : {
+const ai = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  httpOptions: {
     apiVersion: "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
-
-// DeepSeek client (OpenAI-compatible API)
-function getDeepSeekClient(): OpenAI | null {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) return null;
-  return new OpenAI({
-    apiKey,
-    baseURL: "https://api.deepseek.com",
-  });
-}
-
-// DeepSeek client for Translator (separate API key for parallel operations)
-function getDeepSeekTranslatorClient(): OpenAI | null {
-  // Use dedicated translator key if available, fallback to main key
-  const apiKey = process.env.DEEPSEEK_TRANSLATOR_API_KEY || process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) return null;
-  return new OpenAI({
-    apiKey,
-    baseURL: "https://api.deepseek.com",
-  });
-}
-
-// DeepSeek client for Re-editor (separate API key for parallel operations)
-function getDeepSeekReeditorClient(): OpenAI | null {
-  // Use dedicated re-editor key if available, fallback to main key
-  const apiKey = process.env.DEEPSEEK_REEDITOR_API_KEY || process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) return null;
-  return new OpenAI({
-    apiKey,
-    baseURL: "https://api.deepseek.com",
-  });
-}
-
-export { getDeepSeekTranslatorClient, getDeepSeekReeditorClient };
 
 export interface TokenUsage {
   inputTokens: number;
@@ -72,83 +25,18 @@ export interface AgentResponse {
 }
 
 export type GeminiModel = "gemini-3-pro-preview" | "gemini-2.5-flash" | "gemini-2.0-flash";
-export type DeepSeekModel = "deepseek-reasoner" | "deepseek-chat";
-
-// Map Gemini models to DeepSeek equivalents
-// Default to V3 for stability, but allow override per agent
-function mapGeminiToDeepSeek(geminiModel: GeminiModel): DeepSeekModel {
-  return "deepseek-chat"; // Default fallback
-}
-
-// OPTIMIZED Agent-specific DeepSeek model selection:
-// V3 (deepseek-chat): FAST (10-60s), good for creative tasks, corrections, translations
-// R1 (deepseek-reasoner): SLOW (5-15min), only for critical analysis where reasoning matters
-// 
-// PERFORMANCE OPTIMIZATION: Use V3 by default, R1 only when absolutely necessary
-// This reduces processing time from hours to minutes.
-export const AGENT_DEEPSEEK_MODELS: Record<string, DeepSeekModel> = {
-  // === PROSE GENERATION (V3 - need speed and fluency) ===
-  "ghostwriter": "deepseek-chat",       // V3: fluent creative prose
-  "chapter-expander": "deepseek-chat",  // V3: prose expansion
-  "new-chapter-generator": "deepseek-chat", // V3: prose generation
-  "chapter_expander": "deepseek-chat",  // V3: chapter expansion
-  "new_chapter_generator": "deepseek-chat", // V3: new chapter generation
-  "narrative_rewriter": "deepseek-chat", // V3: fast rewrites (was R1 - too slow)
-  "series-thread-fixer": "deepseek-chat", // V3: series thread fixes
-  
-  // === EDITING & CORRECTIONS (V3 - need speed) ===
-  "editor": "deepseek-chat",            // V3: fast edits (was R1 - bottleneck)
-  "copyeditor": "deepseek-chat",        // V3: fast corrections
-  
-  // === TRANSLATION (V3 - need fluency) ===
-  "translator": "deepseek-chat",        // V3: translation
-  
-  // === EXTRACTION (V3 - structured output) ===
-  "world_bible_extractor": "deepseek-chat", // V3: extraction
-  "chapter-expansion-analyzer": "deepseek-chat", // V3: analysis
-  
-  // === FINAL REVIEW ONLY (R1 - critical evaluation, run once per project) ===
-  "final-reviewer": "deepseek-reasoner", // R1: critical final evaluation
-  "final_reviewer": "deepseek-reasoner", // R1: reedit final reviewer
-  
-  // === QA AGENTS (V3 - run many times, need speed) ===
-  "qa_continuity": "deepseek-chat",     // V3: fast continuity check (was R1)
-  "qa_voice": "deepseek-chat",          // V3: fast voice check (was R1)
-  "qa_semantic": "deepseek-chat",       // V3: fast semantic check (was R1)
-  "qa_anachronism": "deepseek-chat",    // V3: fast anachronism check (was R1)
-  "continuity-validator": "deepseek-chat", // V3: fast validation (was R1)
-  "continuity-sentinel": "deepseek-chat", // V3: fast continuity (was R1)
-  "voice-rhythm-auditor": "deepseek-chat", // V3: fast voice (was R1)
-  "semantic-repetition-detector": "deepseek-chat", // V3: fast semantic (was R1)
-  
-  // === STRUCTURAL ANALYSIS (V3 - good enough, much faster) ===
-  "manuscript-analyzer": "deepseek-chat", // V3: fast analysis (was R1)
-  "arc-validator": "deepseek-chat",     // V3: fast arc validation (was R1)
-  "restructurer": "deepseek-chat",      // V3: fast restructuring (was R1)
-  "expansion_analyzer": "deepseek-chat", // V3: fast expansion analysis (was R1)
-  "italian-reviewer": "deepseek-chat",  // V3: fast Italian review (was R1)
-};
-
-export type AIModel = GeminiModel | DeepSeekModel;
 
 export interface AgentConfig {
   name: string;
   role: string;
   systemPrompt: string;
-  model?: AIModel;
+  model?: GeminiModel;
   useThinking?: boolean;
-  useTranslatorClient?: boolean; // Use dedicated DeepSeek API key for translator
-  useReeditorClient?: boolean; // Use dedicated DeepSeek API key for re-editor
 }
 
-// Timeouts optimized for DeepSeek model types:
-// V3 (deepseek-chat): Fast model, 3 minute timeout is generous
-// R1 (deepseek-reasoner): Slow reasoning model, needs 15 minutes
-const TIMEOUT_V3_MS = 3 * 60 * 1000; // 3 minutes for V3 (fast model)
-const TIMEOUT_R1_MS = 15 * 60 * 1000; // 15 minutes for R1 (slow reasoning model)
-const DEFAULT_TIMEOUT_MS = TIMEOUT_V3_MS; // Default to fast timeout
-const MAX_RETRIES = 3; // Reduced from 4 - V3 is reliable
-const RETRY_DELAY_MS = 5000; // Reduced from 8000 - V3 recovers faster
+const DEFAULT_TIMEOUT_MS = 12 * 60 * 1000;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 5000;
 
 const RATE_LIMIT_MAX_RETRIES = 5;
 const RATE_LIMIT_DELAYS_MS = [30000, 60000, 90000, 120000, 180000];
@@ -159,18 +47,6 @@ function isRateLimitError(error: any): boolean {
          errorStr.includes("429") || 
          errorStr.includes("Rate limit") ||
          errorStr.includes("rate limit");
-}
-
-function isConnectionError(error: any): boolean {
-  const errorStr = String(error?.message || error || "");
-  return errorStr.includes("ECONNRESET") || 
-         errorStr.includes("ETIMEDOUT") ||
-         errorStr.includes("ECONNREFUSED") ||
-         errorStr.includes("socket hang up") ||
-         errorStr.includes("network") ||
-         errorStr.includes("fetch failed") ||
-         errorStr.includes("Connection") ||
-         errorStr.includes("ENOTFOUND");
 }
 
 const activeAbortControllers = new Map<number, AbortController>();
@@ -225,22 +101,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Enhanced withTimeout that also supports aborting the underlying request
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  operationName: string,
-  abortController?: AbortController
+  operationName: string
 ): Promise<T> {
   let timeoutId: NodeJS.Timeout;
   
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      // Abort the underlying request when timeout expires
-      if (abortController) {
-        console.log(`[withTimeout] Aborting request for ${operationName} after ${timeoutMs}ms`);
-        abortController.abort();
-      }
       reject(new Error(`TIMEOUT: ${operationName} exceeded ${timeoutMs}ms`));
     }, timeoutMs);
   });
@@ -257,7 +126,7 @@ async function withTimeout<T>(
 
 export abstract class BaseAgent {
   protected config: AgentConfig;
-  protected ai = geminiClient;
+  protected ai = ai;
   protected timeoutMs = DEFAULT_TIMEOUT_MS;
 
   constructor(config: AgentConfig) {
@@ -272,311 +141,7 @@ export abstract class BaseAgent {
     return this.config.role;
   }
 
-  protected async generateContent(prompt: string, projectId?: number, options?: { temperature?: number; forceProvider?: AIProvider }): Promise<AgentResponse> {
-    console.log(`[${this.config.name}] generateContent() called (prompt: ${prompt.length} chars)`);
-    const provider = options?.forceProvider || getAIProvider();
-    console.log(`[${this.config.name}] AI provider: ${provider}${options?.forceProvider ? ' (forced)' : ''}`);
-    
-    if (provider === "deepseek") {
-      console.log(`[${this.config.name}] Calling generateWithDeepSeek()...`);
-      return this.generateWithDeepSeek(prompt, projectId, options);
-    }
-    
-    return this.generateWithGemini(prompt, projectId, options);
-  }
-
-  private async generateWithDeepSeek(prompt: string, projectId?: number, options?: { temperature?: number }): Promise<AgentResponse> {
-    // Use dedicated client if configured (translator or re-editor)
-    let deepseek: OpenAI | null;
-    let keyName: string;
-    
-    if (this.config.useTranslatorClient) {
-      deepseek = getDeepSeekTranslatorClient();
-      keyName = "DEEPSEEK_TRANSLATOR_API_KEY";
-    } else if (this.config.useReeditorClient) {
-      deepseek = getDeepSeekReeditorClient();
-      keyName = "DEEPSEEK_REEDITOR_API_KEY";
-    } else {
-      deepseek = getDeepSeekClient();
-      keyName = "DEEPSEEK_API_KEY";
-    }
-    
-    if (!deepseek) {
-      return {
-        content: "",
-        error: `DeepSeek API key not configured. Please add ${keyName}.`,
-        timedOut: false,
-      };
-    }
-
-    let lastError: Error | null = null;
-    const temperature = options?.temperature ?? 1.0;
-    let rateLimitAttempts = 0;
-    
-    const maxAttempts = MAX_RETRIES + RATE_LIMIT_MAX_RETRIES + 1;
-    
-    // Use agent-specific DeepSeek model if configured, otherwise fallback to V3
-    // Note: Use role (e.g. "final-reviewer") not name (e.g. "El Revisor Final") for model lookup
-    const agentRole = this.config.role?.toLowerCase() || this.config.name.toLowerCase();
-    const deepseekModel = AGENT_DEEPSEEK_MODELS[agentRole] || "deepseek-chat";
-    
-    // Set timeout based on model - R1 is slow and needs more time
-    const isReasonerModel = deepseekModel === "deepseek-reasoner";
-    const effectiveTimeout = isReasonerModel ? TIMEOUT_R1_MS : TIMEOUT_V3_MS;
-    console.log(`[${this.config.name}] Using DeepSeek model: ${deepseekModel} (role: ${agentRole}, timeout: ${effectiveTimeout/1000}s)`);
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (projectId && isProjectCancelled(projectId)) {
-        return {
-          content: "",
-          error: "CANCELLED: Project generation was cancelled",
-          timedOut: false,
-        };
-      }
-      
-      try {
-        const startTime = Date.now();
-        console.log(`[${this.config.name}] Starting DeepSeek API call (${deepseekModel}, attempt ${attempt + 1})...`);
-        
-        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-          { role: "system", content: this.config.systemPrompt },
-          { role: "user", content: prompt },
-        ];
-
-        console.log(`[${this.config.name}] Creating DeepSeek request (messages: ${messages.length}, model: ${deepseekModel})...`);
-        
-        // DeepSeek R1 (reasoner) uses different parameters than V3 (chat)
-        // R1: max_completion_tokens (16000 limit), no temperature support
-        // V3: max_tokens (8192 limit), temperature 0-2
-        // Note: isReasonerModel already defined above for timeout selection
-        
-        const requestParams: any = {
-          model: deepseekModel,
-          messages,
-          stream: false,
-        };
-        
-        if (isReasonerModel) {
-          // R1 uses max_completion_tokens and doesn't support temperature
-          requestParams.max_completion_tokens = 16000;
-        } else {
-          // V3: max_tokens limit is 8192 - this is a hard API limit
-          // For large outputs like World Bible, we need to use streaming or split requests
-          requestParams.max_tokens = 8192;
-          requestParams.temperature = Math.min(temperature, 2.0);
-        }
-        
-        // CRITICAL DEBUG: Log the exact parameters being sent to DeepSeek
-        const systemPromptLength = this.config.systemPrompt?.length || 0;
-        const userPromptLength = prompt?.length || 0;
-        console.log(`[${this.config.name}] DEBUG REQUEST PARAMS:`);
-        console.log(`  - model: ${requestParams.model}`);
-        console.log(`  - max_tokens: ${requestParams.max_tokens || 'N/A'}`);
-        console.log(`  - max_completion_tokens: ${requestParams.max_completion_tokens || 'N/A'}`);
-        console.log(`  - temperature: ${requestParams.temperature || 'N/A'}`);
-        console.log(`  - stream: ${requestParams.stream}`);
-        console.log(`  - systemPrompt length: ${systemPromptLength} chars`);
-        console.log(`  - userPrompt length: ${userPromptLength} chars`);
-        console.log(`  - total prompt chars: ${systemPromptLength + userPromptLength}`);
-        
-        // Create AbortController to cancel hanging requests
-        const requestAbortController = new AbortController();
-        
-        const generatePromise = deepseek.chat.completions.create(requestParams, {
-          signal: requestAbortController.signal as any, // Pass abort signal to cancel hanging connections
-        });
-
-        console.log(`[${this.config.name}] DeepSeek request created, awaiting response (timeout: ${effectiveTimeout/1000}s)...`);
-
-        const response = await withTimeout(
-          generatePromise,
-          effectiveTimeout,
-          `${this.config.name} DeepSeek generation`,
-          requestAbortController
-        );
-        
-        const elapsedMs = Date.now() - startTime;
-        console.log(`[${this.config.name}] DeepSeek API call completed in ${Math.round(elapsedMs / 1000)}s`);
-        
-        // CRITICAL DEBUG: Log the raw response structure
-        console.log(`[${this.config.name}] DEBUG RAW RESPONSE:`);
-        console.log(`  - response.id: ${response.id || 'N/A'}`);
-        console.log(`  - response.model: ${response.model || 'N/A'}`);
-        console.log(`  - response.choices length: ${response.choices?.length || 0}`);
-        console.log(`  - response.usage: ${JSON.stringify(response.usage || {})}`);
-
-        const choice = response.choices?.[0];
-        let content = choice?.message?.content || "";
-        let thoughtSignature = "";
-
-        // DeepSeek R1 returns reasoning in reasoning_content field
-        if ((choice?.message as any)?.reasoning_content) {
-          thoughtSignature = (choice.message as any).reasoning_content;
-        }
-        
-        // DEBUG: Log content length and preview for architect debugging
-        console.log(`[${this.config.name}] DeepSeek response - content length: ${content.length}, reasoning length: ${thoughtSignature.length}`);
-        
-        // CRITICAL DEBUG: Log finish_reason
-        console.log(`[${this.config.name}] DEBUG finish_reason: ${choice?.finish_reason || 'N/A'}`);
-        
-        // If content is empty, log more details
-        if (content.length === 0) {
-          console.log(`[${this.config.name}] WARNING: Empty content received!`);
-          console.log(`  - choice.message: ${JSON.stringify(choice?.message || {}).substring(0, 500)}`);
-          if (thoughtSignature.length > 0) {
-            console.log(`  - reasoning_content preview (first 500): ${thoughtSignature.substring(0, 500)}`);
-          }
-        }
-        if (content.length > 0) {
-          console.log(`[${this.config.name}] DeepSeek content preview (first 500): ${content.substring(0, 500)}`);
-        } else if (thoughtSignature.length > 0) {
-          // If content is empty but reasoning has JSON, try to extract it
-          const jsonMatch = thoughtSignature.match(/```(?:json)?\s*([\s\S]*?)```/);
-          if (jsonMatch) {
-            console.log(`[${this.config.name}] Found JSON in reasoning_content, extracting...`);
-            content = jsonMatch[1].trim();
-          } else {
-            // Try to find raw JSON object in reasoning - look for various patterns
-            // Support world_bible, veredicto, puntuacion_global, bestsellerScore, etc.
-            const jsonPatterns = [
-              /(\{[\s\S]*"world_bible"[\s\S]*\})/,
-              /(\{[\s\S]*"veredicto"[\s\S]*\})/,
-              /(\{[\s\S]*"puntuacion_global"[\s\S]*\})/,
-              /(\{[\s\S]*"bestsellerScore"[\s\S]*\})/,
-              /(\{[\s\S]*"issues"[\s\S]*\})/,
-              /(\{[\s\S]*"capituloReescrito"[\s\S]*\})/,
-              /(\{[\s\S]*"erroresContinuidad"[\s\S]*\})/,
-            ];
-            
-            for (const pattern of jsonPatterns) {
-              const rawJsonMatch = thoughtSignature.match(pattern);
-              if (rawJsonMatch) {
-                console.log(`[${this.config.name}] Found raw JSON in reasoning_content, extracting...`);
-                content = rawJsonMatch[1];
-                break;
-              }
-            }
-            
-            // Last resort: try to find any valid JSON object
-            if (content.length === 0) {
-              const anyJsonMatch = thoughtSignature.match(/(\{[\s\S]*\})/);
-              if (anyJsonMatch) {
-                try {
-                  JSON.parse(anyJsonMatch[1]);
-                  console.log(`[${this.config.name}] Found valid JSON in reasoning_content via generic match, extracting...`);
-                  content = anyJsonMatch[1];
-                } catch {
-                  // Not valid JSON, ignore
-                }
-              }
-            }
-          }
-        }
-
-        const usage = response.usage;
-        const tokenUsage: TokenUsage = {
-          inputTokens: usage?.prompt_tokens || 0,
-          outputTokens: usage?.completion_tokens || 0,
-          thinkingTokens: (usage as any)?.reasoning_tokens || 0,
-        };
-
-        // Track AI usage event with DeepSeek costs
-        if (projectId && (tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0)) {
-          const costs = calculateDeepSeekCost(
-            deepseekModel,
-            tokenUsage.inputTokens,
-            tokenUsage.outputTokens,
-            tokenUsage.thinkingTokens
-          );
-          
-          try {
-            await storage.createAiUsageEvent({
-              projectId,
-              agentName: this.config.name,
-              model: `deepseek:${deepseekModel}`,
-              inputTokens: tokenUsage.inputTokens,
-              outputTokens: tokenUsage.outputTokens,
-              thinkingTokens: tokenUsage.thinkingTokens,
-              inputCostUsd: formatCostForStorage(costs.inputCost),
-              outputCostUsd: formatCostForStorage(costs.outputCost + costs.thinkingCost),
-              totalCostUsd: formatCostForStorage(costs.totalCost),
-              operation: "generate",
-            });
-          } catch (err) {
-            console.error(`[${this.config.name}] Failed to log AI usage event:`, err);
-          }
-        }
-
-        return { content, thoughtSignature, tokenUsage };
-      } catch (error) {
-        lastError = error as Error;
-        const errorMessage = lastError.message || String(error);
-        
-        if (isRateLimitError(error)) {
-          rateLimitAttempts++;
-          if (rateLimitAttempts <= RATE_LIMIT_MAX_RETRIES) {
-            const delayMs = RATE_LIMIT_DELAYS_MS[Math.min(rateLimitAttempts - 1, RATE_LIMIT_DELAYS_MS.length - 1)];
-            console.log(`[${this.config.name}] DeepSeek rate limit hit (attempt ${rateLimitAttempts}/${RATE_LIMIT_MAX_RETRIES}). Waiting ${delayMs / 1000}s before retry...`);
-            await sleep(delayMs);
-            continue;
-          }
-          console.error(`[${this.config.name}] DeepSeek rate limit exceeded after ${RATE_LIMIT_MAX_RETRIES} retries`);
-          return {
-            content: "",
-            error: `RATE_LIMIT: ${errorMessage}`,
-            timedOut: false,
-          };
-        }
-        
-        console.error(`[${this.config.name}] DeepSeek attempt ${attempt + 1} failed:`, errorMessage);
-        
-        if (errorMessage.startsWith("TIMEOUT:")) {
-          if (attempt < MAX_RETRIES) {
-            const delayMs = RETRY_DELAY_MS * (attempt + 1);
-            console.log(`[${this.config.name}] Retrying DeepSeek after timeout (waiting ${delayMs/1000}s)...`);
-            await sleep(delayMs);
-            continue;
-          }
-          return {
-            content: "",
-            error: errorMessage,
-            timedOut: true,
-          };
-        }
-        
-        if (isConnectionError(error)) {
-          if (attempt < MAX_RETRIES) {
-            const delayMs = RETRY_DELAY_MS * (attempt + 2);
-            console.log(`[${this.config.name}] Connection error detected. Retrying in ${delayMs/1000}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
-            await sleep(delayMs);
-            continue;
-          }
-          console.error(`[${this.config.name}] DeepSeek connection failed after ${MAX_RETRIES} retries`);
-          return {
-            content: "",
-            error: `CONNECTION_ERROR: ${errorMessage}`,
-            timedOut: false,
-          };
-        }
-        
-        if (attempt < MAX_RETRIES) {
-          const delayMs = RETRY_DELAY_MS * (attempt + 1);
-          console.log(`[${this.config.name}] Retrying DeepSeek after error (waiting ${delayMs/1000}s)...`);
-          await sleep(delayMs);
-          continue;
-        }
-      }
-    }
-    
-    return {
-      content: "",
-      error: lastError?.message || "Unknown error after all retries",
-      timedOut: false,
-    };
-  }
-
-  private async generateWithGemini(prompt: string, projectId?: number, options?: { temperature?: number }): Promise<AgentResponse> {
+  protected async generateContent(prompt: string, projectId?: number, options?: { temperature?: number }): Promise<AgentResponse> {
     let lastError: Error | null = null;
     const temperature = options?.temperature ?? 1.0;
     let rateLimitAttempts = 0;
@@ -597,7 +162,7 @@ export abstract class BaseAgent {
         const useThinking = this.config.useThinking !== false;
         
         const startTime = Date.now();
-        console.log(`[${this.config.name}] Starting Gemini API call (${modelToUse}, attempt ${attempt + 1})...`);
+        console.log(`[${this.config.name}] Starting API call (attempt ${attempt + 1})...`);
         
         const generatePromise = this.ai.models.generateContent({
           model: modelToUse,
@@ -612,7 +177,7 @@ export abstract class BaseAgent {
             maxOutputTokens: 65536,
             ...(useThinking && modelToUse === "gemini-3-pro-preview" ? {
               thinkingConfig: {
-                thinkingBudget: 10000,
+                thinkingBudget: 2048,
                 includeThoughts: true,
               },
             } : {}),
@@ -622,18 +187,11 @@ export abstract class BaseAgent {
         const response = await withTimeout(
           generatePromise,
           this.timeoutMs,
-          `${this.config.name} Gemini generation`
+          `${this.config.name} AI generation`
         );
         
         const elapsedMs = Date.now() - startTime;
-        console.log(`[${this.config.name}] Gemini API call completed in ${Math.round(elapsedMs / 1000)}s`);
-        
-        // DETAILED LOGGING: Log raw response structure
-        console.log(`[${this.config.name}] Response candidates count: ${response.candidates?.length || 0}`);
-        if (response.candidates?.[0]) {
-          console.log(`[${this.config.name}] Candidate[0] finishReason: ${response.candidates[0].finishReason}`);
-          console.log(`[${this.config.name}] Candidate[0] parts count: ${response.candidates[0].content?.parts?.length || 0}`);
-        }
+        console.log(`[${this.config.name}] API call completed in ${Math.round(elapsedMs / 1000)}s`);
 
         const candidate = response.candidates?.[0];
         let content = "";
@@ -647,17 +205,6 @@ export abstract class BaseAgent {
               content += part.text;
             }
           }
-        }
-        
-        // DETAILED LOGGING: Log extracted content lengths
-        console.log(`[${this.config.name}] Extracted content length: ${content.length}`);
-        console.log(`[${this.config.name}] Extracted thoughtSignature length: ${thoughtSignature.length}`);
-        
-        // Log first 500 chars of content for debugging
-        if (content.length > 0) {
-          console.log(`[${this.config.name}] Content preview (first 500 chars): ${content.substring(0, 500)}`);
-        } else {
-          console.log(`[${this.config.name}] WARNING: Content is EMPTY!`);
         }
         
         if (!thoughtSignature && candidate?.content?.parts) {
@@ -679,10 +226,9 @@ export abstract class BaseAgent {
         };
 
         // Track AI usage event with real costs
-        const modelToUseForCost = this.config.model || "gemini-3-pro-preview";
         if (projectId && (tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0)) {
           const costs = calculateRealCost(
-            modelToUseForCost,
+            modelToUse,
             tokenUsage.inputTokens,
             tokenUsage.outputTokens,
             tokenUsage.thinkingTokens
@@ -692,7 +238,7 @@ export abstract class BaseAgent {
             await storage.createAiUsageEvent({
               projectId,
               agentName: this.config.name,
-              model: modelToUseForCost,
+              model: modelToUse,
               inputTokens: tokenUsage.inputTokens,
               outputTokens: tokenUsage.outputTokens,
               thinkingTokens: tokenUsage.thinkingTokens,
@@ -715,11 +261,11 @@ export abstract class BaseAgent {
           rateLimitAttempts++;
           if (rateLimitAttempts <= RATE_LIMIT_MAX_RETRIES) {
             const delayMs = RATE_LIMIT_DELAYS_MS[Math.min(rateLimitAttempts - 1, RATE_LIMIT_DELAYS_MS.length - 1)];
-            console.log(`[${this.config.name}] Gemini rate limit hit (attempt ${rateLimitAttempts}/${RATE_LIMIT_MAX_RETRIES}). Waiting ${delayMs / 1000}s before retry...`);
+            console.log(`[${this.config.name}] Rate limit hit (attempt ${rateLimitAttempts}/${RATE_LIMIT_MAX_RETRIES}). Waiting ${delayMs / 1000}s before retry...`);
             await sleep(delayMs);
             continue;
           }
-          console.error(`[${this.config.name}] Gemini rate limit exceeded after ${RATE_LIMIT_MAX_RETRIES} retries`);
+          console.error(`[${this.config.name}] Rate limit exceeded after ${RATE_LIMIT_MAX_RETRIES} retries`);
           return {
             content: "",
             error: `RATE_LIMIT: ${errorMessage}`,
@@ -727,11 +273,11 @@ export abstract class BaseAgent {
           };
         }
         
-        console.error(`[${this.config.name}] Gemini attempt ${attempt + 1} failed:`, errorMessage);
+        console.error(`[${this.config.name}] Attempt ${attempt + 1} failed:`, errorMessage);
         
         if (errorMessage.startsWith("TIMEOUT:")) {
           if (attempt < MAX_RETRIES) {
-            console.log(`[${this.config.name}] Retrying Gemini after timeout...`);
+            console.log(`[${this.config.name}] Retrying after timeout...`);
             await sleep(RETRY_DELAY_MS);
             continue;
           }
@@ -743,7 +289,7 @@ export abstract class BaseAgent {
         }
         
         if (attempt < MAX_RETRIES) {
-          console.log(`[${this.config.name}] Retrying Gemini after error...`);
+          console.log(`[${this.config.name}] Retrying after error...`);
           await sleep(RETRY_DELAY_MS * (attempt + 1));
           continue;
         }
@@ -758,36 +304,4 @@ export abstract class BaseAgent {
   }
 
   abstract execute(input: any): Promise<AgentResponse>;
-}
-
-// DeepSeek pricing (per million tokens, as of Jan 2025)
-// V3 (chat): $0.27 input, $1.10 output
-// R1 (reasoner): $0.55 input, $2.19 output (reasoning tokens same as output)
-function calculateDeepSeekCost(
-  model: DeepSeekModel,
-  inputTokens: number,
-  outputTokens: number,
-  thinkingTokens: number
-): { inputCost: number; outputCost: number; thinkingCost: number; totalCost: number } {
-  let inputRate: number;
-  let outputRate: number;
-  
-  if (model === "deepseek-reasoner") {
-    inputRate = 0.55 / 1_000_000;
-    outputRate = 2.19 / 1_000_000;
-  } else {
-    inputRate = 0.27 / 1_000_000;
-    outputRate = 1.10 / 1_000_000;
-  }
-  
-  const inputCost = inputTokens * inputRate;
-  const outputCost = outputTokens * outputRate;
-  const thinkingCost = thinkingTokens * outputRate; // Reasoning tokens charged at output rate
-  
-  return {
-    inputCost,
-    outputCost,
-    thinkingCost,
-    totalCost: inputCost + outputCost + thinkingCost,
-  };
 }

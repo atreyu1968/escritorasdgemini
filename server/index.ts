@@ -4,39 +4,6 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { queueManager } from "./queue-manager";
 import { autoResumeReeditProjects, startWatchdog } from "./reedit-auto-resume";
-import { autoResumeTranslations, startTranslationWatchdog } from "./translation-auto-resume";
-
-// Production diagnostics: Log process signals and memory usage
-process.on("SIGTERM", () => {
-  console.log("[PROCESS] Received SIGTERM signal - server shutting down");
-  process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  console.log("[PROCESS] Received SIGINT signal - server shutting down");
-  process.exit(0);
-});
-
-process.on("uncaughtException", (error) => {
-  console.error("[PROCESS] Uncaught Exception:", error);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("[PROCESS] Unhandled Rejection at:", promise, "reason:", reason);
-});
-
-// Log memory usage periodically in production
-if (process.env.NODE_ENV === "production") {
-  setInterval(() => {
-    const usage = process.memoryUsage();
-    const heapUsedMB = Math.round(usage.heapUsed / 1024 / 1024);
-    const heapTotalMB = Math.round(usage.heapTotal / 1024 / 1024);
-    const rssMB = Math.round(usage.rss / 1024 / 1024);
-    if (heapUsedMB > 400) { // Log if using more than 400MB heap
-      console.log(`[MEMORY] Heap: ${heapUsedMB}MB/${heapTotalMB}MB, RSS: ${rssMB}MB`);
-    }
-  }, 60000); // Every minute
-}
 
 const app = express();
 const httpServer = createServer(app);
@@ -138,21 +105,18 @@ app.use((req, res, next) => {
         log(`Queue manager initialization error: ${error}`, "queue");
       }
       
-      // Auto-resume reedit projects and translations that were in processing state
+      // Auto-resume reedit projects that were in processing state
       try {
         setTimeout(async () => {
           log("Checking for reedit projects to auto-resume...", "reedit");
           await autoResumeReeditProjects();
+          
+          // Start the watchdog to detect frozen processes
           startWatchdog();
           log("Reedit watchdog started", "reedit");
-          
-          log("Checking for translations to auto-resume...", "translation");
-          await autoResumeTranslations();
-          startTranslationWatchdog();
-          log("Translation watchdog started", "translation");
-        }, 3000);
+        }, 3000); // Wait 3 seconds for server to fully initialize
       } catch (error) {
-        log(`Auto-resume error: ${error}`, "system");
+        log(`Reedit auto-resume error: ${error}`, "reedit");
       }
     },
   );

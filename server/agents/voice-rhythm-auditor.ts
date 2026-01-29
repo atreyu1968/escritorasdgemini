@@ -126,9 +126,8 @@ export class VoiceRhythmAuditorAgent extends BaseAgent {
       name: "El Auditor de Voz",
       role: "voice-rhythm-auditor",
       systemPrompt: SYSTEM_PROMPT,
-      model: "deepseek-reasoner",
+      model: "gemini-2.5-flash",
       useThinking: false,
-      useReeditorClient: true, // Use dedicated API key for parallel re-editing
     });
   }
 

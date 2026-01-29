@@ -81,7 +81,7 @@ Responde SIEMPRE en formato JSON válido con esta estructura exacta:
   "keyEvents": [...],
   "seriesHooks": [...]
 }`,
-      model: "deepseek-reasoner",
+      model: "gemini-2.0-flash",
       useThinking: false,
     });
     this.timeoutMs = 4 * 60 * 1000;

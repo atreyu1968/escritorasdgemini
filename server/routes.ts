@@ -9,7 +9,6 @@ import mammoth from "mammoth";
 import { generateManuscriptDocx } from "./services/docx-exporter";
 import { z } from "zod";
 import { CopyEditorAgent, cancelProject, ItalianReviewerAgent } from "./agents";
-import { getAIProvider, type AIProvider } from "./agents/base-agent";
 import { ReeditOrchestrator } from "./orchestrators/reedit-orchestrator";
 import { chatService } from "./services/chatService";
 
@@ -712,29 +711,24 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Project is already generating" });
       }
 
-      const validStatuses = ["paused", "cancelled", "error", "failed_final_review", "idle", "planning", "awaiting_instructions"];
+      const validStatuses = ["paused", "cancelled", "error", "failed_final_review"];
       if (!validStatuses.includes(project.status)) {
         console.log(`[Resume] Project ${id} has invalid status: ${project.status}`);
         return res.status(400).json({ 
-          error: `No se puede reanudar un proyecto con estado "${project.status}". Estados válidos: pausado, cancelado, error, idle, planning, awaiting_instructions.` 
+          error: `Cannot resume project with status "${project.status}". Only paused, cancelled, or error projects can be resumed.` 
         });
       }
-
-      // Check if World Bible exists - if not, we need to start from scratch
-      const worldBible = await storage.getWorldBibleByProject(id);
-      const hasWorldBible = !!worldBible;
-      console.log(`[Resume] Project ${id} has World Bible: ${hasWorldBible}`);
 
       console.log(`[Resume] Updating project ${id} status to generating`);
       await storage.updateProject(id, { status: "generating" });
 
       for (const agentName of ["architect", "ghostwriter", "editor", "copyeditor", "final-reviewer"]) {
-        await storage.updateAgentStatus(id, agentName, { status: "idle", currentTask: hasWorldBible ? "Preparando reanudación..." : "Preparando generación desde cero..." });
+        await storage.updateAgentStatus(id, agentName, { status: "idle", currentTask: "Preparando reanudación..." });
       }
       console.log(`[Resume] Agent statuses updated for project ${id}`);
 
-      res.json({ message: hasWorldBible ? "Resume started" : "Generation started from scratch", projectId: id, fromScratch: !hasWorldBible });
-      console.log(`[Resume] Response sent, starting orchestrator for project ${id} (fromScratch: ${!hasWorldBible})`);
+      res.json({ message: "Resume started", projectId: id });
+      console.log(`[Resume] Response sent, starting orchestrator for project ${id}`);
 
       const sendToStreams = (data: any) => {
         const streams = activeStreams.get(id);
@@ -779,15 +773,7 @@ export async function registerRoutes(
         },
       });
 
-      // If no World Bible exists, start from scratch with generateNovel
-      // Otherwise, resume from where it left off with resumeNovel
-      if (hasWorldBible) {
-        console.log(`[Resume] Resuming project ${id} with resumeNovel`);
-        orchestrator.resumeNovel(project).catch(console.error);
-      } else {
-        console.log(`[Resume] Starting project ${id} from scratch with generateNovel (no World Bible found)`);
-        orchestrator.generateNovel(project).catch(console.error);
-      }
+      orchestrator.resumeNovel(project).catch(console.error);
 
     } catch (error) {
       console.error("Error resuming generation:", error);
@@ -804,20 +790,15 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Project not found" });
       }
 
-      // Allow re-running final review on completed, failed, or 8-score projects
-      const allowedStatuses = ["completed", "failed_final_review"];
-      if (!allowedStatuses.includes(project.status)) {
-        return res.status(400).json({ error: "Solo se puede ejecutar la revisión final en proyectos completados o con revisión fallida" });
+      if (project.status !== "completed") {
+        return res.status(400).json({ error: "Solo se puede ejecutar la revisión final en proyectos completados" });
       }
 
-      // Reset audit flags to allow full re-analysis
       await storage.updateProject(id, { 
         status: "generating",
         revisionCycle: 0,
-        finalReviewResult: null,
-        voiceAuditCompleted: false,
-        semanticCheckCompleted: false
-      } as any);
+        finalReviewResult: null
+      });
 
       res.json({ message: "Final review started", projectId: id });
 
@@ -2602,43 +2583,6 @@ ${series.seriesGuide.substring(0, 50000)}`;
     }
   });
 
-  // Endpoint to reset a chapter to pending status for pipeline re-processing
-  app.post("/api/projects/:projectId/chapters/:chapterNumber/reset-to-pending", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.projectId);
-      const chapterNumber = parseInt(req.params.chapterNumber);
-      
-      const project = await storage.getProject(projectId);
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-      
-      const chapters = await storage.getChaptersByProject(projectId);
-      const chapter = chapters.find(c => c.chapterNumber === chapterNumber);
-      if (!chapter) {
-        return res.status(404).json({ error: "Chapter not found" });
-      }
-      
-      // Reset chapter to pending with empty content
-      await storage.updateChapter(chapter.id, {
-        status: "pending",
-        content: "",
-        wordCount: 0,
-      });
-      
-      console.log(`[ResetChapter] Chapter ${chapterNumber} of project ${projectId} reset to pending`);
-      
-      res.json({ 
-        success: true,
-        message: `Chapter ${chapterNumber} reset to pending`,
-        chapterId: chapter.id,
-      });
-    } catch (error: any) {
-      console.error("Error resetting chapter:", error);
-      res.status(500).json({ error: error.message || "Failed to reset chapter" });
-    }
-  });
-
   // Endpoint to rewrite a specific chapter with improvement instructions
   const rewriteChapterSchema = z.object({
     instructions: z.string().min(10, "Instructions must be at least 10 characters"),
@@ -2769,154 +2713,6 @@ IMPORTANTE:
       }
     } catch (error) {
       console.error("Error rewriting chapter:", error);
-    }
-  });
-
-  // Normalize chapter titles and headers for a project
-  app.post("/api/projects/:id/normalize-titles", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.id);
-      const project = await storage.getProject(projectId);
-      
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-      
-      const chapters = await storage.getChaptersByProject(projectId);
-      const results: { chapterId: number; chapterNumber: number; oldTitle: string; newTitle: string; headerFixed: boolean }[] = [];
-      
-      // Helper function to normalize title case (first letter uppercase, rest lowercase for each word)
-      const toTitleCase = (str: string): string => {
-        return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-      };
-      
-      // Helper function to remove duplicate headers and normalize content
-      const normalizeContent = (content: string, chapterNumber: number, title: string, language: string = "es"): { normalized: string; headerFixed: boolean } => {
-        if (!content || content.trim() === '') return { normalized: content, headerFixed: false };
-        
-        let normalized = content.trim();
-        let headerFixed = false;
-        
-        // Pattern to match chapter/section headers (supports multiple languages and formats)
-        const headerPatterns = [
-          /^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|PRÓLOGO|Prólogo|PROLOGUE|Prologue|EPÍLOGO|Epílogo|EPILOGUE|Epilogue|NOTA DEL AUTOR|Nota del Autor|AUTHOR'?S?\s*NOTE|Author'?s?\s*Note)[^\n]*\n+/gi,
-        ];
-        
-        // Remove ALL duplicate headers at the start (loop until no more found)
-        let prevLength = 0;
-        while (normalized.length !== prevLength) {
-          prevLength = normalized.length;
-          for (const pattern of headerPatterns) {
-            pattern.lastIndex = 0; // Reset regex state
-            const match = normalized.match(pattern);
-            if (match) {
-              normalized = normalized.replace(pattern, '');
-              headerFixed = true;
-            }
-          }
-          normalized = normalized.trim();
-        }
-        
-        // Determine the correct header based on chapter number
-        let header = '';
-        if (chapterNumber === 0) {
-          header = title && title !== 'Prólogo' ? `# Prólogo: ${title}` : '# Prólogo';
-        } else if (chapterNumber === -1) {
-          header = title && title !== 'Epílogo' ? `# Epílogo: ${title}` : '# Epílogo';
-        } else if (chapterNumber === -2) {
-          header = title && title !== 'Nota del Autor' ? `# Nota del Autor: ${title}` : '# Nota del Autor';
-        } else {
-          // Regular chapter - use title from database, ensure title case
-          const normalizedTitle = title ? toTitleCase(title.replace(/^Capítulo\s*\d+\s*:?\s*/i, '').trim()) : '';
-          if (normalizedTitle && normalizedTitle.toLowerCase() !== `capítulo ${chapterNumber}`.toLowerCase()) {
-            header = `# Capítulo ${chapterNumber}: ${normalizedTitle}`;
-          } else {
-            header = `# Capítulo ${chapterNumber}`;
-          }
-        }
-        
-        // Add the normalized header
-        normalized = `${header}\n\n${normalized}`;
-        
-        return { normalized, headerFixed };
-      };
-      
-      // Helper to extract a clean title from content if title is generic
-      const extractTitleFromContent = (content: string, chapterNumber: number): string | null => {
-        if (!content) return null;
-        
-        // Look for a header pattern in the content
-        const match = content.match(/^#+ *(?:CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter)\s*\d+\s*[:–—-]\s*([^\n]+)/mi);
-        if (match && match[1]) {
-          const extracted = match[1].trim();
-          // Make sure it's not just "Capítulo X" repeated
-          if (!extracted.match(/^Capítulo\s*\d+$/i) && extracted.length > 0) {
-            return extracted;
-          }
-        }
-        return null;
-      };
-      
-      for (const chapter of chapters) {
-        const oldTitle = chapter.title || '';
-        let newTitle = oldTitle;
-        
-        // Check if title is generic (just "Capítulo X" or empty)
-        const isGenericTitle = !oldTitle || 
-          oldTitle.match(/^Capítulo\s*\d+$/i) || 
-          oldTitle === 'Prólogo' || 
-          oldTitle === 'Epílogo' ||
-          oldTitle === 'Nota del Autor';
-        
-        // Try to extract a better title from the content if the current title is generic
-        if (isGenericTitle && chapter.content) {
-          const extractedTitle = extractTitleFromContent(chapter.content, chapter.chapterNumber);
-          if (extractedTitle) {
-            newTitle = extractedTitle;
-          }
-        }
-        
-        // Normalize the title case for non-special chapters
-        if (chapter.chapterNumber > 0 && newTitle && !newTitle.match(/^Capítulo\s*\d+$/i)) {
-          newTitle = toTitleCase(newTitle);
-        }
-        
-        // Normalize the content headers
-        const { normalized, headerFixed } = normalizeContent(
-          chapter.content || '', 
-          chapter.chapterNumber, 
-          newTitle
-        );
-        
-        // Update the chapter if there are changes
-        if (oldTitle !== newTitle || headerFixed) {
-          await storage.updateChapter(chapter.id, {
-            title: newTitle,
-            content: normalized,
-          });
-          
-          results.push({
-            chapterId: chapter.id,
-            chapterNumber: chapter.chapterNumber,
-            oldTitle,
-            newTitle,
-            headerFixed,
-          });
-        }
-      }
-      
-      res.json({
-        success: true,
-        projectId,
-        projectTitle: project.title,
-        chaptersUpdated: results.length,
-        totalChapters: chapters.length,
-        updates: results,
-      });
-      
-    } catch (error) {
-      console.error("Error normalizing chapter titles:", error);
-      res.status(500).json({ error: "Failed to normalize chapter titles" });
     }
   });
 
@@ -3928,10 +3724,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         series,
         continuitySnapshots,
         thoughtLogs,
-        translations,
-        reeditProjects,
-        reeditChapters,
-        aiUsageEvents,
       ] = await Promise.all([
         storage.getAllProjects(),
         storage.getAllChapters(),
@@ -3942,15 +3734,10 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         storage.getAllSeries(),
         storage.getAllContinuitySnapshots(),
         storage.getAllThoughtLogs(),
-        storage.getAllTranslations(),
-        storage.getAllReeditProjects(),
-        storage.getAllReeditChapters(),
-        storage.getAllAiUsageEvents(),
       ]);
 
       res.json({
         exportedAt: new Date().toISOString(),
-        version: "2.0",
         data: {
           pseudonyms,
           styleGuides,
@@ -3961,10 +3748,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           worldBibles,
           continuitySnapshots,
           thoughtLogs,
-          translations,
-          reeditProjects,
-          reeditChapters,
-          aiUsageEvents,
         }
       });
     } catch (error) {
@@ -3993,23 +3776,11 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return res.status(400).json({ error: "No data provided. Send { data: {...} } or { sourceUrl: '...' }" });
       }
 
-      // Helper to remove auto-generated fields before insert
-      const prepareForInsert = (item: any, omitFields: string[] = ['id', 'createdAt']) => {
-        const result = { ...item };
-        for (const field of omitFields) {
-          delete result[field];
-        }
-        return result;
+      // Helper to remove id/createdAt before insert
+      const prepareForInsert = (item: any) => {
+        const { id, createdAt, ...rest } = item;
+        return rest;
       };
-      
-      // Fields to omit for different entity types (matches their insertSchema.omit)
-      const projectOmitFields = ['id', 'createdAt', 'status', 'currentChapter'];
-      const reeditProjectOmitFields = [
-        'id', 'createdAt', 'status', 'currentStage', 'processedChapters',
-        'currentChapter', 'totalInputTokens', 'totalOutputTokens', 'totalThinkingTokens'
-      ];
-      const continuitySnapshotOmitFields = ['id', 'createdAt', 'updatedAt'];
-      const worldBibleOmitFields = ['id', 'updatedAt'];
 
       const results: any = { imported: {}, errors: [] };
       
@@ -4086,7 +3857,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         for (const item of importData.projects) {
           try {
             const oldId = item.id;
-            const data = prepareForInsert(item, projectOmitFields);
+            const data = prepareForInsert(item);
             // Map seriesId and pseudonymId to new IDs
             if (data.seriesId && seriesIdMap.has(data.seriesId)) {
               data.seriesId = seriesIdMap.get(data.seriesId);
@@ -4126,7 +3897,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       if (importData.worldBibles?.length) {
         for (const item of importData.worldBibles) {
           try {
-            const data = prepareForInsert(item, worldBibleOmitFields);
+            const data = prepareForInsert(item);
             // Map projectId to new ID
             if (data.projectId && projectIdMap.has(data.projectId)) {
               data.projectId = projectIdMap.get(data.projectId);
@@ -4136,78 +3907,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           } catch (e: any) {
             if (!e.message?.includes('duplicate')) {
               results.errors.push({ table: 'worldBibles', error: e.message });
-            }
-          }
-        }
-      }
-
-      // Import translations (depends on projects)
-      if (importData.translations?.length) {
-        for (const item of importData.translations) {
-          try {
-            const data = prepareForInsert(item);
-            if (data.projectId && projectIdMap.has(data.projectId)) {
-              data.projectId = projectIdMap.get(data.projectId);
-            }
-            await storage.createTranslation(data);
-            results.imported.translations = (results.imported.translations || 0) + 1;
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate')) {
-              results.errors.push({ table: 'translations', error: e.message });
-            }
-          }
-        }
-      }
-
-      // Import reedit projects
-      const reeditProjectIdMap = new Map<number, number>();
-      if (importData.reeditProjects?.length) {
-        for (const item of importData.reeditProjects) {
-          try {
-            const oldId = item.id;
-            const data = prepareForInsert(item, reeditProjectOmitFields);
-            const created = await storage.createReeditProject(data);
-            reeditProjectIdMap.set(oldId, created.id);
-            results.imported.reeditProjects = (results.imported.reeditProjects || 0) + 1;
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate')) {
-              results.errors.push({ table: 'reeditProjects', error: e.message });
-            }
-          }
-        }
-      }
-
-      // Import reedit chapters (depends on reedit projects)
-      if (importData.reeditChapters?.length) {
-        for (const item of importData.reeditChapters) {
-          try {
-            const data = prepareForInsert(item);
-            if (data.projectId && reeditProjectIdMap.has(data.projectId)) {
-              data.projectId = reeditProjectIdMap.get(data.projectId);
-            }
-            await storage.createReeditChapter(data);
-            results.imported.reeditChapters = (results.imported.reeditChapters || 0) + 1;
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate')) {
-              results.errors.push({ table: 'reeditChapters', error: e.message });
-            }
-          }
-        }
-      }
-
-      // Import AI usage events (depends on projects)
-      if (importData.aiUsageEvents?.length) {
-        for (const item of importData.aiUsageEvents) {
-          try {
-            const data = prepareForInsert(item);
-            if (data.projectId && projectIdMap.has(data.projectId)) {
-              data.projectId = projectIdMap.get(data.projectId);
-            }
-            await storage.createAiUsageEvent(data);
-            results.imported.aiUsageEvents = (results.imported.aiUsageEvents || 0) + 1;
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate')) {
-              results.errors.push({ table: 'aiUsageEvents', error: e.message });
             }
           }
         }
@@ -4442,15 +4141,14 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Keepalive heartbeat every 8 seconds to prevent proxy/load balancer timeouts in production
+    // Keepalive heartbeat every 15 seconds to prevent connection timeout
     const heartbeatInterval = setInterval(() => {
       try {
         res.write(`:heartbeat\n\n`);
       } catch (e) {
-        console.log(`[Translation] Heartbeat failed, connection likely closed`);
         clearInterval(heartbeatInterval);
       }
-    }, 8000);
+    }, 15000);
 
     // Clean up function
     const cleanup = () => {
@@ -4491,8 +4189,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
     
     try {
-      console.log(`[Translation] Starting translation for project ${projectId}: ${sourceLanguage} -> ${targetLanguage}`);
-      
       if (!targetLanguage) {
         sendEvent("error", { error: "targetLanguage is required" });
         cleanup();
@@ -4500,7 +4196,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return;
       }
       
-      console.log(`[Translation] Fetching chapters for project ${projectId}...`);
       const chapters = await storage.getChaptersByProject(projectId);
       if (chapters.length === 0) {
         sendEvent("error", { error: "No chapters found in project" });
@@ -4508,7 +4203,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         res.end();
         return;
       }
-      console.log(`[Translation] Found ${chapters.length} chapters`);
       
       const sortedChapters = [...chapters].sort((a, b) => {
         const orderA = a.chapterNumber === 0 ? -1000 : a.chapterNumber === -1 ? 1000 : a.chapterNumber === -2 ? 1001 : a.chapterNumber;
@@ -4518,7 +4212,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       
       const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
       const totalChapters = chaptersWithContent.length;
-      console.log(`[Translation] ${totalChapters} chapters with content ready for translation`);
       
       sendEvent("start", { 
         projectTitle: project.title,
@@ -4527,42 +4220,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         targetLanguage
       });
       
-      // Update heartbeat immediately to mark translation as active
-      if (translationRecordId) {
-        await storage.updateTranslation(translationRecordId, {
-          heartbeatAt: new Date(),
-        } as any);
-        console.log(`[Translation] Initial heartbeat set for record ${translationRecordId}`);
-      }
-      
-      console.log(`[Translation] Initializing TranslatorAgent...`);
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
-      console.log(`[Translation] TranslatorAgent initialized, starting translation loop...`);
-      
-      // Retry helper with exponential backoff for resilient translations
-      const translateWithRetry = async (input: any, maxRetries = 3): Promise<any> => {
-        let lastError: Error | null = null;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const result = await translator.execute(input);
-            if (result.result && result.result.translated_text && result.result.translated_text.length > 50) {
-              return result;
-            }
-            console.warn(`[Translation] Attempt ${attempt}: Empty or short result, retrying...`);
-          } catch (error) {
-            lastError = error as Error;
-            console.error(`[Translation] Attempt ${attempt} failed:`, error);
-          }
-          if (attempt < maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-            console.log(`[Translation] Waiting ${delay}ms before retry...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-        console.error(`[Translation] All ${maxRetries} attempts failed`);
-        return { result: null, error: lastError?.message || "Translation failed after retries" };
-      };
       
       const translatedChapters: Array<{
         chapterNumber: number;
@@ -4605,7 +4264,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         
         console.log(`[Translate] Translating ${chapterLabel}: ${chapter.title}`);
         
-        const result = await translateWithRetry({
+        const result = await translator.execute({
           content: chapter.content || "",
           sourceLanguage,
           targetLanguage,
@@ -4614,22 +4273,14 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           projectId,
         });
         
-        if (result.result && result.result.translated_text) {
+        if (result.result) {
           translatedChapters.push({
             chapterNumber: chapter.chapterNumber,
             title: chapter.title || chapterLabel,
             translatedContent: result.result.translated_text,
-            notes: result.result.notes || "",
+            notes: result.result.notes,
           });
-          completedCount++;
-        } else {
-          // Chapter failed after retries - send error event but continue with remaining chapters
-          console.error(`[Translate] Chapter ${chapter.chapterNumber} failed permanently, skipping`);
-          sendEvent("chapterError", {
-            chapterNumber: chapter.chapterNumber,
-            chapterTitle: chapter.title || chapterLabel,
-            error: result.error || "Translation failed after multiple retries",
-          });
+          completedCount++; // Increment AFTER successful translation
         }
         
         totalInputTokens += (result as any).inputTokens || 0;
@@ -4645,17 +4296,14 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           outputTokens: totalOutputTokens
         });
 
-        // Update the database record with partial progress AND markdown so resume can continue
+        // Update the database record with partial progress so the UI sees it
         if (translationRecordId) {
           try {
-            // Save markdown progressively so resume can pick up from where we left off
-            const partialMarkdown = translatedChapters.map(tc => tc.translatedContent).join("\n\n---\n\n");
             await storage.updateTranslation(translationRecordId, {
               chaptersTranslated: completedCount,
-              markdown: partialMarkdown,
               status: "translating"
             });
-            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${completedCount}/${totalChapters} chapters, ${partialMarkdown.length} chars of markdown saved`);
+            console.log(`[Translation] Progress updated for record ID ${translationRecordId}: ${completedCount}/${totalChapters}`);
           } catch (err) {
             console.error("[Translation] Progress DB update failed:", err);
           }
@@ -4702,8 +4350,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         const langLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
           es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
           en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
-          "en-US": { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
-          "en-GB": { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
           fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
           de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
           it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
@@ -4823,21 +4469,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
           bodyText = afterNumericRemoval.trim();
         }
         
-        // Remove ALL dividers (---, ***, ===) from the content - both at end and in the middle
-        // First remove trailing dividers
-        bodyText = bodyText.replace(/\n*[-*=]{3,}\s*$/, '').trim();
-        // Then remove any dividers in the middle of content (standalone lines of --- or *** or ===)
-        bodyText = bodyText.replace(/\n[-*=]{3,}\n/g, '\n\n').trim();
-        // Remove dividers at the start too
-        bodyText = bodyText.replace(/^[-*=]{3,}\n+/, '').trim();
-        
-        // Remove any remaining Spanish chapter headers that weren't translated
-        // Pattern matches: Capítulo X, Prólogo, Epílogo, Nota del Autor at start of lines
-        const spanishHeaderPattern = /^#{1,4}\s*(Capítulo\s*\d+|CAPÍTULO\s*\d+|Prólogo|PRÓLOGO|Epílogo|EPÍLOGO|Nota\s*del\s*Autor|NOTA\s*DEL\s*AUTOR)[^\n]*\n+/gim;
-        const afterSpanishRemoval = bodyText.replace(spanishHeaderPattern, '');
-        if (afterSpanishRemoval.trim().length > 50) {
-          bodyText = afterSpanishRemoval.trim();
-        }
+        // Remove trailing dividers (---, ***) from the end
+        bodyText = bodyText.replace(/\n*[-*]{3,}\s*$/, '').trim();
         
         return { heading: extractedHeading, body: bodyText };
       };
@@ -4850,8 +4483,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       const chapterLabels: Record<string, { prologue: string; epilogue: string; authorNote: string; chapter: string }> = {
         es: { prologue: "Prólogo", epilogue: "Epílogo", authorNote: "Nota del Autor", chapter: "Capítulo" },
         en: { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
-        "en-US": { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
-        "en-GB": { prologue: "Prologue", epilogue: "Epilogue", authorNote: "Author's Note", chapter: "Chapter" },
         fr: { prologue: "Prologue", epilogue: "Épilogue", authorNote: "Note de l'Auteur", chapter: "Chapitre" },
         de: { prologue: "Prolog", epilogue: "Epilog", authorNote: "Anmerkung des Autors", chapter: "Kapitel" },
         it: { prologue: "Prologo", epilogue: "Epilogo", authorNote: "Nota dell'Autore", chapter: "Capitolo" },
@@ -5000,7 +4631,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         outputTokens: t.outputTokens,
         status: t.status || "completed",
         createdAt: t.createdAt,
-        heartbeatAt: t.heartbeatAt,
       }));
       res.json(translationsWithoutMarkdown);
     } catch (error) {
@@ -5084,59 +4714,35 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return;
       }
 
-      // Support both regular projects and reedit projects
       const projectId = existingTranslation.projectId;
-      const reeditProjectId = (existingTranslation as any).reeditProjectId;
-      
-      if (!projectId && !reeditProjectId) {
+      if (!projectId) {
         sendEvent("error", { error: "No project associated with this translation" });
         cleanup();
         res.end();
         return;
       }
 
-      let project: any = null;
-      let chaptersWithContent: any[] = [];
-      const isReeditProject = !!reeditProjectId && !projectId;
-
-      if (isReeditProject) {
-        // Handle reedit project
-        project = await storage.getReeditProject(reeditProjectId);
-        if (!project) {
-          sendEvent("error", { error: "Original reedit project not found" });
-          cleanup();
-          res.end();
-          return;
-        }
-        
-        const chapters = await storage.getReeditChaptersByProject(reeditProjectId);
-        const getReeditChapterSortOrder = (n: number) => n === 0 ? -1000 : n === -1 || n === 998 ? 1000 : n === -2 || n === 999 ? 1001 : n;
-        const sortedChapters = [...chapters].sort((a, b) => getReeditChapterSortOrder(a.chapterNumber) - getReeditChapterSortOrder(b.chapterNumber));
-        chaptersWithContent = sortedChapters.filter(c => 
-          (c.editedContent || c.originalContent)?.trim().length > 0
-        );
-      } else {
-        // Handle regular project
-        project = await storage.getProject(projectId!);
-        if (!project) {
-          sendEvent("error", { error: "Original project not found" });
-          cleanup();
-          res.end();
-          return;
-        }
-
-        const chapters = await storage.getChaptersByProject(projectId!);
-        const sortedChapters = [...chapters].sort((a, b) => {
-          const orderA = a.chapterNumber === 0 ? -1000 : a.chapterNumber === -1 ? 1000 : a.chapterNumber === -2 ? 1001 : a.chapterNumber;
-          const orderB = b.chapterNumber === 0 ? -1000 : b.chapterNumber === -1 ? 1000 : b.chapterNumber === -2 ? 1001 : b.chapterNumber;
-          return orderA - orderB;
-        });
-        chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        sendEvent("error", { error: "Original project not found" });
+        cleanup();
+        res.end();
+        return;
       }
 
       const sourceLanguage = existingTranslation.sourceLanguage;
       const targetLanguage = existingTranslation.targetLanguage;
       const existingMarkdown = existingTranslation.markdown || "";
+
+      // Get all chapters and sort them
+      const chapters = await storage.getChaptersByProject(projectId);
+      const sortedChapters = [...chapters].sort((a, b) => {
+        const orderA = a.chapterNumber === 0 ? -1000 : a.chapterNumber === -1 ? 1000 : a.chapterNumber === -2 ? 1001 : a.chapterNumber;
+        const orderB = b.chapterNumber === 0 ? -1000 : b.chapterNumber === -1 ? 1000 : b.chapterNumber === -2 ? 1001 : b.chapterNumber;
+        return orderA - orderB;
+      });
+
+      const chaptersWithContent = sortedChapters.filter(c => c.content && c.content.trim().length > 0);
       const totalChapters = chaptersWithContent.length;
       
       // Count chapters in persisted markdown by counting "---" delimiters
@@ -5162,7 +4768,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         await storage.updateTranslation(translationId, { status: "completed" });
         sendEvent("complete", {
           id: translationId,
-          projectId: projectId || reeditProjectId,
+          projectId,
           title: project.title,
           sourceLanguage,
           targetLanguage,
@@ -5193,30 +4799,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
-
-      // Retry helper with exponential backoff for resilient translations
-      const translateWithRetry = async (input: any, maxRetries = 3): Promise<any> => {
-        let lastError: Error | null = null;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const result = await translator.execute(input);
-            if (result.result && result.result.translated_text && result.result.translated_text.length > 50) {
-              return result;
-            }
-            console.warn(`[Resume] Attempt ${attempt}: Empty or short result, retrying...`);
-          } catch (error) {
-            lastError = error as Error;
-            console.error(`[Resume] Attempt ${attempt} failed:`, error);
-          }
-          if (attempt < maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-            console.log(`[Resume] Waiting ${delay}ms before retry...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-        console.error(`[Resume] All ${maxRetries} attempts failed`);
-        return { result: null, error: lastError?.message || "Translation failed after retries" };
-      };
 
       const translatedChapters: Array<{
         chapterNumber: number;
@@ -5251,37 +4833,23 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
         console.log(`[Resume] Translating ${chapterLabel}: ${chapter.title}`);
 
-        // Get content based on project type
-        const chapterContent = isReeditProject 
-          ? ((chapter as any).editedContent || (chapter as any).originalContent || "")
-          : (chapter.content || "");
-
-        const result = await translateWithRetry({
-          content: chapterContent,
+        const result = await translator.execute({
+          content: chapter.content || "",
           sourceLanguage,
           targetLanguage,
           chapterTitle: chapter.title || undefined,
           chapterNumber: chapter.chapterNumber,
-          projectId: projectId || reeditProjectId,
+          projectId,
         });
 
-        if (result.result && result.result.translated_text) {
+        if (result.result) {
           translatedChapters.push({
             chapterNumber: chapter.chapterNumber,
             title: chapter.title || chapterLabel,
             translatedContent: result.result.translated_text,
-            notes: result.result.notes || "",
+            notes: result.result.notes,
           });
           completedCount++;
-        } else {
-          // Chapter failed after retries - send error event but continue
-          console.error(`[Resume] Chapter ${chapter.chapterNumber} failed permanently, skipping`);
-          sendEvent("chapterError", {
-            chapterNumber: chapter.chapterNumber,
-            chapterTitle: chapter.title || chapterLabel,
-            error: result.error || "Translation failed after multiple retries",
-            resumed: true,
-          });
         }
 
         totalInputTokens += (result as any).inputTokens || 0;
@@ -5332,7 +4900,7 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
 
       sendEvent("complete", {
         id: translationId,
-        projectId: projectId || reeditProjectId,
+        projectId,
         title: project.title,
         sourceLanguage,
         targetLanguage,
@@ -5350,87 +4918,10 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       cleanup();
       res.end();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("Error resuming translation:", error);
-      sendEvent("error", { error: `Error al reanudar traducción: ${errorMessage}` });
+      sendEvent("error", { error: "Failed to resume translation" });
       cleanup();
       res.end();
-    }
-  });
-
-  // AI Provider configuration endpoints
-  app.get("/api/ai-provider", async (_req: Request, res: Response) => {
-    try {
-      const provider = getAIProvider();
-      const hasDeepSeekKey = !!process.env.DEEPSEEK_API_KEY;
-      const hasGeminiKey = !!process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
-      
-      res.json({
-        current: provider,
-        available: {
-          gemini: hasGeminiKey,
-          deepseek: hasDeepSeekKey,
-        },
-        models: {
-          gemini: {
-            creative: "gemini-3-pro-preview",
-            analysis: "gemini-2.5-flash",
-            fast: "gemini-2.0-flash",
-          },
-          deepseek: {
-            creative: "deepseek-chat (V3)",
-            analysis: "deepseek-reasoner (R1)",
-            fast: "deepseek-chat (V3)",
-          },
-        },
-        pricing: {
-          gemini: {
-            description: "Gemini (Google AI)",
-            creative: "$1.25/$10.0/M tokens",
-            analysis: "$0.15/$0.60/M tokens",
-          },
-          deepseek: {
-            description: "DeepSeek (más económico)",
-            creative: "$0.55/$2.19/M tokens (R1)",
-            analysis: "$0.27/$1.10/M tokens (V3)",
-          },
-        },
-      });
-    } catch (error) {
-      console.error("Error fetching AI provider info:", error);
-      res.status(500).json({ error: "Failed to fetch AI provider info" });
-    }
-  });
-
-  app.post("/api/ai-provider", async (req: Request, res: Response) => {
-    try {
-      const { provider } = req.body as { provider: AIProvider };
-      
-      if (provider !== "gemini" && provider !== "deepseek") {
-        return res.status(400).json({ error: "Invalid provider. Use 'gemini' or 'deepseek'" });
-      }
-      
-      if (provider === "deepseek" && !process.env.DEEPSEEK_API_KEY) {
-        return res.status(400).json({ error: "DeepSeek API key not configured" });
-      }
-      
-      if (provider === "gemini" && !process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-        return res.status(400).json({ error: "Gemini API key not configured" });
-      }
-      
-      // Set the environment variable (this will persist for this process)
-      process.env.AI_PROVIDER = provider;
-      
-      console.log(`[AI Provider] Switched to ${provider}`);
-      
-      res.json({
-        success: true,
-        provider,
-        message: `Switched to ${provider}. All new AI requests will use ${provider}.`,
-      });
-    } catch (error) {
-      console.error("Error setting AI provider:", error);
-      res.status(500).json({ error: "Failed to set AI provider" });
     }
   });
 
@@ -6145,31 +5636,21 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
   app.post("/api/reedit-projects/:id/cancel", async (req: Request, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
-      const project = await storage.getReeditProject(projectId);
       
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-      
-      console.log(`[ReeditCancel] Cancel requested for project ${projectId}, current status: ${project.status}`);
-      
-      // Remove from active orchestrators immediately
-      const wasActive = activeReeditOrchestrators.has(projectId);
-      if (wasActive) {
-        activeReeditOrchestrators.delete(projectId);
-        console.log(`[ReeditCancel] Removed project ${projectId} from active orchestrators`);
-      }
-      
-      // Set cancelRequested flag AND change status to paused immediately
-      // This ensures the UI shows the project is no longer processing
+      // Set cancelRequested flag - the orchestrator will check this and gracefully exit
       await storage.updateReeditProject(projectId, { 
         cancelRequested: true,
-        status: "awaiting_instructions",
-        pauseReason: "Cancelado por el usuario. Puedes reanudar cuando quieras.",
+        errorMessage: "Cancelación solicitada por el usuario" 
       });
 
-      console.log(`[ReeditCancel] Project ${projectId} cancelled and paused`);
-      res.json({ success: true, message: "Proceso cancelado. Puedes reanudar cuando quieras." });
+      // If there's an active orchestrator, it will pick up the cancellation flag
+      // We also remove it from the active map to allow a new resume
+      if (activeReeditOrchestrators.has(projectId)) {
+        console.log(`[ReeditCancel] Setting cancellation flag for project ${projectId}`);
+        activeReeditOrchestrators.delete(projectId);
+      }
+
+      res.json({ success: true, message: "Cancelación solicitada. El proceso se detendrá pronto." });
     } catch (error) {
       console.error("Error cancelling reedit:", error);
       res.status(500).json({ error: "Failed to cancel reedit" });
@@ -6291,213 +5772,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     } catch (error) {
       console.error("Error deleting reedit project:", error);
       res.status(500).json({ error: "Failed to delete reedit project" });
-    }
-  });
-
-  // ===== REEDIT ISSUES API =====
-  // Get all issues for a reedit project
-  app.get("/api/reedit-projects/:id/issues", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.id);
-      const { status, chapter } = req.query;
-      
-      let issues;
-      if (status && typeof status === "string") {
-        issues = await storage.getReeditIssuesByStatus(projectId, status);
-      } else if (chapter && typeof chapter === "string") {
-        issues = await storage.getReeditIssuesByChapter(projectId, parseInt(chapter));
-      } else {
-        issues = await storage.getReeditIssuesByProject(projectId);
-      }
-      
-      res.json(issues);
-    } catch (error) {
-      console.error("Error fetching reedit issues:", error);
-      res.status(500).json({ error: "Failed to fetch issues" });
-    }
-  });
-
-  // Approve a single issue for correction
-  app.post("/api/reedit-issues/:id/approve", async (req: Request, res: Response) => {
-    try {
-      const issueId = parseInt(req.params.id);
-      const updated = await storage.approveReeditIssue(issueId);
-      if (!updated) {
-        return res.status(404).json({ error: "Issue not found" });
-      }
-      res.json(updated);
-    } catch (error) {
-      console.error("Error approving reedit issue:", error);
-      res.status(500).json({ error: "Failed to approve issue" });
-    }
-  });
-
-  // Reject a single issue (skip correction)
-  app.post("/api/reedit-issues/:id/reject", async (req: Request, res: Response) => {
-    try {
-      const issueId = parseInt(req.params.id);
-      const { reason } = req.body;
-      const updated = await storage.rejectReeditIssue(issueId, reason);
-      if (!updated) {
-        return res.status(404).json({ error: "Issue not found" });
-      }
-      res.json(updated);
-    } catch (error) {
-      console.error("Error rejecting reedit issue:", error);
-      res.status(500).json({ error: "Failed to reject issue" });
-    }
-  });
-
-  // Bulk approve all pending issues for a project
-  app.post("/api/reedit-projects/:id/issues/approve-all", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.id);
-      const pendingIssues = await storage.getReeditIssuesByStatus(projectId, "pending");
-      
-      for (const issue of pendingIssues) {
-        await storage.approveReeditIssue(issue.id);
-      }
-      
-      res.json({ success: true, approved: pendingIssues.length });
-    } catch (error) {
-      console.error("Error bulk approving issues:", error);
-      res.status(500).json({ error: "Failed to bulk approve issues" });
-    }
-  });
-
-  // Bulk reject all pending issues for a project
-  app.post("/api/reedit-projects/:id/issues/reject-all", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.id);
-      const { reason } = req.body;
-      const pendingIssues = await storage.getReeditIssuesByStatus(projectId, "pending");
-      
-      for (const issue of pendingIssues) {
-        await storage.rejectReeditIssue(issue.id, reason || "Bulk rejected by user");
-      }
-      
-      res.json({ success: true, rejected: pendingIssues.length });
-    } catch (error) {
-      console.error("Error bulk rejecting issues:", error);
-      res.status(500).json({ error: "Failed to bulk reject issues" });
-    }
-  });
-
-  // Get summary of issue counts by status
-  app.get("/api/reedit-projects/:id/issues/summary", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.id);
-      const allIssues = await storage.getReeditIssuesByProject(projectId);
-      
-      const summary = {
-        total: allIssues.length,
-        pending: allIssues.filter(i => i.status === "pending").length,
-        approved: allIssues.filter(i => i.status === "approved").length,
-        rejected: allIssues.filter(i => i.status === "rejected").length,
-        resolved: allIssues.filter(i => i.status === "resolved").length,
-        bySeverity: {
-          critical: allIssues.filter(i => i.severity === "critical").length,
-          major: allIssues.filter(i => i.severity === "major").length,
-          minor: allIssues.filter(i => i.severity === "minor").length,
-          suggestion: allIssues.filter(i => i.severity === "suggestion").length,
-        },
-        byCategory: {} as Record<string, number>
-      };
-      
-      // Count by category
-      for (const issue of allIssues) {
-        const cat = issue.category || "unknown";
-        summary.byCategory[cat] = (summary.byCategory[cat] || 0) + 1;
-      }
-      
-      res.json(summary);
-    } catch (error) {
-      console.error("Error fetching issue summary:", error);
-      res.status(500).json({ error: "Failed to fetch issue summary" });
-    }
-  });
-
-  // Proceed with corrections after user has approved issues
-  app.post("/api/reedit-projects/:id/proceed-corrections", async (req: Request, res: Response) => {
-    try {
-      const projectId = parseInt(req.params.id);
-      const project = await storage.getReeditProject(projectId);
-      
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-      
-      if (project.status !== "awaiting_issue_approval") {
-        return res.status(400).json({ 
-          error: "Project is not awaiting issue approval",
-          currentStatus: project.status 
-        });
-      }
-      
-      // Check that user has made decisions on all pending issues
-      const pendingIssues = await storage.getReeditIssuesByStatus(projectId, "pending");
-      if (pendingIssues.length > 0) {
-        return res.status(400).json({
-          error: "There are still pending issues that need approval or rejection",
-          pendingCount: pendingIssues.length
-        });
-      }
-      
-      // Check how many issues were approved for correction
-      const approvedIssues = await storage.getReeditIssuesByStatus(projectId, "approved");
-      
-      // Check if already being processed
-      if (activeReeditOrchestrators.has(projectId)) {
-        return res.status(400).json({ error: "Project is already being processed" });
-      }
-      
-      // Handle case where all issues were rejected (0 approved)
-      // In this case, mark project as completed since user chose to skip all corrections
-      if (approvedIssues.length === 0) {
-        await storage.updateReeditProject(projectId, {
-          status: "completed",
-          pauseReason: null,
-          errorMessage: null,
-        });
-        
-        return res.json({ 
-          success: true, 
-          message: "No corrections approved. Project marked as completed.",
-          approvedCount: 0
-        });
-      }
-      
-      // Update project status to resume processing
-      await storage.updateReeditProject(projectId, {
-        status: "processing",
-        pauseReason: null,
-      });
-      
-      // Create orchestrator and resume processing
-      const orchestrator = new ReeditOrchestrator();
-      activeReeditOrchestrators.set(projectId, orchestrator);
-      
-      res.json({ 
-        success: true, 
-        message: `Proceeding with ${approvedIssues.length} approved corrections`,
-        approvedCount: approvedIssues.length
-      });
-      
-      console.log(`[ProceedCorrections] Resuming final review for project ${projectId} with ${approvedIssues.length} approved issues`);
-      orchestrator.runFinalReviewOnly(projectId).then(() => {
-        console.log(`[ProceedCorrections] Completed for project ${projectId}`);
-      }).catch((err: any) => {
-        console.error(`[ProceedCorrections] Error:`, err);
-        storage.updateReeditProject(projectId, {
-          status: "error",
-          errorMessage: err instanceof Error ? err.message : "Unknown error",
-        });
-      }).finally(() => {
-        activeReeditOrchestrators.delete(projectId);
-      });
-    } catch (error) {
-      console.error("Error proceeding with corrections:", error);
-      res.status(500).json({ error: "Failed to proceed with corrections" });
     }
   });
 
@@ -6746,15 +6020,14 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Keep-alive heartbeat every 8 seconds to prevent proxy/load balancer timeouts in production
+    // Keep-alive heartbeat
     const heartbeatInterval = setInterval(() => {
       try {
         res.write(": heartbeat\n\n");
       } catch {
-        console.log(`[Translation-Reedit] Heartbeat failed, connection likely closed`);
         clearInterval(heartbeatInterval);
       }
-    }, 8000);
+    }, 15000);
 
     const cleanup = () => {
       clearInterval(heartbeatInterval);
@@ -6793,8 +6066,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
     }
     
     try {
-      console.log(`[Translation-Reedit] Starting translation for reedit project ${projectId}: ${sourceLanguage} -> ${targetLanguage}`);
-      
       if (!targetLanguage) {
         sendEvent("error", { error: "targetLanguage is required" });
         cleanup();
@@ -6802,7 +6073,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         return;
       }
       
-      console.log(`[Translation-Reedit] Fetching chapters for reedit project ${projectId}...`);
       const chapters = await storage.getReeditChaptersByProject(projectId);
       if (chapters.length === 0) {
         sendEvent("error", { error: "No chapters found in project" });
@@ -6810,7 +6080,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         res.end();
         return;
       }
-      console.log(`[Translation-Reedit] Found ${chapters.length} chapters`);
       
       const getReeditChapterSortOrder4 = (n: number) => n === 0 ? -1000 : n === -1 || n === 998 ? 1000 : n === -2 || n === 999 ? 1001 : n;
       const sortedChapters = [...chapters].sort((a, b) => getReeditChapterSortOrder4(a.chapterNumber) - getReeditChapterSortOrder4(b.chapterNumber));
@@ -6818,7 +6087,6 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         (c.editedContent || c.originalContent)?.trim().length > 0
       );
       const totalChapters = chaptersWithContent.length;
-      console.log(`[Translation-Reedit] ${totalChapters} chapters with content ready for translation`);
       
       sendEvent("start", { 
         projectTitle: project.title,
@@ -6827,18 +6095,8 @@ NOTA IMPORTANTE: No extiendas ni modifiques otras partes del capítulo. Solo apl
         targetLanguage
       });
       
-      // Update heartbeat immediately to mark translation as active
-      if (translationRecordId) {
-        await storage.updateTranslation(translationRecordId, {
-          heartbeatAt: new Date(),
-        } as any);
-        console.log(`[Translation-Reedit] Initial heartbeat set for record ${translationRecordId}`);
-      }
-      
-      console.log(`[Translation-Reedit] Initializing TranslatorAgent...`);
       const { TranslatorAgent } = await import("./agents/translator");
       const translator = new TranslatorAgent();
-      console.log(`[Translation-Reedit] TranslatorAgent initialized, starting translation loop...`);
       
       const translatedChapters: Array<{
         chapterNumber: number;

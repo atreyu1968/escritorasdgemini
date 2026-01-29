@@ -11,9 +11,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, BookOpen, MessageSquare, PenTool, ChevronDown, Wand2, Loader2, Type } from "lucide-react";
+import { Download, BookOpen, MessageSquare, PenTool, ChevronDown, Wand2, Loader2 } from "lucide-react";
 import { useProject } from "@/lib/project-context";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, Chapter } from "@shared/schema";
 
@@ -31,7 +31,6 @@ export default function ManuscriptPage() {
   const [agentType, setAgentType] = useState<"architect" | "reeditor">("architect");
   const [showAutoEditDialog, setShowAutoEditDialog] = useState(false);
   const [autoEditInstructions, setAutoEditInstructions] = useState("");
-  const [resettingChapterId, setResettingChapterId] = useState<number | undefined>();
   const { currentProject, isLoading: projectsLoading } = useProject();
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -40,60 +39,6 @@ export default function ManuscriptPage() {
     architect: "Arquitecto",
     reeditor: "Re-editor",
   };
-
-  const resetChapterMutation = useMutation({
-    mutationFn: async (params: { projectId: number; chapterNumber: number; chapterId: number }) => {
-      setResettingChapterId(params.chapterId);
-      const res = await apiRequest("POST", `/api/projects/${params.projectId}/chapters/${params.chapterNumber}/reset-to-pending`);
-      return res.json();
-    },
-    onSuccess: () => {
-      setResettingChapterId(undefined);
-      toast({
-        title: "Capítulo marcado como pendiente",
-        description: "El pipeline lo detectará y continuará con la generación.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", currentProject?.id, "chapters"] });
-    },
-    onError: (error: any) => {
-      setResettingChapterId(undefined);
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo marcar el capítulo como pendiente",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleResetChapter = (chapter: Chapter) => {
-    if (!currentProject) return;
-    resetChapterMutation.mutate({
-      projectId: currentProject.id,
-      chapterNumber: chapter.chapterNumber,
-      chapterId: chapter.id,
-    });
-  };
-
-  const normalizeTitlesMutation = useMutation({
-    mutationFn: async (projectId: number) => {
-      const res = await apiRequest("POST", `/api/projects/${projectId}/normalize-titles`);
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Títulos normalizados",
-        description: `Se actualizaron ${data.chaptersUpdated} de ${data.totalChapters} capítulos.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", currentProject?.id, "chapters"] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudieron normalizar los títulos",
-        variant: "destructive",
-      });
-    },
-  });
 
   const cloneToReeditMutation = useMutation({
     mutationFn: async (params: { projectId: number; instructions: string }) => {
@@ -293,19 +238,6 @@ export default function ManuscriptPage() {
           </div>
           <Button 
             variant="outline"
-            onClick={() => currentProject && normalizeTitlesMutation.mutate(currentProject.id)}
-            disabled={normalizeTitlesMutation.isPending || chapters.length === 0}
-            data-testid="button-normalize-titles"
-          >
-            {normalizeTitlesMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Type className="h-4 w-4 mr-2" />
-            )}
-            Normalizar Títulos
-          </Button>
-          <Button 
-            variant="outline"
             onClick={handleDownload}
             disabled={completedChapters.length === 0}
             data-testid="button-download-manuscript"
@@ -405,8 +337,6 @@ export default function ManuscriptPage() {
               chapters={sortChaptersForDisplay(chapters)}
               selectedChapterId={selectedChapter?.id}
               onSelectChapter={setSelectedChapter}
-              onResetChapter={handleResetChapter}
-              resettingChapterId={resettingChapterId}
             />
           </CardContent>
         </Card>

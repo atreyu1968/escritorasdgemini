@@ -36,10 +36,7 @@ import {
   RotateCcw,
   Pause,
   Unlock,
-  MessageSquare,
-  Check,
-  X,
-  XCircle
+  MessageSquare
 } from "lucide-react";
 import type { ReeditProject, ReeditChapter, ReeditAuditReport } from "@shared/schema";
 
@@ -91,7 +88,6 @@ function getStatusBadge(status: string) {
     completed: "Completado",
     error: "Error",
     awaiting_instructions: "Esperando Instrucciones",
-    awaiting_issue_approval: "Revisión de Problemas",
   };
   const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle }> = {
     pending: { variant: "outline", icon: Clock },
@@ -99,12 +95,11 @@ function getStatusBadge(status: string) {
     completed: { variant: "default", icon: CheckCircle },
     error: { variant: "destructive", icon: AlertCircle },
     awaiting_instructions: { variant: "outline", icon: Pause },
-    awaiting_issue_approval: { variant: "outline", icon: AlertCircle },
   };
   const config = variants[status] || variants.pending;
   const IconComponent = config.icon;
   return (
-    <Badge variant={config.variant} className={`flex items-center gap-1 ${status === 'awaiting_instructions' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : ''} ${status === 'awaiting_issue_approval' ? 'border-orange-500 text-orange-600 dark:text-orange-400' : ''}`}>
+    <Badge variant={config.variant} className={`flex items-center gap-1 ${status === 'awaiting_instructions' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : ''}`}>
       <IconComponent className={`h-3 w-3 ${status === 'processing' ? 'animate-spin' : ''}`} />
       {statusLabels[status] || status}
     </Badge>
@@ -624,258 +619,6 @@ function WorldBibleDisplay({ worldBible }: { worldBible: any }) {
   );
 }
 
-// Real-time progress report component - shows statistics, issues found, and before/after comparison
-function ProgressReportDisplay({ 
-  project, 
-  chapters 
-}: { 
-  project: ReeditProject; 
-  chapters: ReeditChapter[];
-}) {
-  // Calculate statistics
-  const completedChapters = chapters.filter(c => c.status === "completed" || c.editedContent);
-  const pendingChapters = chapters.filter(c => c.status === "pending");
-  const processingChapters = chapters.filter(c => c.status === "analyzing" || c.status === "editing");
-  
-  const originalWordCount = chapters.reduce((sum, c) => {
-    const content = c.originalContent || "";
-    return sum + content.split(/\s+/).filter(w => w.length > 0).length;
-  }, 0);
-  
-  const editedWordCount = chapters.reduce((sum, c) => {
-    const content = c.editedContent || c.originalContent || "";
-    return sum + content.split(/\s+/).filter(w => w.length > 0).length;
-  }, 0);
-  
-  const wordCountDiff = editedWordCount - originalWordCount;
-  const wordCountPercent = originalWordCount > 0 ? ((wordCountDiff / originalWordCount) * 100).toFixed(1) : "0";
-  
-  // Safe JSON parsing helper
-  const safeParseJson = (data: any): any => {
-    if (!data) return null;
-    if (typeof data === 'object') return data;
-    try {
-      return JSON.parse(data);
-    } catch {
-      return null;
-    }
-  };
-  
-  // Collect all issues found across chapters
-  const allIssues: Array<{chapter: number, title: string | null, issues: any[]}> = [];
-  chapters.forEach(ch => {
-    const issues: any[] = [];
-    const narr = safeParseJson(ch.narrativeIssues);
-    if (narr) {
-      if (Array.isArray(narr.plotHoles)) issues.push(...narr.plotHoles.map((i: string) => ({ type: "trama", text: String(i) })));
-      if (Array.isArray(narr.continuityErrors)) issues.push(...narr.continuityErrors.map((i: string) => ({ type: "continuidad", text: String(i) })));
-      if (Array.isArray(narr.pacing)) issues.push(...narr.pacing.map((i: string) => ({ type: "ritmo", text: String(i) })));
-    }
-    const fb = safeParseJson(ch.editorFeedback);
-    if (fb && Array.isArray(fb.issues)) {
-      issues.push(...fb.issues.map((i: string) => ({ type: "editor", text: String(i) })));
-    }
-    if (issues.length > 0) {
-      allIssues.push({ chapter: ch.chapterNumber, title: ch.title, issues });
-    }
-  });
-  
-  // Collect changes (before/after comparisons)
-  const chaptersWithChanges = chapters.filter(c => c.editedContent && c.editedContent !== c.originalContent);
-  
-  const getIssueTypeBadge = (type: string) => {
-    const colors: Record<string, string> = {
-      trama: "bg-red-600",
-      continuidad: "bg-orange-600",
-      ritmo: "bg-blue-600",
-      editor: "bg-purple-600",
-    };
-    const labels: Record<string, string> = {
-      trama: "Trama",
-      continuidad: "Continuidad",
-      ritmo: "Ritmo",
-      editor: "Editorial",
-    };
-    return <Badge className={colors[type] || "bg-gray-600"}>{labels[type] || type}</Badge>;
-  };
-
-  return (
-    <div className="space-y-6" data-testid="display-progress-report">
-      {/* Statistics Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <TrendingUp className="h-5 w-5 mx-auto mb-1 text-blue-500" />
-            <p className="text-2xl font-bold">{completedChapters.length}/{chapters.length}</p>
-            <p className="text-xs text-muted-foreground">Capítulos Procesados</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <FileText className="h-5 w-5 mx-auto mb-1 text-green-500" />
-            <p className="text-2xl font-bold">{originalWordCount.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">Palabras Originales</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <Zap className="h-5 w-5 mx-auto mb-1 text-yellow-500" />
-            <p className="text-2xl font-bold">{editedWordCount.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">Palabras Editadas</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <TrendingUp className={`h-5 w-5 mx-auto mb-1 ${wordCountDiff >= 0 ? 'text-green-500' : 'text-red-500'}`} />
-            <p className="text-2xl font-bold">{wordCountDiff >= 0 ? '+' : ''}{wordCountPercent}%</p>
-            <p className="text-xs text-muted-foreground">Cambio de Longitud</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Processing Status */}
-      {processingChapters.length > 0 && (
-        <Card className="border-blue-500/50">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              En Proceso ({processingChapters.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2">
-            <div className="flex flex-wrap gap-2">
-              {processingChapters.map(ch => (
-                <Badge key={ch.id} variant="outline" className="animate-pulse">
-                  {getChapterBadgeLabel(ch.chapterNumber)}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Issues Found */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-orange-500" />
-            Problemas Detectados ({allIssues.reduce((sum, i) => sum + i.issues.length, 0)})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-2">
-          {allIssues.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-2">
-              {completedChapters.length === 0 
-                ? "Los problemas aparecerán aquí durante el análisis" 
-                : "No se han detectado problemas significativos"}
-            </p>
-          ) : (
-            <ScrollArea className="h-[200px]">
-              <div className="space-y-3">
-                {allIssues.slice(0, 10).map((item, idx) => (
-                  <div key={idx} className="border-l-2 border-muted pl-3">
-                    <p className="text-xs font-medium mb-1">
-                      {getChapterLabel(item.chapter, item.title)}
-                    </p>
-                    <div className="space-y-1">
-                      {item.issues.slice(0, 3).map((issue, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs">
-                          {getIssueTypeBadge(issue.type)}
-                          <span className="text-muted-foreground">{issue.text}</span>
-                        </div>
-                      ))}
-                      {item.issues.length > 3 && (
-                        <p className="text-xs text-muted-foreground">+{item.issues.length - 3} más...</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {allIssues.length > 10 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    +{allIssues.length - 10} capítulos más con problemas
-                  </p>
-                )}
-              </div>
-            </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Chapters with Changes */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            Capítulos Editados ({chaptersWithChanges.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-2">
-          {chaptersWithChanges.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-2">
-              Los cambios aparecerán aquí cuando se procesen los capítulos
-            </p>
-          ) : (
-            <ScrollArea className="h-[200px]">
-              <div className="space-y-2">
-                {chaptersWithChanges.slice(0, 15).map(ch => {
-                  const origWords = (ch.originalContent || "").split(/\s+/).filter(w => w.length > 0).length;
-                  const editWords = (ch.editedContent || "").split(/\s+/).filter(w => w.length > 0).length;
-                  const diff = editWords - origWords;
-                  return (
-                    <div key={ch.id} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
-                      <span className="font-medium">{getChapterLabel(ch.chapterNumber, ch.title)}</span>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="text-muted-foreground">{origWords} → {editWords}</span>
-                        <Badge variant={diff >= 0 ? "default" : "secondary"} className="text-xs">
-                          {diff >= 0 ? '+' : ''}{diff}
-                        </Badge>
-                        {ch.editorScore && (
-                          <Badge variant="outline" className="text-xs">
-                            ★ {ch.editorScore}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {chaptersWithChanges.length > 15 && (
-                  <p className="text-xs text-muted-foreground text-center py-2">
-                    +{chaptersWithChanges.length - 15} capítulos más editados
-                  </p>
-                )}
-              </div>
-            </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pending Chapters */}
-      {pendingChapters.length > 0 && (
-        <Card className="border-muted">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Pendientes ({pendingChapters.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2">
-            <div className="flex flex-wrap gap-1">
-              {pendingChapters.slice(0, 20).map(ch => (
-                <Badge key={ch.id} variant="outline" className="text-xs opacity-60">
-                  {getChapterBadgeLabel(ch.chapterNumber)}
-                </Badge>
-              ))}
-              {pendingChapters.length > 20 && (
-                <Badge variant="outline" className="text-xs opacity-60">+{pendingChapters.length - 20}</Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 function AuditReportsDisplay({ reports }: { reports: any[] }) {
   if (!reports || reports.length === 0) {
     return <p className="text-muted-foreground text-center py-4">No hay informes de auditoría disponibles</p>;
@@ -889,7 +632,6 @@ function AuditReportsDisplay({ reports }: { reports: any[] }) {
       semantic_repetition: "Detector de Repetición Semántica",
       anachronism: "Detector de Anacronismos",
       final_review: "Revisión Final",
-      structural_fix: "Corrección Estructural",
     };
     return labels[type] || type;
   };
@@ -902,84 +644,51 @@ function AuditReportsDisplay({ reports }: { reports: any[] }) {
       semantic_repetition: "bg-orange-600",
       anachronism: "bg-amber-600",
       final_review: "bg-green-600",
-      structural_fix: "bg-indigo-600",
     };
     return colors[type] || "bg-gray-600";
   };
 
-  // Filter out any invalid reports to prevent rendering errors
-  const validReports = reports.filter(report => report && typeof report === 'object');
-
-  if (validReports.length === 0) {
-    return <p className="text-muted-foreground text-center py-4">No hay informes de auditoría válidos</p>;
-  }
-
   return (
     <div className="space-y-4" data-testid="display-audit-reports">
-      {validReports.map((report, idx) => {
-        // Safely extract findings summary
-        const findingsSummary = (() => {
-          try {
-            if (!report.findings) return null;
-            const findings = typeof report.findings === 'string' 
-              ? JSON.parse(report.findings) 
-              : report.findings;
-            return findings?.resumenEjecutivo || findings?.resumen || null;
-          } catch {
-            return null;
-          }
-        })();
-
-        // Safely extract recommendations
-        const recs = (() => {
-          try {
-            if (!report.recommendations) return [];
-            const parsed = typeof report.recommendations === 'string' 
-              ? JSON.parse(report.recommendations) 
-              : report.recommendations;
-            return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
-          } catch {
-            return [];
-          }
-        })();
-
-        return (
-          <Card key={report.id || idx} data-testid={`card-audit-report-${report.id || idx}`}>
-            <CardHeader className="py-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Badge className={getAuditTypeBadgeColor(report.auditType || 'unknown')}>
-                    {getAuditTypeLabel(report.auditType || 'unknown')}
-                  </Badge>
-                  {report.chapterRange && report.chapterRange !== "all" && (
-                    <Badge variant="outline">Caps. {report.chapterRange}</Badge>
-                  )}
-                </div>
-                {report.score !== undefined && report.score !== null && (
-                  <ScoreDisplay score={report.score} />
+      {reports.map((report, idx) => (
+        <Card key={idx} data-testid={`card-audit-report-${report.id || idx}`}>
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Badge className={getAuditTypeBadgeColor(report.auditType)}>
+                  {getAuditTypeLabel(report.auditType)}
+                </Badge>
+                {report.chapterRange && report.chapterRange !== "all" && (
+                  <Badge variant="outline">Caps. {report.chapterRange}</Badge>
                 )}
               </div>
-            </CardHeader>
-            <CardContent className="py-2">
-              {findingsSummary && (
-                <p className="text-sm mb-2">{findingsSummary}</p>
+              {report.score !== undefined && report.score !== null && (
+                <ScoreDisplay score={report.score} />
               )}
-              {recs.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-muted-foreground mb-1">Recomendaciones:</p>
-                  <ul className="text-sm list-disc list-inside space-y-1">
-                    {recs.map((rec: any, i: number) => (
-                      <li key={i} className="text-muted-foreground">
-                        {typeof rec === 'string' ? rec : (rec?.descripcion || rec?.description || JSON.stringify(rec))}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+            </div>
+          </CardHeader>
+          <CardContent className="py-2">
+            {report.findings?.resumenEjecutivo && (
+              <p className="text-sm mb-2">{report.findings.resumenEjecutivo}</p>
+            )}
+            {report.findings?.resumen && (
+              <p className="text-sm mb-2">{report.findings.resumen}</p>
+            )}
+            {report.recommendations && Array.isArray(report.recommendations) && report.recommendations.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs text-muted-foreground mb-1">Recomendaciones:</p>
+                <ul className="text-sm list-disc list-inside space-y-1">
+                  {report.recommendations.slice(0, 3).map((rec: any, i: number) => (
+                    <li key={i} className="text-muted-foreground">
+                      {typeof rec === 'string' ? rec : (rec.descripcion || rec.description || JSON.stringify(rec))}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -1027,19 +736,6 @@ export default function ReeditPage() {
 
   const { data: auditReports = [] } = useQuery<any[]>({
     queryKey: ["/api/reedit-projects", selectedProject, "audit-reports"],
-    enabled: !!selectedProject,
-    refetchInterval: 5000,
-  });
-
-  // Fetch issues for awaiting_issue_approval state
-  const { data: issuesList = [] } = useQuery<any[]>({
-    queryKey: ["/api/reedit-projects", selectedProject, "issues"],
-    enabled: !!selectedProject,
-    refetchInterval: 3000,
-  });
-
-  const { data: issuesSummary } = useQuery<any>({
-    queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"],
     enabled: !!selectedProject,
     refetchInterval: 5000,
   });
@@ -1114,74 +810,6 @@ export default function ReeditPage() {
       toast({ title: "Procesamiento Reanudado", description: "El manuscrito continúa siendo reeditado" });
       queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects"] });
       setUserInstructions("");
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  // Issue management mutations
-  const approveIssueMutation = useMutation({
-    mutationFn: async (issueId: number) => {
-      return apiRequest("POST", `/api/reedit-issues/${issueId}/approve`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const rejectIssueMutation = useMutation({
-    mutationFn: async ({ issueId, reason }: { issueId: number; reason?: string }) => {
-      return apiRequest("POST", `/api/reedit-issues/${issueId}/reject`, { reason });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const approveAllIssuesMutation = useMutation({
-    mutationFn: async (projectId: number) => {
-      return apiRequest("POST", `/api/reedit-projects/${projectId}/issues/approve-all`);
-    },
-    onSuccess: () => {
-      toast({ title: "Todos Aprobados", description: "Todos los problemas han sido aprobados para corrección" });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const rejectAllIssuesMutation = useMutation({
-    mutationFn: async (projectId: number) => {
-      return apiRequest("POST", `/api/reedit-projects/${projectId}/issues/reject-all`, { reason: "Bulk rejected by user" });
-    },
-    onSuccess: () => {
-      toast({ title: "Todos Rechazados", description: "Todos los problemas han sido ignorados" });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects", selectedProject, "issues", "summary"] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const proceedCorrectionsMutation = useMutation({
-    mutationFn: async (projectId: number) => {
-      return apiRequest("POST", `/api/reedit-projects/${projectId}/proceed-corrections`);
-    },
-    onSuccess: (data: any) => {
-      toast({ title: "Correcciones Iniciadas", description: `Procediendo con ${data.approvedCount || 0} correcciones aprobadas` });
-      queryClient.invalidateQueries({ queryKey: ["/api/reedit-projects"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1598,31 +1226,14 @@ export default function ReeditPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="live-report">
+                <Tabs defaultValue="progress">
                   <TabsList className="flex-wrap h-auto">
-                    <TabsTrigger value="live-report" data-testid="tab-trigger-live-report">Informe Progreso</TabsTrigger>
-                    <TabsTrigger value="progress" data-testid="tab-trigger-progress">Estado</TabsTrigger>
+                    <TabsTrigger value="progress" data-testid="tab-trigger-progress">Progreso</TabsTrigger>
                     <TabsTrigger value="chapters" data-testid="tab-trigger-chapters">Capítulos</TabsTrigger>
                     <TabsTrigger value="worldbible" data-testid="tab-trigger-worldbible">Biblia del Mundo</TabsTrigger>
                     <TabsTrigger value="audits" data-testid="tab-trigger-audits">Auditorías QA</TabsTrigger>
                     <TabsTrigger value="report" data-testid="tab-trigger-report">Informe Final</TabsTrigger>
                   </TabsList>
-
-                  <TabsContent value="live-report">
-                    <ScrollArea className="h-[500px] mt-4 pr-4">
-                      {chapters.length > 0 ? (
-                        <ProgressReportDisplay 
-                          project={selectedProjectData} 
-                          chapters={chapters} 
-                        />
-                      ) : (
-                        <div className="text-center text-muted-foreground py-12">
-                          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>El informe de progreso aparecerá cuando se carguen los capítulos</p>
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </TabsContent>
 
                   <TabsContent value="progress" className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1693,221 +1304,10 @@ export default function ReeditPage() {
                       </Card>
                     )}
 
-                    {selectedProjectData.status === "awaiting_issue_approval" && (
-                      <Card className="border-orange-500/50 bg-orange-50/50 dark:bg-orange-950/20">
-                        <CardContent className="pt-6 space-y-4">
-                          <div className="flex items-start gap-3">
-                            <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="font-medium text-orange-800 dark:text-orange-200">Revisión de Problemas Detectados</p>
-                              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                                {selectedProjectData.pauseReason || "Se han detectado problemas que requieren tu aprobación antes de corregirlos automáticamente."}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          {issuesSummary && (
-                            <div className="grid grid-cols-4 gap-2 text-center">
-                              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-md">
-                                <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{issuesSummary.pending || 0}</p>
-                                <p className="text-xs text-orange-600 dark:text-orange-400">Pendientes</p>
-                              </div>
-                              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-md">
-                                <p className="text-lg font-bold text-green-700 dark:text-green-300">{issuesSummary.approved || 0}</p>
-                                <p className="text-xs text-green-600 dark:text-green-400">Aprobados</p>
-                              </div>
-                              <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
-                                <p className="text-lg font-bold text-gray-700 dark:text-gray-300">{issuesSummary.rejected || 0}</p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400">Rechazados</p>
-                              </div>
-                              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-md">
-                                <p className="text-lg font-bold text-red-700 dark:text-red-300">{issuesSummary.bySeverity?.critical || 0}</p>
-                                <p className="text-xs text-red-600 dark:text-red-400">Críticos</p>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => selectedProjectData && approveAllIssuesMutation.mutate(selectedProjectData.id)}
-                              disabled={approveAllIssuesMutation.isPending || (issuesSummary?.pending || 0) === 0}
-                              data-testid="button-approve-all-issues"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Aprobar Todos
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => selectedProjectData && rejectAllIssuesMutation.mutate(selectedProjectData.id)}
-                              disabled={rejectAllIssuesMutation.isPending || (issuesSummary?.pending || 0) === 0}
-                              data-testid="button-reject-all-issues"
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Ignorar Todos
-                            </Button>
-                          </div>
-
-                          <ScrollArea className="h-[300px] border rounded-md p-2">
-                            <div className="space-y-2">
-                              {/* Pending issues (actionable) */}
-                              {issuesList.filter((i: any) => i.status === "pending").map((issue: any) => (
-                                <div 
-                                  key={issue.id} 
-                                  className={`p-3 border rounded-md ${
-                                    issue.severity === "critical" ? "border-red-400 bg-red-50 dark:bg-red-950/30" :
-                                    issue.severity === "major" ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30" :
-                                    "border-gray-300 bg-gray-50 dark:bg-gray-900/30"
-                                  }`}
-                                  data-testid={`issue-card-${issue.id}`}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <Badge variant={
-                                          issue.severity === "critical" ? "destructive" :
-                                          issue.severity === "major" ? "default" : "secondary"
-                                        }>
-                                          {issue.severity === "critical" ? "Crítico" :
-                                           issue.severity === "major" ? "Mayor" : "Menor"}
-                                        </Badge>
-                                        <Badge variant="outline">{issue.category}</Badge>
-                                        <span className="text-xs text-muted-foreground">Cap. {issue.chapterNumber}</span>
-                                      </div>
-                                      <p className="text-sm">{issue.description}</p>
-                                      {issue.correctionInstruction && (
-                                        <p className="text-xs text-muted-foreground mt-1 italic">
-                                          Corrección: {issue.correctionInstruction.substring(0, 150)}...
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-7 w-7 text-green-600 hover:bg-green-100"
-                                        onClick={() => approveIssueMutation.mutate(issue.id)}
-                                        disabled={approveIssueMutation.isPending}
-                                        data-testid={`button-approve-issue-${issue.id}`}
-                                      >
-                                        <Check className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-7 w-7 text-red-600 hover:bg-red-100"
-                                        onClick={() => rejectIssueMutation.mutate({ issueId: issue.id })}
-                                        disabled={rejectIssueMutation.isPending}
-                                        data-testid={`button-reject-issue-${issue.id}`}
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                              
-                              {/* Resolved issues (tachados / crossed off) */}
-                              {issuesList.filter((i: any) => i.status === "resolved").length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-dashed">
-                                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                                    <CheckCircle className="h-3 w-3 text-green-600" />
-                                    Problemas corregidos ({issuesList.filter((i: any) => i.status === "resolved").length})
-                                  </p>
-                                  {issuesList.filter((i: any) => i.status === "resolved").map((issue: any) => (
-                                    <div 
-                                      key={issue.id} 
-                                      className="p-2 border rounded-md border-green-200 bg-green-50/50 dark:bg-green-950/20 mb-1 opacity-60"
-                                      data-testid={`issue-card-resolved-${issue.id}`}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <Badge variant="outline" className="text-xs opacity-70">{issue.category}</Badge>
-                                            <span className="text-xs text-muted-foreground">Cap. {issue.chapterNumber}</span>
-                                          </div>
-                                          <p className="text-sm line-through text-muted-foreground">{issue.description}</p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              
-                              {issuesList.filter((i: any) => i.status === "pending").length === 0 && 
-                               issuesList.filter((i: any) => i.status === "resolved").length === 0 && (
-                                <div className="text-center py-8 text-muted-foreground">
-                                  <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
-                                  <p>Todos los problemas han sido revisados</p>
-                                </div>
-                              )}
-                            </div>
-                          </ScrollArea>
-
-                          {(issuesSummary?.pending || 0) === 0 && (
-                            <Button
-                              className="w-full"
-                              onClick={() => selectedProjectData && proceedCorrectionsMutation.mutate(selectedProjectData.id)}
-                              disabled={proceedCorrectionsMutation.isPending}
-                              data-testid="button-proceed-corrections"
-                            >
-                              {proceedCorrectionsMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              ) : (
-                                <Play className="h-4 w-4 mr-2" />
-                              )}
-                              {(issuesSummary?.approved || 0) > 0 
-                                ? `Proceder con ${issuesSummary?.approved || 0} Correcciones`
-                                : "Finalizar sin Correcciones"}
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-
                     <RealTimeCostWidget 
                       projectId={selectedProjectData.id} 
                       isProcessing={selectedProjectData.status === "processing"} 
                     />
-
-                    {/* Historial de correcciones resueltas - visible siempre */}
-                    {issuesList.filter((i: any) => i.status === "resolved").length > 0 && (
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            Correcciones Aplicadas ({issuesList.filter((i: any) => i.status === "resolved").length})
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ScrollArea className="h-[200px]">
-                            <div className="space-y-1">
-                              {issuesList.filter((i: any) => i.status === "resolved").map((issue: any) => (
-                                <div 
-                                  key={issue.id} 
-                                  className="p-2 border rounded-md border-green-200 bg-green-50/50 dark:bg-green-950/20"
-                                  data-testid={`resolved-issue-${issue.id}`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <Badge variant="outline" className="text-xs">{issue.category}</Badge>
-                                        <span className="text-xs text-muted-foreground">Cap. {issue.chapterNumber}</span>
-                                      </div>
-                                      <p className="text-sm line-through text-muted-foreground">{issue.description}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </CardContent>
-                      </Card>
-                    )}
 
                     {selectedProjectData.bestsellerScore && (
                       <Card className="bg-muted/50">
@@ -2014,7 +1414,7 @@ export default function ReeditPage() {
                   </TabsContent>
 
                   <TabsContent value="report">
-                    {selectedProjectData.finalReviewResult ? (
+                    {selectedProjectData.status === "completed" && selectedProjectData.finalReviewResult ? (
                       <Card className="mt-4">
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2">

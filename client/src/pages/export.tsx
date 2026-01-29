@@ -23,8 +23,6 @@ import {
   X,
   Search,
   Play,
-  AlertTriangle,
-  RefreshCw,
 } from "lucide-react";
 
 interface TranslationProgress {
@@ -34,13 +32,11 @@ interface TranslationProgress {
   chapterTitle: string;
   inputTokens: number;
   outputTokens: number;
-  status?: "active" | "reconnecting" | "background" | "error";
 }
 
 const SUPPORTED_LANGUAGES = [
   { code: "es", name: "Español" },
-  { code: "en-US", name: "English (US)" },
-  { code: "en-GB", name: "English (UK)" },
+  { code: "en", name: "English" },
   { code: "fr", name: "Français" },
   { code: "de", name: "Deutsch" },
   { code: "it", name: "Italiano" },
@@ -71,7 +67,6 @@ interface SavedTranslation {
   outputTokens: number;
   status: "pending" | "translating" | "completed" | "error";
   createdAt: string;
-  heartbeatAt?: string | null;
 }
 
 interface ExportResult {
@@ -150,39 +145,11 @@ function loadTranslationState(): ActiveTranslationState | null {
   return null;
 }
 
-function clearTranslationState(): void {
-  try {
-    localStorage.removeItem(TRANSLATION_STATE_KEY);
-  } catch {}
-}
-
-function isTranslationFrozen(translation: SavedTranslation): boolean {
-  if (translation.status !== "translating") return false;
-  
-  // Use server heartbeat to determine if translation is frozen
-  // A translation is considered frozen if no heartbeat in the last 3 minutes
-  const FROZEN_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
-  
-  if (!translation.heartbeatAt) {
-    // No heartbeat recorded, check local state as fallback
-    const savedState = loadTranslationState();
-    if (!savedState) return true;
-    if (savedState.projectId !== translation.projectId) return true;
-    return false;
-  }
-  
-  const lastHeartbeat = new Date(translation.heartbeatAt).getTime();
-  const now = Date.now();
-  const timeSinceHeartbeat = now - lastHeartbeat;
-  
-  return timeSinceHeartbeat > FROZEN_THRESHOLD_MS;
-}
-
 export default function ExportPage() {
   const { toast } = useToast();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [sourceLanguage, setSourceLanguage] = useState("es");
-  const [targetLanguage, setTargetLanguage] = useState("en-US");
+  const [targetLanguage, setTargetLanguage] = useState("en");
   const [eventSourceRef, setEventSourceRef] = useState<EventSource | null>(null);
   const [projectSearch, setProjectSearch] = useState("");
   const [translationSearch, setTranslationSearch] = useState("");
@@ -195,7 +162,6 @@ export default function ExportPage() {
     chapterTitle: savedState ? `Reconectando a "${savedState.projectTitle}"...` : "",
     inputTokens: savedState?.inputTokens || 0,
     outputTokens: savedState?.outputTokens || 0,
-    status: savedState ? "reconnecting" : undefined,
   });
 
   const { data: completedProjects = [], isLoading } = useQuery<CompletedProject[]>({
@@ -212,12 +178,6 @@ export default function ExportPage() {
   });
 
   const startTranslation = useCallback((projectId: number, srcLang: string, tgtLang: string, projectTitle?: string, source: "original" | "reedit" = "original") => {
-    // Close any existing EventSource to prevent duplicate translations
-    if (eventSourceRef) {
-      eventSourceRef.close();
-      setEventSourceRef(null);
-    }
-    
     const title = projectTitle || completedProjects.find(p => p.id === projectId)?.title || "Proyecto";
     
     setTranslationProgress({
@@ -227,7 +187,6 @@ export default function ExportPage() {
       chapterTitle: "Iniciando...",
       inputTokens: 0,
       outputTokens: 0,
-      status: "active",
     });
     
     saveTranslationState({
@@ -298,19 +257,6 @@ export default function ExportPage() {
       });
     });
 
-    eventSource.addEventListener("chapterError", (event) => {
-      const data = JSON.parse(event.data);
-      toast({
-        title: `Error en capítulo ${data.chapterNumber}`,
-        description: `${data.chapterTitle}: ${data.error}. Continuando con el resto...`,
-        variant: "destructive",
-      });
-      setTranslationProgress(prev => ({
-        ...prev,
-        chapterTitle: `Error en ${data.chapterTitle}, continuando...`,
-      }));
-    });
-
     eventSource.addEventListener("saving", () => {
       setTranslationProgress(prev => ({
         ...prev,
@@ -349,10 +295,10 @@ export default function ExportPage() {
     });
 
     eventSource.addEventListener("error", (event) => {
-      let errorMessage = "";
+      let errorMessage = "Error en la traducción";
       try {
         const data = JSON.parse((event as MessageEvent).data);
-        errorMessage = data.error || "";
+        errorMessage = data.error || errorMessage;
       } catch {}
       
       eventSource.close();
@@ -368,55 +314,34 @@ export default function ExportPage() {
         outputTokens: 0,
       });
 
-      // Only show toast if there's an actual error message from the server
-      if (errorMessage) {
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     });
 
     eventSource.onerror = () => {
-      // Only handle if connection was active - avoid spurious errors on page navigation
-      if (eventSource.readyState !== EventSource.CLOSED) {
-        eventSource.close();
-        setEventSourceRef(null);
-        
-        // Don't clear translation state - the server continues processing
-        // The watchdog will auto-resume and complete the translation
-        setTranslationProgress(prev => ({
-          ...prev,
-          status: "background",
-          chapterTitle: "Procesando en segundo plano...",
-        }));
-        
-        // Show toast to inform user
-        toast({
-          title: "Conexión interrumpida",
-          description: "La traducción continúa en segundo plano. Revisa el repositorio en unos minutos.",
-          variant: "default",
-        });
-        
-        // Clear UI state after a short delay
-        setTimeout(() => {
-          saveTranslationState(null);
-          setTranslationProgress({
-            isTranslating: false,
-            currentChapter: 0,
-            totalChapters: 0,
-            chapterTitle: "",
-            inputTokens: 0,
-            outputTokens: 0,
-            status: undefined,
-          });
-          // Refresh translations list to show current status
-          queryClient.invalidateQueries({ queryKey: ["/api/translations"] });
-        }, 3000);
-      }
+      eventSource.close();
+      setEventSourceRef(null);
+      saveTranslationState(null);
+      
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+
+      toast({
+        title: "Conexión perdida",
+        description: "Se perdió la conexión con el servidor. Intenta de nuevo.",
+        variant: "destructive",
+      });
     };
-  }, [toast, completedProjects, eventSourceRef]);
+  }, [toast, completedProjects]);
 
   useEffect(() => {
     // Only restart if we don't already have an active event source
@@ -544,12 +469,6 @@ export default function ExportPage() {
   });
 
   const resumeTranslation = useCallback((translationId: number, projectTitle: string) => {
-    // Close any existing EventSource to prevent duplicate translations
-    if (eventSourceRef) {
-      eventSourceRef.close();
-      setEventSourceRef(null);
-    }
-    
     setTranslationProgress({
       isTranslating: true,
       currentChapter: 0,
@@ -593,19 +512,6 @@ export default function ExportPage() {
       }));
     });
 
-    eventSource.addEventListener("chapterError", (event) => {
-      const data = JSON.parse(event.data);
-      toast({
-        title: `Error en capítulo ${data.chapterNumber}`,
-        description: `${data.chapterTitle}: ${data.error}. Continuando con el resto...`,
-        variant: "destructive",
-      });
-      setTranslationProgress(prev => ({
-        ...prev,
-        chapterTitle: `Error en ${data.chapterTitle}, continuando...`,
-      }));
-    });
-
     eventSource.addEventListener("complete", (event) => {
       const data = JSON.parse(event.data);
       eventSource.close();
@@ -629,10 +535,10 @@ export default function ExportPage() {
     });
 
     eventSource.addEventListener("error", (event) => {
-      let errorMessage = "";
+      let errorMessage = "Error desconocido";
       try {
         const data = JSON.parse((event as MessageEvent).data);
-        errorMessage = data.error || "";
+        errorMessage = data.error || errorMessage;
       } catch {}
       eventSource.close();
       setEventSourceRef(null);
@@ -645,33 +551,27 @@ export default function ExportPage() {
         inputTokens: 0,
         outputTokens: 0,
       });
-      // Only show toast if there's an actual error message from the server
-      if (errorMessage) {
-        toast({
-          title: "Error al reanudar",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Error al reanudar",
+        description: errorMessage,
+        variant: "destructive",
+      });
     });
 
     eventSource.onerror = () => {
-      // Only handle if connection was active - avoid spurious errors on page navigation
-      if (eventSource.readyState !== EventSource.CLOSED) {
-        eventSource.close();
-        setEventSourceRef(null);
-        clearTranslationState();
-        setTranslationProgress({
-          isTranslating: false,
-          currentChapter: 0,
-          totalChapters: 0,
-          chapterTitle: "",
-          inputTokens: 0,
-          outputTokens: 0,
-        });
-      }
+      eventSource.close();
+      setEventSourceRef(null);
+      clearTranslationState();
+      setTranslationProgress({
+        isTranslating: false,
+        currentChapter: 0,
+        totalChapters: 0,
+        chapterTitle: "",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
     };
-  }, [toast, eventSourceRef]);
+  }, [toast]);
 
   const selectedProject = completedProjects.find(p => p.id === selectedProjectId);
 
@@ -890,44 +790,21 @@ export default function ExportPage() {
                   )}
 
                   {translationProgress.isTranslating && (
-                    <div className={`space-y-3 p-3 rounded-md ${
-                      translationProgress.status === "background" 
-                        ? "bg-orange-100 dark:bg-orange-950 border border-orange-300 dark:border-orange-800" 
-                        : "bg-muted"
-                    }`}>
+                    <div className="space-y-3 p-3 bg-muted rounded-md">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium flex items-center gap-2">
-                          {translationProgress.status === "background" ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 animate-spin text-orange-600" />
-                              <span className="text-orange-700 dark:text-orange-400">En segundo plano</span>
-                            </>
-                          ) : translationProgress.status === "reconnecting" ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                              <span className="text-blue-700 dark:text-blue-400">Reconectando...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Traduciendo...
-                            </>
-                          )}
-                        </span>
+                        <span className="font-medium">Traduciendo...</span>
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">
                             {translationProgress.currentChapter}/{translationProgress.totalChapters}
                           </span>
-                          {translationProgress.status !== "background" && (
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              onClick={cancelTranslation}
-                              data-testid="button-cancel-translation"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            onClick={cancelTranslation}
+                            data-testid="button-cancel-translation"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       <Progress 
@@ -937,14 +814,10 @@ export default function ExportPage() {
                         } 
                         className="h-2"
                       />
-                      <p className={`text-xs truncate ${
-                        translationProgress.status === "background" 
-                          ? "text-orange-600 dark:text-orange-400" 
-                          : "text-muted-foreground"
-                      }`}>
+                      <p className="text-xs text-muted-foreground truncate">
                         {translationProgress.chapterTitle}
                       </p>
-                      {translationProgress.inputTokens > 0 && translationProgress.status !== "background" && (
+                      {translationProgress.inputTokens > 0 && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <DollarSign className="h-3 w-3" />
                           <span>
@@ -1032,8 +905,7 @@ export default function ExportPage() {
               <p className="text-sm">Las traducciones aparecerán aquí cuando las generes</p>
             </div>
           ) : (
-            <ScrollArea className="max-h-[400px] pr-1">
-              <div className="space-y-3">
+            <div className="space-y-3">
               {filteredTranslations.map((translation) => (
                 <div
                   key={translation.id}
@@ -1043,12 +915,7 @@ export default function ExportPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-medium truncate">{translation.projectTitle}</p>
-                      {translation.status === "translating" && isTranslationFrozen(translation) ? (
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-200">
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          Congelado
-                        </Badge>
-                      ) : translation.status === "translating" ? (
+                      {translation.status === "translating" ? (
                         <Badge variant="outline" className="animate-pulse bg-blue-500/10 text-blue-600 border-blue-200">
                           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                           Procesando...
@@ -1089,22 +956,6 @@ export default function ExportPage() {
                           <Download className="h-4 w-4 mr-2" />
                         )}
                         Descargar
-                      </Button>
-                    ) : translation.status === "translating" && isTranslationFrozen(translation) ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => resumeTranslation(translation.id, translation.projectTitle)}
-                        disabled={translationProgress.isTranslating}
-                        className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
-                        data-testid={`button-retry-frozen-${translation.id}`}
-                      >
-                        {translationProgress.isTranslating ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                        )}
-                        Reintentar
                       </Button>
                     ) : translation.status === "translating" ? (
                       <Button
@@ -1151,8 +1002,7 @@ export default function ExportPage() {
                   </div>
                 </div>
               ))}
-              </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>

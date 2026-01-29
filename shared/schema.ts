@@ -80,8 +80,6 @@ export const projects = pgTable("projects", {
   currentChapter: integer("current_chapter").default(0),
   revisionCycle: integer("revision_cycle").default(0),
   maxRevisionCycles: integer("max_revision_cycles").default(3),
-  voiceAuditCompleted: boolean("voice_audit_completed").default(false),
-  semanticCheckCompleted: boolean("semantic_check_completed").default(false),
   finalReviewResult: jsonb("final_review_result"),
   finalScore: integer("final_score"),
   totalInputTokens: integer("total_input_tokens").default(0),
@@ -484,7 +482,6 @@ export const translations = pgTable("translations", {
   inputTokens: integer("input_tokens").default(0),
   outputTokens: integer("output_tokens").default(0),
   status: text("status").notNull().default("pending"), // pending, translating, completed, error
-  heartbeatAt: timestamp("heartbeat_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -585,11 +582,6 @@ export const reeditProjects = pgTable("reedit_projects", {
   architectInstructions: text("architect_instructions"), // Initial user instructions from import
   // Tracking de issues resueltos - evita que el revisor re-reporte problemas ya corregidos
   resolvedIssueHashes: jsonb("resolved_issue_hashes").default([]), // Array of hashes for resolved issues
-  // Per-chapter correction counts to prevent infinite loops - persisted across restarts
-  chapterCorrectionCounts: jsonb("chapter_correction_counts").default({}), // {chapterNumber: correctionCount}
-  // Per-chapter change history for intelligent resolution detection
-  // Format: { "chapterNum": [{ issue: "desc", fix: "what changed", timestamp: "date" }] }
-  chapterChangeHistory: jsonb("chapter_change_history").default({}),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -680,33 +672,6 @@ export const insertReeditAuditReportSchema = createInsertSchema(reeditAuditRepor
   id: true,
   createdAt: true,
 });
-
-export const reeditIssues = pgTable("reedit_issues", {
-  id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull().references(() => reeditProjects.id, { onDelete: "cascade" }),
-  chapterNumber: integer("chapter_number").notNull(),
-  category: text("category").notNull(), // continuidad, voz_ritmo, estructura, anacronismo, narrativa, etc.
-  severity: text("severity").notNull().default("mayor"), // critica, mayor, menor
-  description: text("description").notNull(),
-  textCitation: text("text_citation"), // Fragmento exacto del texto con el problema
-  correctionInstruction: text("correction_instruction"), // Instrucción FIND/REPLACE para corregir
-  source: text("source").notNull().default("qa"), // qa, architect, final_reviewer
-  reviewCycle: integer("review_cycle").default(0), // En qué ciclo se detectó
-  status: text("status").notNull().default("pending"), // pending, approved, rejected, resolved
-  resolvedAt: timestamp("resolved_at"),
-  rejectionReason: text("rejection_reason"), // Si el usuario rechaza, por qué
-  issueHash: text("issue_hash"), // Hash único para evitar duplicados
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-
-export const insertReeditIssueSchema = createInsertSchema(reeditIssues).omit({
-  id: true,
-  createdAt: true,
-  resolvedAt: true,
-});
-
-export type ReeditIssue = typeof reeditIssues.$inferSelect;
-export type InsertReeditIssue = z.infer<typeof insertReeditIssueSchema>;
 
 export type ReeditProject = typeof reeditProjects.$inferSelect;
 export type InsertReeditProject = z.infer<typeof insertReeditProjectSchema>;

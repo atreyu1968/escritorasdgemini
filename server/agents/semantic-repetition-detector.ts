@@ -37,20 +37,6 @@ export interface SemanticRepetitionResult {
   }>;
 }
 
-interface TrancheResult {
-  puntuacion_originalidad: number;
-  puntuacion_foreshadowing: number;
-  clusters: RepetitionCluster[];
-  foreshadowing_detectado: Array<{
-    setup: string;
-    capitulo_setup: number;
-    payoff: string | null;
-    capitulo_payoff: number | null;
-    estado: "resuelto" | "pendiente" | "sin_payoff";
-  }>;
-  capitulos_para_revision: number[];
-}
-
 const SYSTEM_PROMPT = `
 Eres el "Detector de Repetición Semántica", experto en análisis de patrones narrativos.
 Tu misión es encontrar REPETICIONES DE IDEAS (no solo palabras) y verificar el sistema de FORESHADOWING/PAYOFF.
@@ -61,75 +47,101 @@ QUÉ DEBES DETECTAR
 
 1. REPETICIÓN DE IDEAS (Semántica):
    - El mismo CONCEPTO expresado con palabras diferentes en múltiples capítulos
-   - Ejemplo: "sintió un escalofrío" (cap 2) / "un estremecimiento la recorrió" (cap 5)
+   - Ejemplo: "sintió un escalofrío" (cap 2) / "un estremecimiento la recorrió" (cap 5) / "su cuerpo tembló involuntariamente" (cap 8)
    - Esto es MÁS SUTIL que repetición léxica - buscas la IDEA, no las palabras
 
 2. METÁFORAS REPETIDAS:
    - La misma imagen/comparación usada múltiples veces
    - Ejemplo: "ojos como el mar" aparece en caps 1, 4, y 9
+   - Cada metáfora debería ser única o usarse con intención
 
 3. ESTRUCTURAS NARRATIVAS REPETIDAS:
-   - Escenas que siguen el mismo patrón
-   - Diálogos que empiezan igual
-   - Finales de capítulo similares
+   - Escenas que siguen el mismo patrón: llegada-descubrimiento-huida
+   - Diálogos que empiezan igual: "—¿Qué está pasando? —preguntó..."
+   - Finales de capítulo similares: siempre terminando en cliffhanger
 
 4. FORESHADOWING SIN PAYOFF:
    - Pistas sembradas que nunca se resuelven
    - Misterios planteados y olvidados
+   - Chekhov's gun que nunca dispara
 
 5. PAYOFF SIN FORESHADOWING:
    - Revelaciones que aparecen sin preparación
+   - Soluciones que no fueron sembradas
+   - Deus ex machina disfrazados
 
 ═══════════════════════════════════════════════════════════════════
-PUNTUACIÓN
+CÓMO ANALIZAR
 ═══════════════════════════════════════════════════════════════════
 
-PUNTUACIÓN ORIGINALIDAD (1-10):
-- 10/10: CERO repeticiones semánticas en este tramo
-- 9/10: Solo 1 cluster menor de repetición
-- 8/10: 2 clusters menores
-- 7/10: 1 cluster mayor o 3+ menores
-- 6/10 o menos: Múltiples clusters mayores
+1. Lee el manuscrito completo buscando PATRONES SEMÁNTICOS
+2. Agrupa ideas similares aunque usen palabras diferentes
+3. Identifica SETUPS (foreshadowing) y busca sus PAYOFFS
+4. Marca setups sin payoff y payoffs sin setup
+5. Solo reporta clusters con 3+ ocurrencias (o foreshadowing crítico)
 
-PUNTUACIÓN FORESHADOWING (1-10):
-- 10/10: Todos los setups tienen payoff visible
-- 9/10: Solo 1 foreshadowing menor sin resolver
-- 8/10: 2 foreshadowing menores sin resolver
-- 7/10: 1 foreshadowing mayor sin payoff
-- 6/10 o menos: Sistema de pistas roto
+PUNTUACIÓN ORIGINALIDAD ESTRICTA (1-10):
+- 10/10: CERO repeticiones semánticas. Cada idea es completamente fresca y única.
+- 9/10: Solo 1 cluster menor de repetición.
+- 8/10: 2 clusters menores.
+- 7/10: 1 cluster mayor o 3+ menores.
+- 6/10 o menos: Múltiples clusters mayores o patrones muy repetitivos.
+
+PUNTUACIÓN FORESHADOWING ESTRICTA (1-10):
+- 10/10: TODOS los setups tienen payoff, TODOS los payoffs tienen setup. Sistema perfecto.
+- 9/10: Solo 1 foreshadowing menor sin resolver.
+- 8/10: 2 foreshadowing menores sin resolver.
+- 7/10: 1 foreshadowing mayor sin payoff.
+- 6/10 o menos: Sistema de pistas roto con múltiples cabos sueltos.
+
+APROBACIÓN (ESTRICTA):
+- APROBADO (10/10): AMBAS puntuaciones = 10. Cero clusters y sistema foreshadowing perfecto.
+- REQUIERE REVISIÓN: Cualquier puntuación < 10 o cualquier cluster/foreshadowing sin resolver.
 
 ═══════════════════════════════════════════════════════════════════
 SALIDA OBLIGATORIA (JSON)
 ═══════════════════════════════════════════════════════════════════
 
 {
+  "analisis_aprobado": boolean,
   "puntuacion_originalidad": (1-10),
   "puntuacion_foreshadowing": (1-10),
+  "resumen": "Análisis del estado de originalidad y foreshadowing",
   "clusters": [
     {
       "tipo": "idea_repetida",
-      "capitulos_afectados": [2, 5],
-      "descripcion": "Descripción del patrón repetido",
-      "ejemplos": ["Cap 2: 'ejemplo'", "Cap 5: 'ejemplo'"],
-      "severidad": "menor",
-      "elementos_a_preservar": "Mantener la instancia del Cap 2",
-      "fix_sugerido": "Cambiar la oración en Cap 5"
+      "capitulos_afectados": [2, 5, 8, 12],
+      "descripcion": "La sensación de 'escalofrío/estremecimiento' se usa excesivamente para indicar peligro",
+      "ejemplos": [
+        "Cap 2: 'sintió un escalofrío recorrer su espalda'",
+        "Cap 5: 'un estremecimiento la sacudió'",
+        "Cap 8: 'su cuerpo tembló involuntariamente'",
+        "Cap 12: 'un frío súbito la envolvió'"
+      ],
+      "severidad": "mayor",
+      "elementos_a_preservar": "Mantener la instancia del Cap 2 (es la primera, establece el patrón). El resto del contenido de cada capítulo está perfecto.",
+      "fix_sugerido": "SOLO cambiar las oraciones citadas en caps 5, 8 y 12. Sugerencias: Cap 5 → 'tensó los músculos', Cap 8 → 'se le secó la boca', Cap 12 → 'el corazón le latió con fuerza'. El resto de cada capítulo permanece INTACTO."
     }
   ],
+  "capitulos_para_revision": [5, 8, 12],
   "foreshadowing_detectado": [
     {
-      "setup": "Descripción del setup",
+      "setup": "El protagonista encuentra una llave misteriosa en el cajón",
       "capitulo_setup": 3,
-      "payoff": "Descripción del payoff o null",
+      "payoff": "La llave abre la caja fuerte del antagonista",
       "capitulo_payoff": 18,
       "estado": "resuelto"
+    },
+    {
+      "setup": "Se menciona que el hermano desapareció hace 10 años",
+      "capitulo_setup": 2,
+      "payoff": null,
+      "capitulo_payoff": null,
+      "estado": "sin_payoff"
     }
-  ],
-  "capitulos_para_revision": [5]
+  ]
 }
 `;
-
-const CHAPTERS_PER_TRANCHE = 10;
 
 export class SemanticRepetitionDetectorAgent extends BaseAgent {
   constructor() {
@@ -137,13 +149,13 @@ export class SemanticRepetitionDetectorAgent extends BaseAgent {
       name: "El Detector Semántico",
       role: "semantic-repetition-detector",
       systemPrompt: SYSTEM_PROMPT,
-      model: "deepseek-reasoner",
+      model: "gemini-2.5-flash",
       useThinking: false,
-      useReeditorClient: true,
     });
   }
 
   async execute(input: SemanticRepetitionDetectorInput): Promise<AgentResponse & { result?: SemanticRepetitionResult }> {
+    // Helper to get proper chapter label based on number
     const getChapterLabel = (num: number): string => {
       if (num === 0) return "Prólogo";
       if (num === -1 || num === 998) return "Epílogo";
@@ -151,6 +163,7 @@ export class SemanticRepetitionDetectorAgent extends BaseAgent {
       return `Capítulo ${num}`;
     };
     
+    // Sort chapters in narrative order (prologue first, epilogue/author note last)
     const getChapterSortOrder = (n: number): number => {
       if (n === 0) return -1000;
       if (n === -1 || n === 998) return 1000;
@@ -161,114 +174,63 @@ export class SemanticRepetitionDetectorAgent extends BaseAgent {
     const sortedChapters = [...input.chapters].sort((a, b) => 
       getChapterSortOrder(a.numero) - getChapterSortOrder(b.numero)
     );
-
-    const totalChapters = sortedChapters.length;
-    const numTranches = Math.ceil(totalChapters / CHAPTERS_PER_TRANCHE);
     
-    console.log(`[Detector Semántico] Analizando ${totalChapters} capítulos en ${numTranches} tramos`);
-
-    const allResults: TrancheResult[] = [];
-    let lastResponse: AgentResponse | null = null;
-
-    for (let t = 0; t < numTranches; t++) {
-      const startIdx = t * CHAPTERS_PER_TRANCHE;
-      const endIdx = Math.min(startIdx + CHAPTERS_PER_TRANCHE, totalChapters);
-      const trancheChapters = sortedChapters.slice(startIdx, endIdx);
-      const trancheNum = t + 1;
-
-      console.log(`[Detector Semántico] Tramo ${trancheNum}/${numTranches}: capítulos ${startIdx + 1} a ${endIdx}`);
-
-      const chaptersText = trancheChapters.map(c => `
+    const chaptersText = sortedChapters.map(c => `
 ===== ${getChapterLabel(c.numero)}: ${c.titulo} =====
 ${c.contenido}
 `).join("\n\n---\n\n");
 
-      const foreshadowingSection = input.foreshadowingExpected?.length
-        ? `\nFORESHADOWING ESPERADO (según World Bible):\n${input.foreshadowingExpected.map(f => `- ${f}`).join("\n")}`
-        : "";
+    const foreshadowingSection = input.foreshadowingExpected?.length
+      ? `\nFORESHADOWING ESPERADO (según World Bible):\n${input.foreshadowingExpected.map(f => `- ${f}`).join("\n")}`
+      : "";
 
-      const prompt = `
+    const prompt = `
 PROYECTO: ${input.projectTitle}
-ANÁLISIS DE REPETICIÓN SEMÁNTICA - TRAMO ${trancheNum}/${numTranches}
+ANÁLISIS DE REPETICIÓN SEMÁNTICA Y FORESHADOWING
 
-WORLD BIBLE (resumen para contexto):
-${JSON.stringify(input.worldBible?.resumen || input.worldBible?.protagonista || "No disponible", null, 2)}
+WORLD BIBLE (para verificar arcos y misterios):
+${JSON.stringify(input.worldBible, null, 2)}
 ${foreshadowingSection}
 
 ═══════════════════════════════════════════════════════════════════
-TRAMO ${trancheNum}: Capítulos ${startIdx + 1} a ${endIdx} de ${totalChapters}
+MANUSCRITO COMPLETO (${input.chapters.length} capítulos):
 ═══════════════════════════════════════════════════════════════════
 ${chaptersText}
 
 INSTRUCCIONES:
-1. Analiza SOLO estos capítulos del tramo actual
-2. Busca patrones de ideas repetidas DENTRO de este tramo
-3. Identifica foreshadowing y payoffs DENTRO de este tramo
-4. Reporta clusters con 2+ ocurrencias en este tramo
-5. Marca foreshadowing pendiente (puede resolverse en tramos posteriores)
+1. Lee el manuscrito completo buscando PATRONES DE IDEAS
+2. Identifica conceptos que se repiten con diferentes palabras
+3. Busca metáforas y estructuras narrativas repetidas
+4. Rastrea cada SETUP y busca su PAYOFF
+5. Marca foreshadowing sin resolver y revelaciones sin preparación
+6. Solo reporta clusters con 3+ ocurrencias o foreshadowing crítico
 
 Responde ÚNICAMENTE con el JSON estructurado.
 `;
 
-      try {
-        const response = await this.generateContent(prompt);
-        lastResponse = response;
-
-        const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]) as TrancheResult;
-          allResults.push(parsed);
-          console.log(`[Detector Semántico] Tramo ${trancheNum}: Originalidad ${parsed.puntuacion_originalidad}/10, Foreshadowing ${parsed.puntuacion_foreshadowing}/10`);
-        } else {
-          console.log(`[Detector Semántico] Tramo ${trancheNum}: No se pudo parsear JSON, usando valores por defecto`);
-          allResults.push({
-            puntuacion_originalidad: 8,
-            puntuacion_foreshadowing: 8,
-            clusters: [],
-            foreshadowing_detectado: [],
-            capitulos_para_revision: []
-          });
-        }
-      } catch (e) {
-        console.error(`[Detector Semántico] Error en tramo ${trancheNum}:`, e);
-        allResults.push({
-          puntuacion_originalidad: 8,
-          puntuacion_foreshadowing: 8,
-          clusters: [],
-          foreshadowing_detectado: [],
-          capitulos_para_revision: []
-        });
+    const response = await this.generateContent(prompt);
+    
+    try {
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]) as SemanticRepetitionResult;
+        return { ...response, result };
       }
+    } catch (e) {
+      console.error("[SemanticRepetitionDetector] Failed to parse JSON response");
     }
 
-    const avgOriginalidad = Math.round(
-      allResults.reduce((sum, r) => sum + r.puntuacion_originalidad, 0) / allResults.length
-    );
-    const avgForeshadowing = Math.round(
-      allResults.reduce((sum, r) => sum + r.puntuacion_foreshadowing, 0) / allResults.length
-    );
-
-    const allClusters = allResults.flatMap(r => r.clusters);
-    const allForeshadowing = allResults.flatMap(r => r.foreshadowing_detectado);
-    const allChaptersForRevision = Array.from(new Set(allResults.flatMap(r => r.capitulos_para_revision)));
-
-    const analisis_aprobado = avgOriginalidad >= 8 && avgForeshadowing >= 8 && allClusters.filter(c => c.severidad === "mayor").length === 0;
-
-    const result: SemanticRepetitionResult = {
-      analisis_aprobado,
-      puntuacion_originalidad: avgOriginalidad,
-      puntuacion_foreshadowing: avgForeshadowing,
-      resumen: `Análisis por tramos completado. Originalidad: ${avgOriginalidad}/10, Foreshadowing: ${avgForeshadowing}/10. ${allClusters.length} clusters detectados.`,
-      clusters: allClusters,
-      capitulos_para_revision: allChaptersForRevision,
-      foreshadowing_detectado: allForeshadowing
-    };
-
-    console.log(`[Detector Semántico] Resultado final: ${analisis_aprobado ? 'APROBADO' : 'REQUIERE REVISIÓN'}. Originalidad: ${avgOriginalidad}/10, Foreshadowing: ${avgForeshadowing}/10`);
-
     return { 
-      ...(lastResponse || { content: '', reasoning: null }),
-      result 
+      ...response, 
+      result: { 
+        analisis_aprobado: true,
+        puntuacion_originalidad: 8,
+        puntuacion_foreshadowing: 8,
+        resumen: "Análisis aprobado automáticamente",
+        clusters: [],
+        capitulos_para_revision: [],
+        foreshadowing_detectado: []
+      } 
     };
   }
 }

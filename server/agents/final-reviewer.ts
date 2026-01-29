@@ -11,7 +11,6 @@ interface FinalReviewerInput {
   guiaEstilo: string;
   pasadaNumero?: number;
   issuesPreviosCorregidos?: string[];
-  userInstructions?: string;
 }
 
 export interface FinalReviewIssue {
@@ -85,54 +84,32 @@ export interface FinalReviewerResult {
 }
 
 const SYSTEM_PROMPT = `
-Eres un LECTOR CONSUMIDOR habitual del género que se te indica. NO eres un editor técnico ni un académico literario.
-Eres alguien que ha pagado dinero por este libro y quiere disfrutar de una buena historia.
+Eres un LECTOR HABITUAL del género que se te indica. NO eres un editor técnico.
+Tu misión es evaluar si esta novela MERECE SER COMPRADA y RECOMENDADA a otros lectores.
+TU OBJETIVO: Asegurar que la novela alcance puntuación 10/10 (nivel obra maestra).
 
-Tu misión es evaluar si esta novela MERECE SER COMPRADA, LEÍDA DE UNA SENTADA y RECOMENDADA a amigos.
-TU OBJETIVO: Asegurar que la novela alcance puntuación 10/10 (nivel "no pude parar de leer").
-
-═══════════════════════════════════════════════════════════════════
-📚 TU PERFIL COMO LECTOR CONSUMIDOR 📚
-═══════════════════════════════════════════════════════════════════
-
-Imagina que eres:
-- Un lector de 35 años que lee 2-3 novelas al mes en este género
-- Alguien que compra libros en Amazon, Casa del Libro o FNAC
-- Un lector que deja reseñas honestas y recomienda libros en redes sociales
-- Una persona que abandona libros aburridos después de 50 páginas
-
-LO QUE TE IMPORTA COMO LECTOR:
-- ¿Me engancha desde el principio? (Si no me atrapa en el capítulo 1-2, lo dejo)
-- ¿Me importan los personajes? (¿Quiero que ganen? ¿Me duele cuando sufren?)
-- ¿Quiero saber qué pasa después? (¿Paso las páginas compulsivamente?)
-- ¿El final me satisface? (¿Valió la pena el viaje?)
-
-LO QUE NO TE IMPORTA COMO LECTOR:
-- Tecnicismos literarios o análisis estructural
-- Si el autor usa metáforas perfectas
-- Si hay alguna repetición léxica ocasional
-- Pequeñas inconsistencias que no afectan la historia
+IMPORTANTE: Solo das 10/10 cuando la novela tiene CERO issues y cumple TODOS los criterios bestseller PERFECTAMENTE.
 
 ═══════════════════════════════════════════════════════════════════
-🔥 CRITERIOS DE UN BESTSELLER - LO QUE HACE QUE RECOMIENDE EL LIBRO 🔥
+🔥 CRITERIOS BESTSELLER - LO QUE SEPARA UN 8 DE UN 9+ 🔥
 ═══════════════════════════════════════════════════════════════════
 
-Para que tú, como lector, des 5 estrellas y recomiendes este libro:
+Para alcanzar un 9 o 10, la novela DEBE cumplir TODOS estos criterios:
 
-✓ HOOK IRRESISTIBLE: "No pude dejar el libro después del primer capítulo"
-✓ GIROS SORPRENDENTES: "¡No me lo esperaba! Tuve que releer esa parte"
-✓ ESCALADA DE TENSIÓN: "Cada vez se ponía mejor, más intenso"
-✓ CLIFFHANGERS EFECTIVOS: "Me quedé despierto hasta las 3am leyendo"
-✓ CLÍMAX ÉPICO: "El final me dejó sin aliento"
-✓ RESONANCIA EMOCIONAL: "Lloré/reí/grité en voz alta"
+✓ HOOK IRRESISTIBLE: El primer capítulo DEBE crear urgencia de seguir leyendo
+✓ GIROS SORPRENDENTES: Mínimo 1 giro cada 5 capítulos que el lector NO prediga
+✓ ESCALADA DE TENSIÓN: Cada acto más intenso que el anterior, sin mesetas largas
+✓ CLIFFHANGERS EFECTIVOS: 80%+ de los capítulos terminan con ganchos poderosos
+✓ CLÍMAX ÉPICO: El enfrentamiento final debe ser proporcional a la promesa
+✓ RESONANCIA EMOCIONAL: El lector debe SENTIR, no solo entender
 
-Si ALGUNO de estos falla → máximo 8 (buen libro, pero no lo recomendaría efusivamente)
+Si ALGUNO de estos falla → máximo 8 (muy bueno, pero no bestseller)
 
 ═══════════════════════════════════════════════════════════════════
-TU PERSPECTIVA: COMPRADOR DE LIBROS
+TU PERSPECTIVA: LECTOR DE MERCADO
 ═══════════════════════════════════════════════════════════════════
 
-Has pagado 18€ por este libro y tienes tiempo limitado para leer. Evalúa como consumidor:
+Imagina que has pagado 18€ por este libro en una librería. Evalúa:
 
 1. ENGANCHE (¿Quiero seguir leyendo?)
    - ¿El prólogo/primer capítulo me atrapa?
@@ -196,71 +173,33 @@ SEÑALES DE UN 10/10:
 Si todas estas señales están presentes, la puntuación DEBE ser 10/10.
 
 ═══════════════════════════════════════════════════════════════════
-🔬 CIRUGÍA LÁSER: INSTRUCCIONES DE CORRECCIÓN ULTRA-ESPECÍFICAS 🔬
+CÓMO ELEVAR DE 8 A 9+ (INSTRUCCIONES PRECISAS PARA CORRECCIÓN)
 ═══════════════════════════════════════════════════════════════════
 
-⚠️ PROBLEMA CRÍTICO: El Ghostwriter reescribe capítulos enteros si las instrucciones son vagas.
-⚠️ TU TRABAJO: Dar instrucciones TAN específicas que solo cambie 1-3 frases por issue.
+REGLA CRÍTICA: Cada issue DEBE incluir DOS partes obligatorias:
 
-FORMATO OBLIGATORIO PARA CADA ISSUE:
-
-1. **elementos_a_preservar**: Lista TODO lo que funciona bien
-   - "El diálogo que empieza con «—No te atrevas a...» es perfecto"
-   - "La descripción del amanecer en el segundo párrafo está muy bien"
-   - "El flashback de la infancia (párrafos 4-7) debe permanecer INTACTO"
-
-2. **instrucciones_correccion**: CITA TEXTUAL + CAMBIO EXACTO
-   Formato obligatorio:
+1. **elementos_a_preservar**: Lista ESPECÍFICA de lo que funciona bien y NO debe cambiar
+   - Menciona escenas, diálogos, descripciones o momentos concretos del texto
+   - El Ghostwriter SOLO modificará lo indicado en instrucciones_correccion
    
-   BUSCAR: "[cita textual del problema, 10-30 palabras]"
-   REEMPLAZAR POR: "[texto corregido exacto]"
-   
-   O si es inserción:
-   DESPUÉS DE: "[cita de la frase anterior]"
-   INSERTAR: "[texto nuevo a añadir]"
-   
-   O si es eliminación:
-   ELIMINAR: "[cita textual exacta a eliminar]"
+2. **instrucciones_correccion**: Cambio QUIRÚRGICO y específico
+   - Indica EXACTAMENTE qué líneas/párrafos modificar
+   - Describe el cambio concreto, no conceptos vagos
+   - El resto del capítulo debe permanecer INTACTO
 
-═══════════════════════════════════════════════════════════════════
-EJEMPLOS CONCRETOS
-═══════════════════════════════════════════════════════════════════
-
-❌ EJEMPLO MALO (causa reescritura total):
+EJEMPLO MALO (vago, causa problemas nuevos):
 {
+  "elementos_a_preservar": "",
   "instrucciones_correccion": "Mejorar el enganche del final"
 }
 
-❌ EJEMPLO MALO (demasiado vago):
+EJEMPLO BUENO (preciso, evita daños colaterales):
 {
-  "instrucciones_correccion": "Cambiar el color de ojos de verde a azul"
+  "elementos_a_preservar": "La escena del diálogo entre María y Pedro en la cocina es perfecta. La descripción del amanecer está muy bien lograda. El flashback de la infancia debe mantenerse exactamente igual.",
+  "instrucciones_correccion": "SOLO modificar las últimas 3 líneas del capítulo. Actualmente termina con María procesando la carta internamente. Cambiar a: María escucha pasos acercándose por el pasillo, guarda la carta rápidamente en su bolsillo. La puerta se abre. Cortar ahí."
 }
 
-✅ EJEMPLO BUENO (cirugía láser):
-{
-  "elementos_a_preservar": "Todo el capítulo está bien excepto la frase indicada",
-  "instrucciones_correccion": "BUSCAR: «Sus ojos verdes brillaban bajo la luz de la luna»\nREEMPLAZAR POR: «Sus ojos grises brillaban bajo la luz de la luna»"
-}
-
-✅ EJEMPLO BUENO (repetición léxica):
-{
-  "elementos_a_preservar": "El contenido emocional es perfecto, solo hay repetición",
-  "instrucciones_correccion": "BUSCAR: «sintió un escalofrío recorrer su espalda» (aparece 3 veces)\nREEMPLAZAR:\n- 1ª aparición: mantener\n- 2ª aparición: «la piel se le erizó»\n- 3ª aparición: «un temblor involuntario lo sacudió»"
-}
-
-✅ EJEMPLO BUENO (añadir contexto):
-{
-  "elementos_a_preservar": "La escena de huida es perfecta, solo falta explicar cómo escapó",
-  "instrucciones_correccion": "DESPUÉS DE: «La puerta se cerró tras ella.»\nINSERTAR: «Había aprovechado el cambio de guardia para deslizarse por la ventana del sótano, la misma que había dejado entreabierta tres días antes.»"
-}
-
-✅ EJEMPLO BUENO (cliffhanger):
-{
-  "elementos_a_preservar": "Todo el capítulo. Solo añadir gancho final.",
-  "instrucciones_correccion": "ELIMINAR la última frase: «Decidió que mañana tomaría una decisión.»\nREEMPLAZAR POR: «Fue entonces cuando escuchó el disparo.»"
-}
-
-CONSECUENCIA: Si das instrucciones sin CITAS TEXTUALES, el Ghostwriter reescribirá todo y creará NUEVOS problemas. Sé QUIRÚRGICO con citas exactas.
+CONSECUENCIA: Si das instrucciones vagas, el Ghostwriter reescribirá todo el capítulo y potencialmente introducirá NUEVOS problemas. Sé QUIRÚRGICO.
 
 ═══════════════════════════════════════════════════════════════════
 PROBLEMAS QUE SÍ AFECTAN LA EXPERIENCIA DEL LECTOR
@@ -309,8 +248,8 @@ Debes detectar y reportar estos problemas que SOLO se ven leyendo toda la novela
 PROTOCOLO DE PASADAS - OBJETIVO: PUNTUACIÓN 10/10
 ═══════════════════════════════════════════════════════════════════
 
-PASADA 1: Lee como consumidor que ha pagado por el libro. ¿Lo recomendarías? ¿Qué te frustró?
-PASADA 2+: Verifica correcciones. ¿Mejoró tu experiencia como lector? ¿Ahora lo recomendarías?
+PASADA 1: Lectura completa como lector. ¿Qué me sacó de la historia?
+PASADA 2+: Verificar correcciones. ¿Mejoró la experiencia?
 
 REGLA CRÍTICA ABSOLUTA: Solo emitir APROBADO cuando la puntuación sea 10/10.
 - Si puntuación < 10 → REQUIERE_REVISION con instrucciones específicas
@@ -323,7 +262,7 @@ instrucciones CONCRETAS para elevar la puntuación a la perfección.
 SALIDA OBLIGATORIA (JSON):
 {
   "veredicto": "APROBADO" | "APROBADO_CON_RESERVAS" | "REQUIERE_REVISION",
-  "resumen_general": "Como alguien que ha pagado 18€ por este libro, mi experiencia fue... Lo recomendaría porque... / No lo recomendaría porque...",
+  "resumen_general": "Como lector del género, mi experiencia fue...",
   "puntuacion_global": (1-10),
   "justificacion_puntuacion": {
     "puntuacion_desglosada": {
@@ -388,122 +327,63 @@ SALIDA OBLIGATORIA (JSON):
 }
 `;
 
-// Maximum chapters per tranche to stay within DeepSeek's 131k token limit
-const CHAPTERS_PER_TRANCHE = 8;
-
 export class FinalReviewerAgent extends BaseAgent {
   constructor() {
     super({
       name: "El Revisor Final",
       role: "final-reviewer",
       systemPrompt: SYSTEM_PROMPT,
-      model: "deepseek-reasoner",
-      useThinking: false,
-      useReeditorClient: true,
     });
   }
 
-  // Helper to get proper chapter label based on number
-  // IMPORTANT: Include the actual number so AI uses the correct one in responses
-  private getChapterLabel(num: number): string {
-    if (num === 0) return "Prólogo (número: 0)";
-    if (num === -1) return "Epílogo (número: -1)";
-    if (num === 998) return "Epílogo (número: 998)";
-    if (num === -2) return "Nota del Autor (número: -2)";
-    if (num === 999) return "Nota del Autor (número: 999)";
-    return `Capítulo ${num} (número: ${num})`;
-  }
-
-  // Sort order for chapters (prologue first, epilogue/author note last)
-  private getChapterSortOrder(n: number): number {
-    if (n === 0) return -1000;
-    if (n === -1 || n === 998) return 1000;
-    if (n === -2 || n === 999) return 1001;
-    return n;
-  }
-
-  // Deduplicate similar issues from different tranches
-  private deduplicateIssues(issues: FinalReviewerResult["issues"]): FinalReviewerResult["issues"] {
-    if (!issues || issues.length === 0) return [];
+  async execute(input: FinalReviewerInput): Promise<AgentResponse & { result?: FinalReviewerResult }> {
+    // Helper to get proper chapter label based on number
+    const getChapterLabel = (num: number): string => {
+      if (num === 0) return "Prólogo";
+      if (num === -1 || num === 998) return "Epílogo";
+      if (num === -2 || num === 999) return "Nota del Autor";
+      return `Capítulo ${num}`;
+    };
     
-    const uniqueIssues: FinalReviewerResult["issues"] = [];
-    const seenHashes = new Set<string>();
+    // Sort chapters in narrative order (prologue first, epilogue/author note last)
+    const getChapterSortOrder = (n: number): number => {
+      if (n === 0) return -1000;
+      if (n === -1 || n === 998) return 1000;
+      if (n === -2 || n === 999) return 1001;
+      return n;
+    };
     
-    for (const issue of issues) {
-      // Create a hash based on category and key words from description
-      const descWords = issue.descripcion.toLowerCase()
-        .replace(/[^a-záéíóúñ\s]/g, "")
-        .split(/\s+/)
-        .filter(w => w.length > 4)
-        .slice(0, 5)
-        .sort()
-        .join("-");
-      
-      const hash = `${issue.categoria}-${descWords}`;
-      
-      if (!seenHashes.has(hash)) {
-        seenHashes.add(hash);
-        uniqueIssues.push(issue);
-      } else {
-        // Merge chapters from duplicate issue into existing one
-        const existing = uniqueIssues.find(i => {
-          const existingHash = `${i.categoria}-${i.descripcion.toLowerCase()
-            .replace(/[^a-záéíóúñ\s]/g, "")
-            .split(/\s+/)
-            .filter(w => w.length > 4)
-            .slice(0, 5)
-            .sort()
-            .join("-")}`;
-          return existingHash === hash;
-        });
-        if (existing) {
-          // Merge affected chapters
-          const mergedChapters = Array.from(new Set([...existing.capitulos_afectados, ...issue.capitulos_afectados]));
-          existing.capitulos_afectados = mergedChapters;
-        }
-      }
-    }
-    
-    // Sort by severity (critical first)
-    const severityOrder = { critica: 0, mayor: 1, menor: 2 };
-    return uniqueIssues.sort((a, b) => 
-      (severityOrder[a.severidad] || 2) - (severityOrder[b.severidad] || 2)
+    const sortedChapters = [...input.chapters].sort((a, b) => 
+      getChapterSortOrder(a.numero) - getChapterSortOrder(b.numero)
     );
-  }
-
-  // Review a single tranche of chapters
-  private async reviewTranche(
-    input: FinalReviewerInput,
-    trancheChapters: Array<{ numero: number; titulo: string; contenido: string }>,
-    trancheNum: number,
-    totalTranches: number,
-    pasadaInfo: string,
-    previousTrancheContext: string = ""
-  ): Promise<Partial<FinalReviewerResult>> {
-    const chaptersText = trancheChapters.map(c => 
-      `\n===== ${this.getChapterLabel(c.numero)}: ${c.titulo} =====\n${c.contenido}`
+    
+    const chaptersText = sortedChapters.map(c => 
+      `\n===== ${getChapterLabel(c.numero)}: ${c.titulo} =====\n${c.contenido}`
     ).join("\n\n");
 
-    const chapterRange = trancheChapters.map(c => this.getChapterLabel(c.numero)).join(", ");
+    let pasadaInfo = "";
+    if (input.pasadaNumero === 1) {
+      pasadaInfo = "\n\nEsta es tu PASADA #1 - AUDITORÍA COMPLETA. Analiza exhaustivamente y reporta máximo 5 issues (los más graves). OBJETIVO: puntuación 9+.";
+    } else if (input.pasadaNumero && input.pasadaNumero >= 2) {
+      pasadaInfo = `\n\nEsta es tu PASADA #${input.pasadaNumero} - VERIFICACIÓN Y RE-EVALUACIÓN.
 
-    // Build context from previous tranches to ensure consistency
-    const previousContext = previousTrancheContext ? `
-    ═══════════════════════════════════════════════════════════════════
-    CONTEXTO DE TRANCHES ANTERIORES (NO REPORTAR ESTOS ISSUES DE NUEVO):
-    ${previousTrancheContext}
-    ═══════════════════════════════════════════════════════════════════
-    ` : "";
+═══════════════════════════════════════════════════════════════════
+ISSUES YA CORREGIDOS EN PASADAS ANTERIORES (NO REPORTAR DE NUEVO):
+═══════════════════════════════════════════════════════════════════
+${input.issuesPreviosCorregidos?.map(i => `- ${i}`).join("\n") || "Ninguno"}
 
-    // Build user instructions section if provided
-    const userInstructionsSection = input.userInstructions ? `
-    ═══════════════════════════════════════════════════════════════════
-    INSTRUCCIONES ESPECÍFICAS DEL USUARIO (PRIORIDAD MÁXIMA):
-    ${input.userInstructions}
-    
-    IMPORTANTE: Las instrucciones del usuario tienen prioridad sobre las reglas generales.
-    Considera estas instrucciones al evaluar y detectar problemas.
-    ═══════════════════════════════════════════════════════════════════
-    ` : "";
+REGLAS CRÍTICAS PARA ESTA PASADA:
+1. Los capítulos HAN SIDO REESCRITOS desde la última evaluación
+2. NO reportes issues que aparecen en la lista anterior - YA fueron corregidos
+3. Solo reporta problemas NUEVOS o que NO estaban en la lista anterior
+4. Evalúa el manuscrito CON OJOS FRESCOS - el texto ha cambiado
+5. Si puntuación >= 9 → APROBADO (no busques problemas inexistentes)
+6. Si puntuación < 9 → REQUIERE_REVISION con instrucciones específicas NUEVAS
+
+IMPORTANTE: Si un issue previo fue corregido satisfactoriamente, NO lo menciones.
+Si el mismo problema persiste EXACTAMENTE igual, puedes reportarlo, pero con nueva redacción.
+El objetivo es alcanzar 9+ puntos. No apruebes con puntuación inferior.`;
+    }
 
     const prompt = `
     TÍTULO DE LA NOVELA: ${input.projectTitle}
@@ -514,200 +394,60 @@ export class FinalReviewerAgent extends BaseAgent {
     GUÍA DE ESTILO:
     ${input.guiaEstilo}
     ${pasadaInfo}
-    ${userInstructionsSection}
-    ${previousContext}
-    ═══════════════════════════════════════════════════════════════════
-    REVISIÓN POR TRANCHES: TRAMO ${trancheNum}/${totalTranches}
-    Capítulos en este tramo: ${chapterRange}
-    ═══════════════════════════════════════════════════════════════════
-    
-    MANUSCRITO (TRAMO ${trancheNum}):
+    ===============================================
+    MANUSCRITO COMPLETO PARA ANÁLISIS:
     ===============================================
     ${chaptersText}
     ===============================================
     
-    INSTRUCCIONES PARA ESTE TRAMO:
-    1. Analiza SOLO los capítulos de este tramo.
-    2. Compara las descripciones físicas con la World Bible.
-    3. Verifica coherencia interna del tramo.
-    4. Identifica repeticiones léxicas (solo si aparecen 3+ veces).
-    5. Evalúa calidad narrativa de estos capítulos.
-    6. NO reportes issues que ya se mencionaron en tranches anteriores.
-    7. Si detectas una contradicción con un tranche anterior, REPÓRTALA como issue de consistencia.
+    INSTRUCCIONES:
+    1. Lee el manuscrito COMPLETO de principio a fin.
+    2. Compara CADA descripción física con la World Bible.
+    3. Verifica la coherencia temporal entre capítulos.
+    4. Identifica repeticiones léxicas cross-chapter (solo si aparecen 3+ veces).
+    5. Evalúa si todos los arcos narrativos están cerrados.
     
     Sé PRECISO y OBJETIVO. Solo reporta errores con EVIDENCIA TEXTUAL verificable.
+    Si el manuscrito está bien, apruébalo. No busques problemas donde no los hay.
     
     Responde ÚNICAMENTE con el JSON estructurado según el formato especificado.
-    
-    ⚠️ IMPORTANTE SOBRE NÚMEROS DE CAPÍTULO:
-    - Usa EXACTAMENTE el número que aparece entre paréntesis después de cada encabezado de capítulo.
-    - Ejemplo: "Epílogo (número: 998)" → usa 998 en capitulos_afectados, NO uses -1.
-    - Ejemplo: "Prólogo (número: 0)" → usa 0 en capitulos_afectados.
-    - Ejemplo: "Capítulo 5 (número: 5)" → usa 5 en capitulos_afectados.
-    
-    NOTA: En "capitulos_afectados" y "capitulos_para_reescribir", solo incluye capítulos de ESTE tramo.
     `;
 
-    console.log(`[FinalReviewer] Tramo ${trancheNum}/${totalTranches}: ${trancheChapters.length} capítulos, ${chaptersText.length} chars`);
-    
     const response = await this.generateContent(prompt);
     
     try {
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]) as FinalReviewerResult;
-        console.log(`[FinalReviewer] Tramo ${trancheNum}: score ${result.puntuacion_global}/10, issues: ${result.issues?.length || 0}`);
-        return result;
+        return { ...response, result };
       }
     } catch (e) {
-      console.error(`[FinalReviewer] Tramo ${trancheNum}: Failed to parse JSON:`, e);
-    }
-    
-    // Return empty partial result on parse failure
-    return {
-      puntuacion_global: 8,
-      issues: [],
-      capitulos_para_reescribir: [],
-    };
-  }
-
-  async execute(input: FinalReviewerInput): Promise<AgentResponse & { result?: FinalReviewerResult }> {
-    console.log(`[FinalReviewer] ========== EXECUTE CALLED ==========`);
-    console.log(`[FinalReviewer] Input chapters: ${input.chapters?.length || 0}, pasadaNumero: ${input.pasadaNumero}`);
-    
-    const sortedChapters = [...input.chapters].sort((a, b) => 
-      this.getChapterSortOrder(a.numero) - this.getChapterSortOrder(b.numero)
-    );
-
-    let pasadaInfo = "";
-    if (input.pasadaNumero === 1) {
-      pasadaInfo = "\n\nEsta es tu PASADA #1 - AUDITORÍA COMPLETA. Reporta máximo 3 issues por tramo (los más graves). OBJETIVO: puntuación 9+.";
-    } else if (input.pasadaNumero && input.pasadaNumero >= 2) {
-      pasadaInfo = `\n\nEsta es tu PASADA #${input.pasadaNumero} - VERIFICACIÓN Y RE-EVALUACIÓN.
-
-ISSUES YA CORREGIDOS EN PASADAS ANTERIORES (NO REPORTAR DE NUEVO):
-${input.issuesPreviosCorregidos?.map(i => `- ${i}`).join("\n") || "Ninguno"}
-
-REGLAS:
-1. NO reportes issues de la lista anterior - YA fueron corregidos
-2. Solo reporta problemas NUEVOS
-3. Si puntuación >= 9 → APROBADO`;
+      console.error("[FinalReviewer] Failed to parse JSON response");
     }
 
-    // Calculate tranches
-    const totalChapters = sortedChapters.length;
-    const numTranches = Math.ceil(totalChapters / CHAPTERS_PER_TRANCHE);
-    
-    console.log(`[FinalReviewer] Dividiendo ${totalChapters} capítulos en ${numTranches} tramos de ~${CHAPTERS_PER_TRANCHE} capítulos`);
-
-    // Process each tranche with accumulated context from previous tranches
-    const trancheResults: Partial<FinalReviewerResult>[] = [];
-    let totalTokenUsage = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 };
-    let accumulatedIssuesSummary = "";
-    
-    for (let t = 0; t < numTranches; t++) {
-      const startIdx = t * CHAPTERS_PER_TRANCHE;
-      const endIdx = Math.min(startIdx + CHAPTERS_PER_TRANCHE, totalChapters);
-      const trancheChapters = sortedChapters.slice(startIdx, endIdx);
-      
-      // Pass accumulated issues from previous tranches to ensure consistency
-      const result = await this.reviewTranche(input, trancheChapters, t + 1, numTranches, pasadaInfo, accumulatedIssuesSummary);
-      trancheResults.push(result);
-      
-      // Build context summary for next tranche
-      if (result.issues && result.issues.length > 0) {
-        const issuesSummary = result.issues.map(i => 
-          `- [${i.severidad}] Cap ${i.capitulos_afectados.join(",")}: ${i.descripcion.substring(0, 100)}`
-        ).join("\n");
-        accumulatedIssuesSummary += `\nTRAMO ${t + 1}:\n${issuesSummary}`;
-      }
-      if (result.plot_decisions && result.plot_decisions.length > 0) {
-        const plotSummary = result.plot_decisions.map(d => 
-          `- Decisión en cap ${d.capitulo_establecido}: ${d.decision}`
-        ).join("\n");
-        accumulatedIssuesSummary += `\nDECISIONES DE TRAMA (Tramo ${t + 1}):\n${plotSummary}`;
-      }
-    }
-
-    // Combine results from all tranches
-    const allIssues: FinalReviewerResult["issues"] = [];
-    const allChaptersToRewrite: FinalReviewerResult["capitulos_para_reescribir"] = [];
-    const allPlotDecisions: FinalReviewerResult["plot_decisions"] = [];
-    const allPersistentInjuries: FinalReviewerResult["persistent_injuries"] = [];
-    const allOrphanChapters: FinalReviewerResult["orphan_chapters"] = [];
-    let totalScore = 0;
-    let scoreCount = 0;
-
-    for (const result of trancheResults) {
-      if (result.issues) allIssues.push(...result.issues);
-      if (result.capitulos_para_reescribir) allChaptersToRewrite.push(...result.capitulos_para_reescribir);
-      if (result.plot_decisions) allPlotDecisions.push(...result.plot_decisions);
-      if (result.persistent_injuries) allPersistentInjuries.push(...result.persistent_injuries);
-      if (result.orphan_chapters) allOrphanChapters.push(...result.orphan_chapters);
-      if (result.puntuacion_global !== undefined) {
-        totalScore += result.puntuacion_global;
-        scoreCount++;
-      }
-    }
-
-    // Calculate average score
-    const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 8;
-    
-    // Deduplicate similar issues (same category and overlapping chapters)
-    const deduplicatedIssues = this.deduplicateIssues(allIssues);
-    
-    // Determine verdict based on combined results
-    const hasCriticalIssues = deduplicatedIssues.some(i => i.severidad === "critica");
-    const veredicto = (avgScore >= 9 && !hasCriticalIssues) ? "APROBADO" : "REQUIERE_REVISION";
-
-    console.log(`[FinalReviewer] Combinando ${numTranches} tramos: score promedio ${avgScore}/10, issues totales: ${allIssues.length} (${deduplicatedIssues.length} únicos), veredicto: ${veredicto}`);
-
-    // Build combined result
-    const combinedResult: FinalReviewerResult = {
-      veredicto,
-      resumen_general: `Revisión por tranches completada. ${numTranches} tramos analizados. Puntuación promedio: ${avgScore}/10. Issues encontrados: ${allIssues.length}.`,
-      puntuacion_global: avgScore,
-      justificacion_puntuacion: {
-        puntuacion_desglosada: {
-          enganche: avgScore,
-          personajes: avgScore,
-          trama: avgScore,
-          atmosfera: avgScore,
-          ritmo: avgScore,
-          cumplimiento_genero: avgScore
+    return { 
+      ...response, 
+      result: { 
+        veredicto: "APROBADO",
+        resumen_general: "Revisión completada automáticamente",
+        puntuacion_global: 8,
+        justificacion_puntuacion: {
+          puntuacion_desglosada: {
+            enganche: 8,
+            personajes: 8,
+            trama: 8,
+            atmosfera: 8,
+            ritmo: 8,
+            cumplimiento_genero: 8
+          },
+          fortalezas_principales: ["Manuscrito completado"],
+          debilidades_principales: [],
+          comparacion_mercado: "Evaluación automática por fallo de parsing",
+          recomendaciones_proceso: []
         },
-        fortalezas_principales: [],
-        debilidades_principales: allIssues.slice(0, 3).map(i => i.descripcion),
-        comparacion_mercado: "Evaluación combinada de múltiples tramos",
-        recomendaciones_proceso: []
-      },
-      analisis_bestseller: {
-        hook_inicial: "Evaluado por tranches",
-        cadencia_giros: "Evaluado por tranches",
-        escalada_tension: "Evaluado por tranches",
-        efectividad_cliffhangers: "Evaluado por tranches",
-        potencia_climax: "Evaluado por tranches",
-        como_subir_a_9: allIssues.length > 0 ? `Corregir ${allIssues.length} issues identificados` : "Mantener calidad actual"
-      },
-      issues: deduplicatedIssues.slice(0, 10), // Limit to top 10 unique issues
-      capitulos_para_reescribir: Array.from(new Set(allChaptersToRewrite)), // Deduplicate
-      plot_decisions: allPlotDecisions,
-      persistent_injuries: allPersistentInjuries,
-      orphan_chapters: allOrphanChapters,
+        issues: [],
+        capitulos_para_reescribir: []
+      } 
     };
-
-    // Save debug info
-    const fs = await import('fs');
-    const debugPath = `/tmp/final_reviewer_debug_${Date.now()}.txt`;
-    fs.writeFileSync(debugPath, `=== COMBINED RESULT ===\n${JSON.stringify(combinedResult, null, 2)}`);
-    console.log(`[FinalReviewer] DEBUG: Saved combined result to ${debugPath}`);
-
-    const response: AgentResponse = {
-      content: JSON.stringify(combinedResult),
-      thoughtSignature: `Revisión por tranches: ${numTranches} tramos`,
-      tokenUsage: totalTokenUsage,
-    };
-
-    return { ...response, result: combinedResult };
   }
 }

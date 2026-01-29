@@ -13,7 +13,7 @@ interface QueueEvent {
   error?: string;
 }
 
-const HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes without activity = frozen (reduced for faster recovery)
+const HEARTBEAT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes without activity = frozen (must be > API timeout of 12 min)
 const HEARTBEAT_CHECK_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 
 export class QueueManager {
@@ -79,14 +79,6 @@ export class QueueManager {
     const projectId = this.currentProjectId;
     
     console.log(`[QueueManager] Auto-recovery attempt #${this.autoRecoveryCount} for project ${projectId}`);
-    
-    // CRITICAL: Cancel any pending API connections for this project
-    try {
-      console.log(`[QueueManager] Aborting pending API connections for project ${projectId}...`);
-      cancelProject(projectId);
-    } catch (e) {
-      console.error("[QueueManager] Failed to cancel project connections:", e);
-    }
     
     // Log the recovery event
     try {
@@ -169,14 +161,6 @@ export class QueueManager {
             startedAt: null,
           });
         }
-        
-        // Mark project as "paused" so processProject uses resumeNovel instead of generateNovel
-        // This prevents re-generating the World Bible from scratch on each server restart
-        if (project && project.status === "generating") {
-          await storage.updateProject(project.id, { status: "paused" });
-          console.log(`[QueueManager] Project ${project.id} marked as paused for resume`);
-        }
-        
         await storage.updateQueueState({ currentProjectId: null, status: "running" });
         console.log("[QueueManager] Reset incomplete project. AUTO-RESTARTING queue...");
         
@@ -191,32 +175,30 @@ export class QueueManager {
         }
       }
       
-      // AUTO-START IMMEDIATELY (not after delay to avoid server restart killing the timer)
+      // AUTO-START after short delay
       this.isRunning = false;
       this.isPaused = false;
-      // Use setImmediate to let the server finish initialization first
-      setImmediate(async () => {
+      setTimeout(async () => {
         try {
-          console.log("[QueueManager] Auto-starting queue after server restart (immediate)");
+          console.log("[QueueManager] Auto-starting queue after server restart");
           await this.start();
         } catch (e) {
           console.error("[QueueManager] Failed to auto-start after server restart:", e);
         }
-      });
+      }, 5000);
     } else if (state.status === "running") {
       // Queue was marked running but no current project - continue processing
       console.log("[QueueManager] Queue was running with no project. AUTO-RESTARTING to process queue...");
       this.isRunning = false;
       this.isPaused = false;
-      // Use setImmediate to let the server finish initialization first
-      setImmediate(async () => {
+      setTimeout(async () => {
         try {
-          console.log("[QueueManager] Auto-starting queue (was running with no project) (immediate)");
+          console.log("[QueueManager] Auto-starting queue (was running with no project)");
           await this.start();
         } catch (e) {
           console.error("[QueueManager] Failed to auto-start:", e);
         }
-      });
+      }, 3000);
     } else if (state.status === "paused") {
       this.isPaused = true;
       console.log("[QueueManager] Queue is paused, waiting for manual resume");
@@ -245,63 +227,19 @@ export class QueueManager {
   
   private async checkForFrozenProjects(): Promise<void> {
     try {
-      // FIRST: Check if queue is paused but there are projects waiting - auto-resume
-      const queueState = await storage.getQueueState();
-      if (queueState?.status === "paused" && !this.currentProjectId) {
-        const allQueueItems = await storage.getQueueItems();
-        const waitingItems = allQueueItems.filter(item => item.status === "waiting");
-        if (waitingItems.length > 0) {
-          console.log(`[QueueManager] AUTO-RECOVERY: Queue is paused but has waiting projects. Auto-resuming...`);
-          this.isPaused = false;
-          this.isRunning = false;
-          await storage.updateQueueState({ status: "running", currentProjectId: null });
-          this.emit({ type: "queue_started", message: "Auto-recovery: Queue auto-resumed" });
-          
-          setImmediate(async () => {
-            try {
-              await this.start();
-              console.log(`[QueueManager] AUTO-RECOVERY: Queue resumed. currentProjectId=${this.currentProjectId}`);
-            } catch (e) {
-              console.error("[QueueManager] AUTO-RECOVERY: Failed to auto-resume queue:", e);
-            }
-          });
-          return; // Don't check for frozen projects if we just resumed
-        }
-      }
-      
-      // Get all projects in active processing states that might freeze
+      // Get all projects in "generating" status OR projects that failed final review (they might need retry)
       const projects = await storage.getAllProjects();
-      // Extended list: include all states where generation could be happening
-      const monitoredStatuses = ["generating", "failed_final_review", "paused", "awaiting_instructions"];
+      const monitoredStatuses = ["generating", "failed_final_review", "paused"];
       const generatingProjects = projects.filter((p: Project) => monitoredStatuses.includes(p.status));
-      
-      // Debug log every 5 minutes (every 5th check)
-      if (Date.now() % (5 * 60 * 1000) < 60 * 1000) {
-        console.log(`[QueueManager] Frozen monitor: ${generatingProjects.length} projects in monitored states (${monitoredStatuses.join(", ")}). Queue status: ${queueState?.status}, isPaused: ${this.isPaused}`);
-      }
       
       for (const project of generatingProjects) {
         const lastActivity = await storage.getLastActivityLogTime(project.id);
         
-        // Handle projects with no activity logs - use project creation date or current time
-        const activityTime = lastActivity || project.createdAt;
-        if (!activityTime) {
-          console.warn(`[QueueManager] Project ${project.id} "${project.title}" has no activity or creation time`);
-          continue;
-        }
-        
-        const timeSinceActivity = Date.now() - new Date(activityTime).getTime();
-        
-        if (timeSinceActivity > HEARTBEAT_TIMEOUT_MS) {
+        if (lastActivity) {
+          const timeSinceActivity = Date.now() - lastActivity.getTime();
+          
+          if (timeSinceActivity > HEARTBEAT_TIMEOUT_MS) {
             console.log(`[QueueManager] FROZEN PROJECT DETECTED: "${project.title}" (ID: ${project.id}) - no activity for ${Math.round(timeSinceActivity / 60000)} minutes`);
-            
-            // CRITICAL: Cancel any pending API connections FIRST
-            try {
-              console.log(`[QueueManager] Aborting pending API connections for frozen project ${project.id}...`);
-              cancelProject(project.id);
-            } catch (e) {
-              console.error("[QueueManager] Failed to cancel project connections:", e);
-            }
             
             // Log the recovery event
             await storage.createActivityLog({
@@ -322,29 +260,14 @@ export class QueueManager {
               this.currentProjectId = null;
             }
             
-            // Reset queue item to waiting OR CREATE IT if it doesn't exist
+            // Reset queue item to waiting (handle any status that's not already waiting)
             const queueItem = await storage.getQueueItemByProject(project.id);
-            if (queueItem) {
-              if (queueItem.status !== "waiting") {
-                await storage.updateQueueItem(queueItem.id, {
-                  status: "waiting",
-                  startedAt: null,
-                  completedAt: null,
-                  errorMessage: `Auto-recovery after ${Math.round(timeSinceActivity / 60000)} min (status was: ${project.status})`,
-                });
-              }
-            } else {
-              // CRITICAL: Create queue item if it doesn't exist - this can happen if generation was started without queue
-              console.log(`[QueueManager] Creating missing queue item for frozen project ${project.id}`);
-              const allQueueItems = await storage.getQueueItems();
-              const maxPosition = allQueueItems.length > 0 
-                ? Math.max(...allQueueItems.map(q => q.position)) 
-                : 0;
-              await storage.addToQueue({
-                projectId: project.id,
-                position: maxPosition + 1,
-                priority: "normal",
+            if (queueItem && queueItem.status !== "waiting") {
+              await storage.updateQueueItem(queueItem.id, {
                 status: "waiting",
+                startedAt: null,
+                completedAt: null,
+                errorMessage: `Auto-recovery after ${Math.round(timeSinceActivity / 60000)} min (status was: ${project.status})`,
               });
             }
             
@@ -374,63 +297,45 @@ export class QueueManager {
               status: "running" 
             });
             
-            // CRITICAL: Emit event so frontend updates immediately
-            this.emit({ type: "queue_started", message: "Auto-recovery: Queue restarted automatically" });
-            console.log(`[QueueManager] AUTO-RECOVERY: Emitted queue_started event for UI update`);
-            
             // Small delay then restart - use setImmediate pattern to avoid blocking
             setTimeout(() => {
               (async () => {
                 try {
-                  console.log(`[QueueManager] AUTO-RECOVERY: Starting queue to RETRY frozen project ${project.id}`);
+                  console.log(`[QueueManager] Auto-starting queue to RETRY frozen project ${project.id}`);
                   
-                  // CRITICAL: Force reset ALL flags to ensure clean state
+                  // Double-check flags before start
                   this.isRunning = false;
                   this.isPaused = false;
                   this.processingLock = false;
-                  this.currentProjectId = null;
-                  this.currentOrchestrator = null;
-                  
-                  // Ensure DB state is also clean
-                  await storage.updateQueueState({ 
-                    currentProjectId: null, 
-                    status: "running" 
-                  });
-                  
-                  // Set pending retry BEFORE start to ensure priority pickup
-                  this.pendingRetryProjectId = project.id;
                   
                   // Ensure the project is still in paused state before starting
                   const checkProject = await storage.getProject(project.id);
                   if (!checkProject || checkProject.status !== "paused") {
-                    console.log(`[QueueManager] AUTO-RECOVERY: Project ${project.id} status changed to ${checkProject?.status}, skipping`);
+                    console.log(`[QueueManager] Project ${project.id} status changed to ${checkProject?.status}, skipping auto-restart`);
                     this.pendingRetryProjectId = null;
                     return;
                   }
                   
-                  console.log(`[QueueManager] AUTO-RECOVERY: Calling start() for project ${project.id}`);
                   await this.start();
                   
-                  // Log result
-                  console.log(`[QueueManager] AUTO-RECOVERY: start() completed. isRunning=${this.isRunning}, currentProjectId=${this.currentProjectId}, pendingRetryProjectId=${this.pendingRetryProjectId}`);
+                  // Log if start actually began processing
+                  console.log(`[QueueManager] start() completed. isRunning=${this.isRunning}, currentProjectId=${this.currentProjectId}`);
                   
-                  // CRITICAL: If start() didn't pick up the project, force processQueue directly
-                  if (this.currentProjectId === null) {
-                    console.log(`[QueueManager] AUTO-RECOVERY: Project ${project.id} not picked up by start(), forcing processQueue directly`);
+                  // If start() didn't pick up the project, force processQueue
+                  if (this.currentProjectId === null && this.pendingRetryProjectId === null) {
+                    console.log(`[QueueManager] Project not picked up, forcing processQueue for ${project.id}`);
                     this.pendingRetryProjectId = project.id;
-                    this.isRunning = true;
-                    this.isPaused = false;
                     await this.processQueue();
-                    console.log(`[QueueManager] AUTO-RECOVERY: processQueue() completed. currentProjectId=${this.currentProjectId}`);
                   }
                 } catch (e) {
-                  console.error("[QueueManager] AUTO-RECOVERY FAILED:", e);
+                  console.error("[QueueManager] Failed to auto-restart after recovery:", e);
                   this.pendingRetryProjectId = null;
                 }
               })();
             }, 3000);
             
             break; // Handle one frozen project at a time
+          }
         }
       }
     } catch (error) {
@@ -570,8 +475,6 @@ export class QueueManager {
   }
 
   private async processQueue(): Promise<void> {
-    console.log(`[QueueManager] processQueue() called - isRunning=${this.isRunning}, isPaused=${this.isPaused}, currentProjectId=${this.currentProjectId}, lock=${this.processingLock}`);
-    
     // Guard: Check if queue should process
     if (!this.isRunning || this.isPaused) {
       console.log("[QueueManager] processQueue skipped - queue not running or paused");
@@ -623,11 +526,9 @@ export class QueueManager {
       // If no pending retry or retry failed, get next in queue normally
       if (!nextItem) {
         nextItem = await storage.getNextInQueue();
-        console.log(`[QueueManager] getNextInQueue returned: ${nextItem ? `item ${nextItem.id} for project ${nextItem.projectId}` : 'null'}`);
       }
       
       if (!nextItem) {
-        console.log("[QueueManager] No items in queue - emitting queue_empty");
         this.emit({ type: "queue_empty", message: "No projects in queue" });
         
         if (state.autoAdvance) {
@@ -692,38 +593,10 @@ export class QueueManager {
       onAgentStatus: async (role, status, message) => {
         self.updateHeartbeat();
         console.log(`[Queue] ${project.title} - ${role}: ${status}`, message || "");
-        // Save activity log to database for UI visibility
-        if (message) {
-          try {
-            await storage.createActivityLog({
-              projectId: project.id,
-              level: status === "error" ? "error" : "info",
-              agentRole: role,
-              message: message,
-            });
-          } catch (err) {
-            console.error(`[Queue] Failed to save activity log:`, err);
-          }
-        }
       },
       onChapterComplete: async (chapterNumber, wordCount, chapterTitle) => {
         self.updateHeartbeat();
         console.log(`[Queue] ${project.title} - Chapter ${chapterNumber} complete: ${wordCount} words`);
-        // Save chapter completion to activity log
-        const sectionName = chapterNumber === 0 ? "el Prólogo" : 
-                           chapterNumber === -1 ? "el Epílogo" : 
-                           chapterNumber === -2 ? "la Nota del Autor" :
-                           `el Capítulo ${chapterNumber}`;
-        try {
-          await storage.createActivityLog({
-            projectId: project.id,
-            level: "success",
-            agentRole: "ghostwriter",
-            message: `${sectionName} completado (${wordCount} palabras)`,
-          });
-        } catch (err) {
-          console.error(`[Queue] Failed to save chapter complete log:`, err);
-        }
       },
       onChapterRewrite: async () => {
         self.updateHeartbeat();

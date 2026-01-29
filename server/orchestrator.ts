@@ -570,46 +570,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         ? `${project.premise || ""}${extendedGuideContent ? `\n\n--- GUÍA DE ESCRITURA EXTENDIDA ---\n${extendedGuideContent}` : ""}${seriesContextContent}`
         : (project.premise || "");
 
-      const savedWorldBible = await storage.getWorldBibleByProject(project.id);
-      const savedChapters = await storage.getChaptersByProject(project.id);
-      
-      // plotOutline can be an object with 'escaleta' array or directly an array
-      const plotOutlineData = savedWorldBible?.plotOutline as any;
-      const hasPlotOutline = plotOutlineData && (
-        Array.isArray(plotOutlineData) ? plotOutlineData.length > 0 :
-        (plotOutlineData.escaleta && Array.isArray(plotOutlineData.escaleta) && plotOutlineData.escaleta.length > 0)
-      );
-      
-      const hasValidWorldBible = savedWorldBible && 
-        (savedWorldBible.characters as any[])?.length > 0 && 
-        (hasPlotOutline || savedChapters.length > 0);
-      
-      let worldBibleData: ParsedWorldBible | null = null;
-      
-      if (hasValidWorldBible && savedChapters.length > 0) {
-        console.log(`[Orchestrator] RESUME: World Bible already exists with ${(savedWorldBible!.characters as any[]).length} characters and ${savedChapters.length} chapters. Skipping Architect.`);
-        this.callbacks.onAgentStatus("architect", "completed", "Estructura narrativa ya existente - reanudando escritura");
-        await storage.createActivityLog({
-          projectId: project.id,
-          level: "info",
-          message: `Reanudando desde World Bible existente (${(savedWorldBible!.characters as any[]).length} personajes, ${savedChapters.length} capítulos)`,
-          agentRole: "system",
-        });
-        
-        worldBibleData = this.reconstructWorldBibleData(savedWorldBible!, project);
-        
-        // Check if there are pending chapters - if so, delegate to resumeNovel
-        const pendingChapters = savedChapters.filter(ch => ch.status === "pending" || ch.status === "writing");
-        
-        if (pendingChapters.length > 0) {
-          console.log(`[Orchestrator] Found ${pendingChapters.length} pending chapters - delegating to resumeNovel`);
-          return this.resumeNovel(project);
-        }
-      }
-
       const MAX_ARCHITECT_RETRIES = 3;
       let architectAttempt = 0;
       let architectResult: any = null;
+      let worldBibleData: ParsedWorldBible | null = null;
       let lastArchitectError = "";
 
       while (architectAttempt < MAX_ARCHITECT_RETRIES) {
@@ -868,7 +832,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         const sectionData = allSections[i];
 
         await storage.updateChapter(chapter.id, { status: "writing" });
-        this.callbacks.onChapterStatusChange(sectionData.numero, "writing");
         await storage.updateProject(project.id, { currentChapter: i + 1 });
 
         const sectionLabel = this.getSectionLabel(sectionData);
@@ -894,13 +857,11 @@ ${chapterSummaries || "Sin capítulos disponibles"}
 
           const isRewrite = refinementAttempts > 0;
           // Use per-chapter limits if set, otherwise calculate from total novel target
-          // SPECIAL: Author's Note has different word limits (800-1200 words)
-          const isAuthorNote = sectionData.tipo === "author_note" || sectionData.numero === -2;
           const projectMinPerChapter = (project as any).minWordsPerChapter;
           const projectMaxPerChapter = (project as any).maxWordsPerChapter;
           const totalNovelTarget = (project as any).minWordCount;
-          const perChapterTarget = isAuthorNote ? 800 : (projectMinPerChapter || this.calculatePerChapterTarget(totalNovelTarget, allSections.length));
-          const perChapterMax = isAuthorNote ? 1200 : (projectMaxPerChapter || Math.round(perChapterTarget * 1.15));
+          const perChapterTarget = projectMinPerChapter || this.calculatePerChapterTarget(totalNovelTarget, allSections.length);
+          const perChapterMax = projectMaxPerChapter || Math.round(perChapterTarget * 1.15);
           const writerResult = await this.ghostwriter.execute({
             chapterNumber: sectionData.numero,
             chapterData: sectionData,
@@ -917,33 +878,9 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
-          // CRITICAL: Validate that content exists before processing
-          if (!writerResult.content || writerResult.content.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Ghostwriter returned NULL/EMPTY content for ${sectionLabel}. Retrying...`);
-            this.callbacks.onAgentStatus("ghostwriter", "error", 
-              `${sectionLabel} vacío. La IA no devolvió contenido. Reintentando...`
-            );
-            refinementAttempts++;
-            refinementInstructions = `CRÍTICO: Tu respuesta anterior estaba VACÍA. DEBES escribir el capítulo COMPLETO. NO devuelvas una respuesta vacía.`;
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            continue;
-          }
-
           const { cleanContent, continuityState } = this.ghostwriter.extractContinuityState(writerResult.content);
           let currentContent = cleanContent;
           const currentContinuityState = continuityState;
-          
-          // CRITICAL: Double-check after extraction that content is not empty
-          if (!currentContent || currentContent.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Content extraction resulted in EMPTY content for ${sectionLabel}. Retrying...`);
-            this.callbacks.onAgentStatus("ghostwriter", "error", 
-              `${sectionLabel} vacío tras extracción. Reintentando...`
-            );
-            refinementAttempts++;
-            refinementInstructions = `CRÍTICO: Tu respuesta contenía solo metadatos sin contenido narrativo. DEBES escribir el capítulo COMPLETO con prosa narrativa.`;
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            continue;
-          }
           
           // Validate word count with user-defined min/max per chapter
           const ABSOLUTE_MIN = 500; // Detect severe truncation
@@ -1193,22 +1130,11 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                   `Disparando correcciones para ${checkpointResult.chaptersToRevise.length} capítulos con errores detectados`
                 );
                 
-                for (let idx = 0; idx < checkpointResult.chaptersToRevise.length; idx++) {
-                  // Check cancellation before each chapter correction
-                  if (await isProjectCancelledFromDb(project.id)) {
-                    console.log(`[Orchestrator] Continuity corrections cancelled at chapter ${idx + 1}/${checkpointResult.chaptersToRevise.length}`);
-                    return;
-                  }
-                  
-                  const chapterNum = checkpointResult.chaptersToRevise[idx];
+                for (const chapterNum of checkpointResult.chaptersToRevise) {
                   const chapterToFix = chaptersInScope.find(c => c.chapterNumber === chapterNum);
                   const sectionForFix = allSections.find(s => s.numero === chapterNum);
                   
                   if (chapterToFix && sectionForFix) {
-                    this.callbacks.onAgentStatus("continuity-sentinel", "editing", 
-                      `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${checkpointResult.chaptersToRevise.length})`
-                    );
-                    
                     const issuesForChapter = checkpointResult.issues.filter(issue => 
                       issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
                     ).join("\n");
@@ -1224,31 +1150,22 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                     );
                   }
                 }
-                
-                this.callbacks.onAgentStatus("continuity-sentinel", "completed", 
-                  `Correcciones de continuidad completadas para ${checkpointResult.chaptersToRevise.length} capítulos`
-                );
               }
             }
           }
         }
       }
 
-      // QA: Voice & Rhythm Auditor - SKIP if already completed OR in final review phase to prevent cost inflation
+      // QA: Voice & Rhythm Auditor - SKIP if already in final review phase to prevent cost inflation
       const projectStateForVoice = await storage.getProject(project.id);
-      const skipVoiceAudit = (projectStateForVoice?.revisionCycle || 0) > 0 || 
-                             (projectStateForVoice as any)?.voiceAuditCompleted === true;
+      const skipVoiceAudit = (projectStateForVoice?.revisionCycle || 0) > 0;
       
       if (skipVoiceAudit) {
         this.callbacks.onAgentStatus("voice-auditor", "skipped", 
-          `Auditor de voz omitido - ${(projectStateForVoice as any)?.voiceAuditCompleted ? 'ya completado previamente' : 'proyecto en fase de revisión'}`
+          `Auditor de voz omitido - ya ejecutado previamente`
         );
-        console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - voiceAuditCompleted=${(projectStateForVoice as any)?.voiceAuditCompleted}, revisionCycle=${projectStateForVoice?.revisionCycle}`);
+        console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - already completed`);
       } else {
-        // CRITICAL: Mark voice audit complete IMMEDIATELY BEFORE any analysis to prevent infinite loops on freeze
-        await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
-        console.log(`[Orchestrator:generateNovel] Voice audit marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
-        
         const allCompletedChapters = await storage.getChaptersByProject(project.id);
         const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
         
@@ -1266,20 +1183,9 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                   `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
                 );
                 
-                for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
-                  // Check cancellation before each chapter correction
-                  if (await isProjectCancelledFromDb(project.id)) {
-                    console.log(`[Orchestrator] Voice corrections cancelled at chapter ${idx + 1}/${voiceResult.chaptersToRevise.length} (generateNovel)`);
-                    return;
-                  }
-                  
-                  const chapterNum = voiceResult.chaptersToRevise[idx];
+                for (const chapterNum of voiceResult.chaptersToRevise) {
                   const chapterToPolish = trancheChapters.find(c => c.chapterNumber === chapterNum);
                   if (chapterToPolish) {
-                    this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                      `Puliendo capítulo ${chapterNum} (${idx + 1}/${voiceResult.chaptersToRevise.length})`
-                    );
-                    
                     const issuesForChapter = voiceResult.issues.filter(issue => 
                       issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
                     ).join("\n");
@@ -1292,44 +1198,28 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                     );
                   }
                 }
-                
-                this.callbacks.onAgentStatus("voice-auditor", "completed", 
-                  `Correcciones de voz/ritmo completadas para ${voiceResult.chaptersToRevise.length} capítulos`
-                );
               }
             }
           }
         }
       }
 
-      // QA: Semantic Repetition Detector - SKIP if already completed OR in final review phase to prevent cost inflation
+      // QA: Semantic Repetition Detector - SKIP if already in final review phase to prevent cost inflation
       // MAX 2 attempts to fix semantic issues, then accept with warnings
       const currentProjectState = await storage.getProject(project.id);
-      const skipSemanticDetectorGen = (currentProjectState?.revisionCycle || 0) > 0 || 
-                                      (currentProjectState as any)?.semanticCheckCompleted === true;
+      const skipSemanticDetector = (currentProjectState?.revisionCycle || 0) > 0;
       const MAX_SEMANTIC_ATTEMPTS = 2;
       
-      if (skipSemanticDetectorGen) {
+      if (skipSemanticDetector) {
         this.callbacks.onAgentStatus("semantic-detector", "skipped", 
-          `Detector semántico omitido - ${(currentProjectState as any)?.semanticCheckCompleted ? 'ya completado previamente' : 'proyecto en fase de revisión'}`
+          `Detector semántico omitido - ya ejecutado previamente`
         );
-        console.log(`[Orchestrator] Skipping semantic detector for project ${project.id} - semanticCheckCompleted=${(currentProjectState as any)?.semanticCheckCompleted}, revisionCycle=${currentProjectState?.revisionCycle}`);
+        console.log(`[Orchestrator] Skipping semantic detector for project ${project.id} - already completed`);
       } else {
-        // CRITICAL: Mark semantic check complete IMMEDIATELY to prevent infinite loops on freeze
-        await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-        console.log(`[Orchestrator:generateNovel] Semantic check marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
-        
         let semanticAttempt = 0;
         let semanticPassed = false;
-        let semanticActuallyRan = false;
         
         while (semanticAttempt < MAX_SEMANTIC_ATTEMPTS && !semanticPassed) {
-          // Check cancellation at start of each semantic attempt
-          if (await isProjectCancelledFromDb(project.id)) {
-            console.log(`[Orchestrator] Semantic detector cancelled for project ${project.id}`);
-            return;
-          }
-          
           semanticAttempt++;
           
           const refreshedChaptersForSemantic = await storage.getChaptersByProject(project.id);
@@ -1337,7 +1227,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
 
           if (completedForSemanticAnalysis.length === 0) break;
           
-          semanticActuallyRan = true; // Mark that we actually ran the detector
           this.callbacks.onAgentStatus("semantic-detector", "analyzing", 
             `Análisis semántico (intento ${semanticAttempt}/${MAX_SEMANTIC_ATTEMPTS})...`
           );
@@ -1346,7 +1235,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           
           if (semanticResult.passed) {
             semanticPassed = true;
-            console.log(`[Orchestrator] Semantic check PASSED for project ${project.id}`);
             this.callbacks.onAgentStatus("semantic-detector", "complete", 
               `Análisis semántico aprobado`
             );
@@ -1354,32 +1242,19 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           }
           
           if (semanticAttempt >= MAX_SEMANTIC_ATTEMPTS) {
-            // Mark completed even at max attempts to prevent re-running
-            await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-            console.log(`[Orchestrator] Semantic check max attempts reached, marking as completed for project ${project.id}`);
             this.callbacks.onAgentStatus("semantic-detector", "warning", 
               `Máximo de intentos alcanzado. Continuando con observaciones menores.`
             );
+            console.log(`[Orchestrator] Semantic detector: max attempts reached, accepting with warnings`);
             break;
           }
           
           if (semanticResult.chaptersToRevise.length > 0) {
-            // Mark as completed BEFORE starting corrections to prevent re-running on interruption
-            await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-            console.log(`[Orchestrator] Semantic check marked complete BEFORE corrections for project ${project.id}`);
-            
             this.callbacks.onAgentStatus("semantic-detector", "editing", 
               `Corrigiendo ${semanticResult.chaptersToRevise.length} capítulos (intento ${semanticAttempt})`
             );
             
-            for (let i = 0; i < semanticResult.chaptersToRevise.length; i++) {
-              // Check cancellation before each chapter correction
-              if (await isProjectCancelledFromDb(project.id)) {
-                console.log(`[Orchestrator] Semantic corrections cancelled at chapter ${i + 1}/${semanticResult.chaptersToRevise.length}`);
-                return;
-              }
-              
-              const chapterNum = semanticResult.chaptersToRevise[i];
+            for (const chapterNum of semanticResult.chaptersToRevise) {
               const chapterToFix = completedForSemanticAnalysis.find(c => c.chapterNumber === chapterNum);
               const sectionForFix = allSections.find((s: any) => s.numero === chapterNum);
               
@@ -1387,10 +1262,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                 const freshChapter = await storage.getChaptersByProject(project.id)
                   .then(chs => chs.find(c => c.chapterNumber === chapterNum));
                 if (!freshChapter) continue;
-                
-                this.callbacks.onAgentStatus("semantic-detector", "editing", 
-                  `Corrigiendo capítulo ${chapterNum} (${i + 1}/${semanticResult.chaptersToRevise.length})`
-                );
                 
                 const clusterIssues = semanticResult.clusters
                   .filter(c => c.capitulos_afectados?.includes(chapterNum))
@@ -1417,12 +1288,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                 }
               }
             }
-            
-            this.callbacks.onAgentStatus("semantic-detector", "completed", 
-              `Correcciones semánticas completadas para ${semanticResult.chaptersToRevise.length} capítulos`
-            );
-            // Break after corrections - don't re-analyze (semanticCheckCompleted already true)
-            break;
           }
         }
       }
@@ -1538,39 +1403,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
 
       for (const chapter of pendingChapters) {
         const sectionData = this.buildSectionDataFromChapter(chapter, worldBibleData);
-        const sectionLabel = this.getSectionLabel(sectionData);
-        
-        // RESUME FIX: Check if chapter already has content (was interrupted during editing)
-        // If it has content, skip writing phase and go directly to editing
-        const hasExistingContent = chapter.content && chapter.content.trim().length > 100;
-        
-        if (hasExistingContent && chapter.status === "editing") {
-          console.log(`[Orchestrator:Resume] Chapter ${chapter.chapterNumber} already has content (${chapter.wordCount} words) and was in editing. Skipping to completion.`);
-          
-          // Mark as completed since it was already edited
-          await storage.updateChapter(chapter.id, { status: "completed" });
-          this.callbacks.onChapterStatusChange(chapter.chapterNumber, "completed");
-          this.callbacks.onAgentStatus("orchestrator", "resuming", 
-            `${sectionLabel} ya tenía contenido editado. Marcado como completado.`
-          );
-          
-          // Update continuity for next chapter
-          previousContinuity = chapter.continuityState 
-            ? JSON.stringify(chapter.continuityState)
-            : `Capítulo anterior completado. Contenido termina con: ${chapter.content!.slice(-500)}`;
-          previousContinuityStateForEditor = chapter.continuityState || null;
-          
-          continue; // Skip to next chapter
-        }
-        
-        // Reset chapters that were left in inconsistent states (editing without content)
-        if (chapter.status === "editing" && !hasExistingContent) {
-          console.log(`[Orchestrator:Resume] Chapter ${chapter.chapterNumber} was in editing state but has no content. Resetting to write.`);
-        }
         
         await storage.updateChapter(chapter.id, { status: "writing" });
-        this.callbacks.onChapterStatusChange(chapter.chapterNumber, "writing");
 
+        const sectionLabel = this.getSectionLabel(sectionData);
         this.callbacks.onAgentStatus("ghostwriter", "writing", `El Narrador está escribiendo ${sectionLabel}...`);
 
         let chapterContent = "";
@@ -1589,12 +1425,10 @@ ${chapterSummaries || "Sin capítulos disponibles"}
 
           const isRewrite = refinementAttempts > 0;
           // Use project's per-chapter settings, fallback to calculated from total
-          // SPECIAL: Author's Note has different word limits (800-1200 words)
-          const isAuthorNoteResume = sectionData.tipo === "author_note" || sectionData.numero === -2;
           const totalChaptersResume = existingChapters.length || project.chapterCount || 1;
           const calculatedTarget = this.calculatePerChapterTarget((project as any).minWordCount, totalChaptersResume);
-          const perChapterMinResume = isAuthorNoteResume ? 800 : ((project as any).minWordsPerChapter || calculatedTarget);
-          const perChapterMaxResume = isAuthorNoteResume ? 1200 : ((project as any).maxWordsPerChapter || Math.round(perChapterMinResume * 1.15));
+          const perChapterMinResume = (project as any).minWordsPerChapter || calculatedTarget;
+          const perChapterMaxResume = (project as any).maxWordsPerChapter || Math.round(perChapterMinResume * 1.15);
           const writerResult = await this.ghostwriter.execute({
             chapterNumber: sectionData.numero,
             chapterData: sectionData,
@@ -1611,33 +1445,9 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
-          // CRITICAL: Validate that content exists before processing
-          if (!writerResult.content || writerResult.content.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Ghostwriter returned NULL/EMPTY content for ${sectionLabel}. Retrying...`);
-            this.callbacks.onAgentStatus("ghostwriter", "error", 
-              `${sectionLabel} vacío. La IA no devolvió contenido. Reintentando...`
-            );
-            refinementAttempts++;
-            refinementInstructions = `CRÍTICO: Tu respuesta anterior estaba VACÍA. DEBES escribir el capítulo COMPLETO. NO devuelvas una respuesta vacía.`;
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            continue;
-          }
-
           const { cleanContent, continuityState } = this.ghostwriter.extractContinuityState(writerResult.content);
           let currentContent = cleanContent;
           const currentContinuityState = continuityState;
-          
-          // CRITICAL: Double-check after extraction that content is not empty
-          if (!currentContent || currentContent.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Content extraction resulted in EMPTY content for ${sectionLabel}. Retrying...`);
-            this.callbacks.onAgentStatus("ghostwriter", "error", 
-              `${sectionLabel} vacío tras extracción. Reintentando...`
-            );
-            refinementAttempts++;
-            refinementInstructions = `CRÍTICO: Tu respuesta contenía solo metadatos sin contenido narrativo. DEBES escribir el capítulo COMPLETO con prosa narrativa.`;
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            continue;
-          }
           
           // Validate word count with user-defined min/max per chapter
           const ABSOLUTE_MIN = 500; // Detect severe truncation
@@ -1861,22 +1671,11 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                   `Disparando correcciones para ${checkpointResult.chaptersToRevise.length} capítulos con errores detectados`
                 );
                 
-                for (let idx = 0; idx < checkpointResult.chaptersToRevise.length; idx++) {
-                  // Check cancellation before each chapter correction
-                  if (await isProjectCancelledFromDb(project.id)) {
-                    console.log(`[Orchestrator] Continuity corrections cancelled at chapter ${idx + 1}/${checkpointResult.chaptersToRevise.length} (resumeNovel)`);
-                    return;
-                  }
-                  
-                  const chapterNum = checkpointResult.chaptersToRevise[idx];
+                for (const chapterNum of checkpointResult.chaptersToRevise) {
                   const chapterToFix = chaptersForCheckpoint.find(c => c.chapterNumber === chapterNum);
                   const sectionForFix = this.buildSectionDataFromChapter(chapterToFix!, worldBibleData);
                   
                   if (chapterToFix) {
-                    this.callbacks.onAgentStatus("continuity-sentinel", "editing", 
-                      `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${checkpointResult.chaptersToRevise.length})`
-                    );
-                    
                     const issuesForChapter = checkpointResult.issues.filter(issue => 
                       issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
                     ).join("\n");
@@ -1897,31 +1696,22 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                     );
                   }
                 }
-                
-                this.callbacks.onAgentStatus("continuity-sentinel", "completed", 
-                  `Correcciones de continuidad completadas para ${checkpointResult.chaptersToRevise.length} capítulos`
-                );
               }
             }
           }
         }
       }
 
-      // QA: Voice & Rhythm Auditor after all chapters complete - SKIP if already completed OR in final review phase
+      // QA: Voice & Rhythm Auditor after all chapters complete - SKIP if already in final review phase
       const projectForVoiceCheck = await storage.getProject(project.id);
-      const skipVoiceAuditor = (projectForVoiceCheck?.revisionCycle || 0) > 0 || 
-                               (projectForVoiceCheck as any)?.voiceAuditCompleted === true;
+      const skipVoiceAuditor = (projectForVoiceCheck?.revisionCycle || 0) > 0;
       
       if (skipVoiceAuditor) {
         this.callbacks.onAgentStatus("voice-auditor", "skipped", 
-          `Auditor de voz omitido - ${(projectForVoiceCheck as any)?.voiceAuditCompleted ? 'ya completado previamente' : 'proyecto en fase de revisión final'}`
+          `Auditor de voz omitido - proyecto ya en fase de revisión final`
         );
-        console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - voiceAuditCompleted=${(projectForVoiceCheck as any)?.voiceAuditCompleted}, revisionCycle=${projectForVoiceCheck?.revisionCycle}`);
+        console.log(`[Orchestrator] Skipping voice auditor for project ${project.id} - already in final review phase`);
       } else {
-        // CRITICAL: Mark voice audit complete IMMEDIATELY BEFORE any analysis to prevent infinite loops on freeze
-        await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
-        console.log(`[Orchestrator:resumeNovel] Voice audit marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
-        
         const allCompletedChapters = await storage.getChaptersByProject(project.id);
         const completedForAnalysis = allCompletedChapters.filter(c => c.status === "completed" && c.content);
         
@@ -1939,20 +1729,9 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                   `Puliendo ${voiceResult.chaptersToRevise.length} capítulos con problemas de voz/ritmo`
                 );
                 
-                for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
-                  // Check cancellation before each chapter correction
-                  if (await isProjectCancelledFromDb(project.id)) {
-                    console.log(`[Orchestrator] Voice corrections cancelled at chapter ${idx + 1}/${voiceResult.chaptersToRevise.length} (resumeNovel)`);
-                    return;
-                  }
-                  
-                  const chapterNum = voiceResult.chaptersToRevise[idx];
+                for (const chapterNum of voiceResult.chaptersToRevise) {
                   const chapterToPolish = trancheChapters.find(c => c.chapterNumber === chapterNum);
                   if (chapterToPolish) {
-                    this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                      `Puliendo capítulo ${chapterNum} (${idx + 1}/${voiceResult.chaptersToRevise.length})`
-                    );
-                    
                     const issuesForChapter = voiceResult.issues.filter(issue => 
                       issue.includes(`capítulo ${chapterNum}`) || issue.includes(`Cap ${chapterNum}`)
                     ).join("\n");
@@ -1965,45 +1744,28 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                     );
                   }
                 }
-                
-                this.callbacks.onAgentStatus("voice-auditor", "completed", 
-                  `Correcciones de voz/ritmo completadas para ${voiceResult.chaptersToRevise.length} capítulos`
-                );
               }
             }
           }
         }
       }
 
-      // QA: Semantic Repetition Detector - SKIP if already completed OR in final review phase (revisionCycle > 0)
+      // QA: Semantic Repetition Detector - SKIP if already in final review phase (revisionCycle > 0)
       // MAX 2 attempts to fix semantic issues, then accept with warnings
       const updatedProject = await storage.getProject(project.id);
       const alreadyInFinalReview = (updatedProject?.revisionCycle || 0) > 0;
-      const semanticAlreadyCompleted = (updatedProject as any)?.semanticCheckCompleted === true;
-      const skipSemanticDetector = alreadyInFinalReview || semanticAlreadyCompleted;
       const MAX_SEMANTIC_ATTEMPTS_RESUME = 2;
       
-      if (skipSemanticDetector) {
+      if (alreadyInFinalReview) {
         this.callbacks.onAgentStatus("semantic-detector", "skipped", 
-          `Detector semántico omitido - ${semanticAlreadyCompleted ? 'ya completado previamente' : `proyecto en fase de revisión final (ciclo ${updatedProject?.revisionCycle})`}`
+          `Detector semántico omitido - proyecto ya en fase de revisión final (ciclo ${updatedProject?.revisionCycle})`
         );
-        console.log(`[Orchestrator] Skipping semantic detector for project ${project.id} - semanticCheckCompleted=${semanticAlreadyCompleted}, revisionCycle=${updatedProject?.revisionCycle}`);
+        console.log(`[Orchestrator] Skipping semantic detector for project ${project.id} - already in final review phase`);
       } else {
-        // CRITICAL: Mark semantic check complete IMMEDIATELY to prevent infinite loops on freeze
-        await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-        console.log(`[Orchestrator:resumeNovel] Semantic check marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
-        
         let semanticAttemptResume = 0;
         let semanticPassedResume = false;
-        let semanticActuallyRanResume = false;
         
         while (semanticAttemptResume < MAX_SEMANTIC_ATTEMPTS_RESUME && !semanticPassedResume) {
-          // Check cancellation at start of each semantic attempt
-          if (await isProjectCancelledFromDb(project.id)) {
-            console.log(`[Orchestrator:Resume] Semantic detector cancelled for project ${project.id}`);
-            return;
-          }
-          
           semanticAttemptResume++;
           
           const refreshedChaptersForSemantic = await storage.getChaptersByProject(project.id);
@@ -2011,7 +1773,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
 
           if (completedForSemanticAnalysis.length === 0) break;
           
-          semanticActuallyRanResume = true; // Mark that we actually ran the detector
           this.callbacks.onAgentStatus("semantic-detector", "analyzing", 
             `Análisis semántico (intento ${semanticAttemptResume}/${MAX_SEMANTIC_ATTEMPTS_RESUME})...`
           );
@@ -2020,7 +1781,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           
           if (semanticResult.passed) {
             semanticPassedResume = true;
-            console.log(`[Orchestrator:Resume] Semantic check PASSED for project ${project.id}`);
             this.callbacks.onAgentStatus("semantic-detector", "complete", 
               `Análisis semántico aprobado`
             );
@@ -2028,32 +1788,19 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           }
           
           if (semanticAttemptResume >= MAX_SEMANTIC_ATTEMPTS_RESUME) {
-            // Mark completed even at max attempts to prevent re-running
-            await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-            console.log(`[Orchestrator:Resume] Semantic check max attempts reached, marking as completed for project ${project.id}`);
             this.callbacks.onAgentStatus("semantic-detector", "warning", 
               `Máximo de intentos alcanzado. Continuando con observaciones menores.`
             );
+            console.log(`[Orchestrator] Semantic detector: max attempts reached, accepting with warnings`);
             break;
           }
           
           if (semanticResult.chaptersToRevise.length > 0) {
-            // Mark as completed BEFORE starting corrections to prevent re-running on interruption
-            await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-            console.log(`[Orchestrator:Resume] Semantic check marked complete BEFORE corrections for project ${project.id}`);
-            
             this.callbacks.onAgentStatus("semantic-detector", "editing", 
               `Corrigiendo ${semanticResult.chaptersToRevise.length} capítulos (intento ${semanticAttemptResume})`
             );
             
-            for (let i = 0; i < semanticResult.chaptersToRevise.length; i++) {
-              // Check cancellation before each chapter correction
-              if (await isProjectCancelledFromDb(project.id)) {
-                console.log(`[Orchestrator:Resume] Semantic corrections cancelled at chapter ${i + 1}/${semanticResult.chaptersToRevise.length}`);
-                return;
-              }
-              
-              const chapterNum = semanticResult.chaptersToRevise[i];
+            for (const chapterNum of semanticResult.chaptersToRevise) {
               const chapterToFix = completedForSemanticAnalysis.find(c => c.chapterNumber === chapterNum);
               
               if (chapterToFix) {
@@ -2061,10 +1808,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                 const freshChapter = await storage.getChaptersByProject(project.id)
                   .then(chs => chs.find(c => c.chapterNumber === chapterNum));
                 if (!freshChapter) continue;
-                
-                this.callbacks.onAgentStatus("semantic-detector", "editing", 
-                  `Corrigiendo capítulo ${chapterNum} (${i + 1}/${semanticResult.chaptersToRevise.length})`
-                );
                 
                 const clusterIssues = semanticResult.clusters
                   .filter(c => c.capitulos_afectados?.includes(chapterNum))
@@ -2096,12 +1839,6 @@ ${chapterSummaries || "Sin capítulos disponibles"}
                 }
               }
             }
-            
-            this.callbacks.onAgentStatus("semantic-detector", "completed", 
-              `Correcciones semánticas completadas para ${semanticResult.chaptersToRevise.length} capítulos`
-            );
-            // Break after corrections - don't re-analyze (semanticCheckCompleted already true)
-            break;
           }
         }
       }
@@ -2394,69 +2131,48 @@ ${chapterSummaries || "Sin capítulos disponibles"}
         consecutiveHighScores = 0; // Reset counter if score drops below 9
       }
       
-      // Verificar si hay CUALQUIER issue que deba corregirse
-      const allIssues = result?.issues || [];
-      const hasAnyIssues = allIssues.length > 0;
-      
-      // APROBADO: Puntuación >= 9 por N veces consecutivas Y SIN NINGÚN issue
-      if (consecutiveHighScores >= this.requiredConsecutiveHighScores && !hasAnyIssues) {
+      // APROBADO: Puntuación >= 9 por N veces consecutivas
+      if (consecutiveHighScores >= this.requiredConsecutiveHighScores) {
         const recentScores = previousScores.slice(-this.requiredConsecutiveHighScores).join(", ");
         const mensaje = result?.veredicto === "APROBADO_CON_RESERVAS"
           ? `Manuscrito APROBADO CON RESERVAS. Puntuaciones consecutivas: ${recentScores}/10.`
-          : `Manuscrito APROBADO. Puntuaciones consecutivas: ${recentScores}/10. CERO issues pendientes. Calidad bestseller confirmada.`;
+          : `Manuscrito APROBADO. Puntuaciones consecutivas: ${recentScores}/10. Calidad bestseller confirmada.`;
         this.callbacks.onAgentStatus("final-reviewer", "completed", mensaje);
         return true;
       }
       
-      // Si hay CUALQUIER issue (crítico, mayor o menor), FORZAR corrección antes de aprobar
-      if (hasAnyIssues) {
-        const criticalCount = allIssues.filter(i => i.severidad === "critica").length;
-        const majorCount = allIssues.filter(i => i.severidad === "mayor").length;
-        const minorCount = allIssues.filter(i => i.severidad === "menor").length;
-        
-        this.callbacks.onAgentStatus("final-reviewer", "editing", 
-          `Puntuación ${currentScore}/10. Corrigiendo ${allIssues.length} issues detectados (${criticalCount} críticos, ${majorCount} mayores, ${minorCount} menores) antes de poder aprobar.`
-        );
-        
-        // Asegurar que TODOS los capítulos afectados por CUALQUIER issue están en la lista
-        const chaptersToRewrite = result?.capitulos_para_reescribir || [];
-        allIssues.forEach(issue => {
-          issue.capitulos_afectados.forEach(ch => {
-            if (!chaptersToRewrite.includes(ch)) {
-              chaptersToRewrite.push(ch);
-            }
-          });
-        });
-        if (result) {
-          result.capitulos_para_reescribir = chaptersToRewrite;
-          result.veredicto = "REQUIERE_REVISION";
-        }
-        // Continuar hacia la sección de reescritura (no hacer continue aquí)
-      } else if (currentScore >= this.minAcceptableScore && consecutiveHighScores < this.requiredConsecutiveHighScores) {
-        // Puntuación >= 9 pero aún no suficientes consecutivas, Y sin issues
+      // Puntuación >= 9 pero aún no suficientes consecutivas
+      if (currentScore >= this.minAcceptableScore && consecutiveHighScores < this.requiredConsecutiveHighScores) {
         this.callbacks.onAgentStatus("final-reviewer", "reviewing", 
-          `Puntuación ${currentScore}/10 sin issues. Necesita ${this.requiredConsecutiveHighScores - consecutiveHighScores} evaluación(es) más con 9+ para confirmar.`
+          `Puntuación ${currentScore}/10. Necesita ${this.requiredConsecutiveHighScores - consecutiveHighScores} evaluación(es) más con 9+ para confirmar.`
         );
         revisionCycle++;
         continue; // Re-evaluate without rewriting
       }
       
       // Si el revisor aprobó pero la puntuación es < 9, continuamos refinando
-      // PERO no creamos issues sintéticos con capítulos hardcodeados para evitar bucles infinitos
       if ((result?.veredicto === "APROBADO" || result?.veredicto === "APROBADO_CON_RESERVAS") && currentScore < this.minAcceptableScore) {
         this.callbacks.onAgentStatus("final-reviewer", "editing", 
-          `Sin problemas específicos pero puntuación ${currentScore}/10 < ${this.minAcceptableScore}. Continuando refinamiento...`
+          `Puntuación ${currentScore}/10 insuficiente. Objetivo: ${this.minAcceptableScore}+ (${this.requiredConsecutiveHighScores}x consecutivas). Refinando...`
         );
+        // Create generic issues based on the bestseller analysis if available
+        const genericIssues = result?.analisis_bestseller?.como_subir_a_9 
+          ? [{ 
+              capitulos_afectados: [1], // Will be expanded below
+              categoria: "enganche" as const,
+              descripcion: result.analisis_bestseller.como_subir_a_9,
+              severidad: "mayor" as const,
+              elementos_a_preservar: "Mantener la estructura general y personajes tal como están",
+              instrucciones_correccion: result.analisis_bestseller.como_subir_a_9
+            }]
+          : result?.issues || [];
         
-        // Solo marcamos como REQUIERE_REVISION pero NO creamos issues sintéticos
-        // El sistema re-evaluará sin reescribir capítulos si no hay issues reales
         if (result) {
           result.veredicto = "REQUIERE_REVISION";
-          // NO crear issues sintéticos - dejar que el ciclo continúe para re-evaluar
+          if (!result.issues?.length && genericIssues.length) {
+            result.issues = genericIssues;
+          }
         }
-        
-        revisionCycle++;
-        continue; // Re-evaluar sin reescribir
       }
       
       // LÍMITE MÁXIMO DE CICLOS alcanzado
@@ -2465,22 +2181,11 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           ? (previousScores.reduce((a, b) => a + b, 0) / previousScores.length).toFixed(1)
           : currentScore;
         
-        // No aprobar si hay CUALQUIER issue sin resolver
-        if (currentScore >= this.minAcceptableScore && !hasAnyIssues) {
+        if (currentScore >= this.minAcceptableScore) {
           this.callbacks.onAgentStatus("final-reviewer", "completed", 
-            `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado. Puntuación final: ${currentScore}/10 (promedio: ${avgScore}). CERO issues. APROBADO.`
+            `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado. Puntuación final: ${currentScore}/10 (promedio: ${avgScore}). APROBADO.`
           );
           return true;
-        } else if (hasAnyIssues) {
-          this.callbacks.onAgentStatus("final-reviewer", "error", 
-            `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado con ${allIssues.length} issues sin resolver. Proyecto pausado para revisión manual.`
-          );
-          await storage.updateProject(project.id, {
-            status: "awaiting_instructions",
-            architectInstructions: `[PAUSA] Límite de ciclos alcanzado con ${allIssues.length} issues pendientes:\n${allIssues.map(i => `- [${i.severidad.toUpperCase()}] ${i.descripcion}`).join("\n")}`,
-            finalScore: currentScore
-          });
-          return false;
         } else {
           this.callbacks.onAgentStatus("final-reviewer", "error", 
             `Límite de ${this.maxFinalReviewCycles} ciclos alcanzado. Puntuación final: ${currentScore}/10 NO alcanza el mínimo de ${this.minAcceptableScore}. Proyecto NO APROBADO.`
@@ -2514,42 +2219,11 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           }
         } else {
           if (currentScore >= this.minAcceptableScore) {
-            consecutiveHighScores++;
-            if (consecutiveHighScores >= this.requiredConsecutiveHighScores) {
-              this.callbacks.onAgentStatus("final-reviewer", "completed", 
-                `Revisión completada sin problemas. ${consecutiveHighScores}x puntuaciones ${this.minAcceptableScore}+ consecutivas alcanzadas.`
-              );
-              return true;
-            } else {
-              this.callbacks.onAgentStatus("final-reviewer", "reviewing", 
-                `Puntuación ${currentScore}/10. Necesita ${this.requiredConsecutiveHighScores - consecutiveHighScores} más para confirmar.`
-              );
-              revisionCycle++;
-              continue;
-            }
+            this.callbacks.onAgentStatus("final-reviewer", "completed", 
+              `Revisión completada sin problemas específicos. Puntuación: ${currentScore}/10.`
+            );
+            return true;
           } else {
-            consecutiveHighScores = 0;
-            
-            // Detectar estancamiento: múltiples evaluaciones sin issues y sin alcanzar 9
-            const recentScores = previousScores.slice(-3);
-            const isStagnant = recentScores.length >= 3 && 
-              recentScores.every(s => s >= 7 && s < this.minAcceptableScore);
-            
-            if (isStagnant) {
-              const avgScore = (recentScores.reduce((a, b) => a + b, 0) / recentScores.length).toFixed(1);
-              this.callbacks.onAgentStatus("final-reviewer", "paused", 
-                `ESTANCAMIENTO: 3 evaluaciones consecutivas con ~${avgScore}/10 sin issues específicos. El manuscrito está bien pero no alcanza el 9. Pausando para instrucciones del usuario.`
-              );
-              
-              await storage.updateProject(project.id, {
-                status: "awaiting_instructions",
-                architectInstructions: `[PAUSA] El manuscrito mantiene una puntuación de ${avgScore}/10 pero el revisor no encuentra problemas específicos para mejorar. Por favor, proporciona instrucciones sobre cómo proceder.`,
-                finalScore: currentScore
-              });
-              
-              return false;
-            }
-            
             this.callbacks.onAgentStatus("final-reviewer", "reviewing", 
               `Sin problemas específicos pero puntuación ${currentScore}/10 < ${this.minAcceptableScore}. Continuando refinamiento...`
             );
@@ -2608,59 +2282,83 @@ ${chapterSummaries || "Sin capítulos disponibles"}
           issuesSummary
         );
         
-        // MICROSURGERY MODE: Use CopyEditor for surgical corrections instead of full Ghostwriter rewrite
-        // Still report as ghostwriter for UI compatibility
         this.callbacks.onAgentStatus("ghostwriter", "writing", 
-          `Microcirugía ${sectionLabel} (${rewriteIndex + 1}/${chaptersToRewrite.length}): ${issuesSummary}`
+          `Reescribiendo ${sectionLabel} (${rewriteIndex + 1}/${chaptersToRewrite.length}): ${issuesSummary}`
         );
 
-        // Get continuity context for corrections
         const previousChapter = updatedChapters.find(c => c.chapterNumber === chapterNum - 1);
-        const continuityContext = previousChapter?.content 
-          ? `\nCONTEXTO DE CONTINUIDAD (final del capítulo anterior):\n${previousChapter.content.slice(-1500)}\n` 
+        const previousContinuity = previousChapter?.content 
+          ? `Continuidad del capítulo anterior disponible.` 
           : "";
 
-        // Build targeted correction prompt for microsurgery
-        const microsurgeryPrompt = `
-CORRECCIONES DEL REVISOR FINAL - MODO MICROCIRUGÍA:
-${revisionInstructions}
-${continuityContext}
-INSTRUCCIONES CRÍTICAS:
-- Modifica SOLO las frases/párrafos específicos indicados en cada corrección
-- Preserva el 95% del texto original INTACTO
-- NO reescribas secciones que funcionan bien
-- Si la instrucción dice "BUSCAR X REEMPLAZAR POR Y", hazlo exactamente
-- Aplica cambios quirúrgicos mínimos
-- Mantén la continuidad con el capítulo anterior
-
-Género: ${project.genre}, Tono: ${project.tone}
-${styleGuideContent ? `\nGUÍA DE ESTILO:\n${styleGuideContent}` : ""}`;
-
-        const copyEditResult = await this.copyeditor.execute({
-          chapterContent: chapter.content || "",
+        // Use project's per-chapter settings, fallback to calculated from total
+        const totalChaptersQA = updatedChapters.length || project.chapterCount || 1;
+        const calculatedTargetQA = this.calculatePerChapterTarget((project as any).minWordCount, totalChaptersQA);
+        const perChapterMinQA = (project as any).minWordsPerChapter || calculatedTargetQA;
+        const perChapterMaxQA = (project as any).maxWordsPerChapter || Math.round(perChapterMinQA * 1.15);
+        const originalChapterContent = chapter.content || "";
+        const writerResult = await this.ghostwriter.execute({
           chapterNumber: sectionData.numero,
-          chapterTitle: sectionData.titulo,
-          guiaEstilo: microsurgeryPrompt,
+          chapterData: sectionData,
+          worldBible: worldBibleData.world_bible,
+          guiaEstilo,
+          previousContinuity,
+          refinementInstructions: `CORRECCIONES DEL REVISOR FINAL:\n${revisionInstructions}`,
+          authorName,
+          minWordCount: perChapterMinQA,
+          maxWordCount: perChapterMaxQA,
+          extendedGuideContent: styleGuideContent || undefined,
+          previousChapterContent: originalChapterContent,
+          kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
         });
 
-        await this.trackTokenUsage(project.id, copyEditResult.tokenUsage, "El Estilista", "gemini-3-pro-preview", sectionData.numero, "final_review_microsurgery");
+        let chapterContent = writerResult.content;
+        await this.trackTokenUsage(project.id, writerResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", sectionData.numero, "qa_rewrite");
 
-        let finalContent = copyEditResult.result?.texto_final || chapter.content || "";
-        
-        // Quick verification: ensure minimum changes were applied
-        const originalWordCount = (chapter.content || "").split(/\s+/).filter((w: string) => w.length > 0).length;
-        const newWordCount = finalContent.split(/\s+/).filter((w: string) => w.length > 0).length;
-        const wordDiff = Math.abs(newWordCount - originalWordCount);
-        const changeRatio = wordDiff / originalWordCount;
-        
-        // If microsurgery failed (no changes or too many changes), log warning
-        if (changeRatio === 0) {
-          console.warn(`[Orchestrator] Microsurgery applied no changes to chapter ${chapterNum}`);
-        } else if (changeRatio > 0.3) {
-          console.warn(`[Orchestrator] Microsurgery changed ${Math.round(changeRatio * 100)}% of chapter ${chapterNum} - may have over-corrected`);
+        this.callbacks.onAgentStatus("editor", "editing", `El Editor está revisando ${sectionLabel}...`);
+
+        const editorResult = await this.editor.execute({
+          chapterNumber: sectionData.numero,
+          chapterContent,
+          chapterData: sectionData,
+          worldBible: worldBibleData.world_bible,
+          guiaEstilo: `Género: ${project.genre}, Tono: ${project.tone}`,
+        });
+
+        await this.trackTokenUsage(project.id, editorResult.tokenUsage, "El Editor", "gemini-3-pro-preview", sectionData.numero, "qa_edit");
+
+        if (!editorResult.result?.aprobado) {
+          const refinementInstructions = this.buildRefinementInstructions(editorResult.result);
+          const rewriteResult = await this.ghostwriter.execute({
+            chapterNumber: sectionData.numero,
+            chapterData: sectionData,
+            worldBible: worldBibleData.world_bible,
+            guiaEstilo,
+            previousContinuity,
+            refinementInstructions,
+            authorName,
+            minWordCount: perChapterMinQA,
+            maxWordCount: perChapterMaxQA,
+            extendedGuideContent: styleGuideContent || undefined,
+            previousChapterContent: chapterContent,
+            kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
+          });
+          chapterContent = rewriteResult.content;
+          await this.trackTokenUsage(project.id, rewriteResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", sectionData.numero, "qa_rewrite");
         }
 
-        const wordCount = newWordCount;
+        this.callbacks.onAgentStatus("copyeditor", "polishing", `El Estilista está puliendo ${sectionLabel}...`);
+
+        const polishResult = await this.copyeditor.execute({
+          chapterContent,
+          chapterNumber: sectionData.numero,
+          chapterTitle: sectionData.titulo,
+          guiaEstilo: styleGuideContent || undefined,
+        });
+        await this.trackTokenUsage(project.id, polishResult.tokenUsage, "El Estilista", "gemini-3-pro-preview", sectionData.numero, "qa_polish");
+
+        const finalContent = polishResult.result?.texto_final || chapterContent;
+        const wordCount = finalContent.split(/\s+/).length;
 
         await storage.updateChapter(chapter.id, {
           content: finalContent,
@@ -2733,133 +2431,6 @@ ${styleGuideContent ? `\nGUÍA DE ESTILO:\n${styleGuideContent}` : ""}`;
       const chapters = await storage.getChaptersByProject(project.id);
       const allSections = this.buildSectionsListFromChapters(chapters, worldBibleData);
       const guiaEstilo = `Género: ${project.genre}, Tono: ${project.tone}`;
-
-      const completedChapters = chapters.filter(c => c.status === "completed" && c.content);
-      
-      if (completedChapters.length > 0) {
-        // Check if voice audit was already completed to prevent infinite loops
-        const currentProjectForVoice = await storage.getProject(project.id);
-        const voiceAlreadyDone = (currentProjectForVoice as any)?.voiceAuditCompleted === true;
-        
-        if (voiceAlreadyDone) {
-          this.callbacks.onAgentStatus("voice-auditor", "skipped", 
-            `Auditor de voz omitido - ya completado previamente`
-          );
-          console.log(`[Orchestrator:runFinalReviewOnly] Skipping voice auditor for project ${project.id} - already completed`);
-        } else {
-          this.callbacks.onAgentStatus("voice-auditor", "analyzing", 
-            `Ejecutando análisis de voz y ritmo antes de revisión final...`
-          );
-          
-          // Mark voice audit as completed BEFORE corrections to prevent re-running on interruption
-          await storage.updateProject(project.id, { voiceAuditCompleted: true } as any);
-          console.log(`[Orchestrator:runFinalReviewOnly] Voice audit marked complete BEFORE corrections for project ${project.id}`);
-          
-          const trancheSize = 10;
-          const totalTranches = Math.ceil(completedChapters.length / trancheSize);
-          let voiceCorrectionsApplied = false;
-          
-          for (let t = 0; t < totalTranches; t++) {
-            const trancheChapters = completedChapters.slice(t * trancheSize, (t + 1) * trancheSize);
-            if (trancheChapters.length > 0) {
-              const voiceResult = await this.runVoiceRhythmAudit(project, t + 1, trancheChapters, styleGuideContent);
-              
-              if (!voiceResult.passed && voiceResult.chaptersToRevise.length > 0) {
-                voiceCorrectionsApplied = true;
-                this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                  `Corrigiendo ${voiceResult.chaptersToRevise.length} capítulos con issues de voz/ritmo...`
-                );
-                
-                for (let idx = 0; idx < voiceResult.chaptersToRevise.length; idx++) {
-                  // Check cancellation before each chapter correction
-                  if (await isProjectCancelledFromDb(project.id)) {
-                    console.log(`[Orchestrator] Voice corrections cancelled at chapter ${idx + 1}/${voiceResult.chaptersToRevise.length} (runFinalReviewOnly)`);
-                    return;
-                  }
-                  
-                  const chapterNum = voiceResult.chaptersToRevise[idx];
-                  const chapter = chapters.find(c => c.chapterNumber === chapterNum);
-                  const sectionData = allSections.find(s => s.numero === chapterNum);
-                  if (chapter && sectionData) {
-                    this.callbacks.onAgentStatus("voice-auditor", "editing", 
-                      `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${voiceResult.chaptersToRevise.length})`
-                    );
-                    const correctionInstructions = voiceResult.issues.join("\n");
-                    await this.rewriteChapterForQA(project, chapter, sectionData, worldBibleData, guiaEstilo, "voice", correctionInstructions);
-                  }
-                }
-              }
-            }
-          }
-          
-          if (voiceCorrectionsApplied) {
-            this.callbacks.onAgentStatus("voice-auditor", "completed", 
-              `Correcciones de voz/ritmo completadas`
-            );
-          } else {
-            this.callbacks.onAgentStatus("voice-auditor", "complete", 
-              `Análisis de voz aprobado`
-            );
-          }
-        }
-        
-        // Check if semantic check was already completed to prevent infinite loops
-        const currentProjectForSemantic = await storage.getProject(project.id);
-        const semanticAlreadyDone = (currentProjectForSemantic as any)?.semanticCheckCompleted === true;
-        
-        if (semanticAlreadyDone) {
-          this.callbacks.onAgentStatus("semantic-detector", "skipped", 
-            `Detector semántico omitido - ya completado previamente`
-          );
-          console.log(`[Orchestrator:runFinalReviewOnly] Skipping semantic detector for project ${project.id} - already completed`);
-        } else {
-          this.callbacks.onAgentStatus("semantic-detector", "analyzing", 
-            `Ejecutando análisis semántico antes de revisión final...`
-          );
-          
-          // CRITICAL: Mark as completed BEFORE analysis to prevent infinite loops on freeze
-          await storage.updateProject(project.id, { semanticCheckCompleted: true } as any);
-          console.log(`[Orchestrator:runFinalReviewOnly] Semantic check marked complete IMMEDIATELY for project ${project.id} - prevents re-runs on freeze`);
-          
-          const semanticResult = await this.runSemanticRepetitionAnalysis(project, completedChapters, worldBibleData);
-          
-          if (!semanticResult.passed && semanticResult.chaptersToRevise.length > 0) {
-            this.callbacks.onAgentStatus("semantic-detector", "editing", 
-              `Corrigiendo ${semanticResult.chaptersToRevise.length} capítulos con repeticiones semánticas...`
-            );
-            
-            for (let idx = 0; idx < semanticResult.chaptersToRevise.length; idx++) {
-              // Check cancellation before each chapter correction
-              if (await isProjectCancelledFromDb(project.id)) {
-                console.log(`[Orchestrator] Semantic corrections cancelled at chapter ${idx + 1}/${semanticResult.chaptersToRevise.length} (runFinalReviewOnly)`);
-                return;
-              }
-              
-              const chapterNum = semanticResult.chaptersToRevise[idx];
-              const chapter = chapters.find(c => c.chapterNumber === chapterNum);
-              const sectionData = allSections.find(s => s.numero === chapterNum);
-              if (chapter && sectionData) {
-                this.callbacks.onAgentStatus("semantic-detector", "editing", 
-                  `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${semanticResult.chaptersToRevise.length})`
-                );
-                const semanticIssues = semanticResult.clusters
-                  .filter(c => c.capitulos_afectados?.includes(chapterNum))
-                  .map(c => `Repetición semántica: "${c.concepto}" aparece ${c.frecuencia} veces`);
-                const correctionInstructions = semanticIssues.join("\n");
-                await this.rewriteChapterForQA(project, chapter, sectionData, worldBibleData, guiaEstilo, "semantic", correctionInstructions);
-              }
-            }
-            
-            this.callbacks.onAgentStatus("semantic-detector", "completed", 
-              `Correcciones semánticas completadas para ${semanticResult.chaptersToRevise.length} capítulos`
-            );
-          } else {
-            this.callbacks.onAgentStatus("semantic-detector", "complete", 
-              `Análisis semántico aprobado`
-            );
-          }
-        }
-      }
 
       const approved = await this.runFinalReview(
         project,
@@ -3097,7 +2668,6 @@ Responde SOLO con un JSON válido con la estructura:
         const sectionData = this.buildSectionDataFromChapter(chapter, worldBibleData);
         
         await storage.updateChapter(chapter.id, { status: "writing" });
-        this.callbacks.onChapterStatusChange(chapter.chapterNumber, "writing");
 
         const sectionLabel = this.getSectionLabel(sectionData);
         this.callbacks.onAgentStatus("ghostwriter", "writing", `El Narrador está escribiendo ${sectionLabel}...`);
@@ -3117,10 +2687,8 @@ Responde SOLO con un JSON válido con la estructura:
             : baseStyleGuide;
 
           const isRewrite = refinementAttempts > 0;
-          // SPECIAL: Author's Note has different word limits (800-1200 words)
-          const isAuthorNoteExtend = sectionData.tipo === "author_note" || sectionData.numero === -2;
-          const perChapterMin = isAuthorNoteExtend ? 800 : ((project as any).minWordsPerChapter || 2500);
-          const perChapterMax = isAuthorNoteExtend ? 1200 : ((project as any).maxWordsPerChapter || Math.round(perChapterMin * 1.15));
+          const perChapterMin = (project as any).minWordsPerChapter || 2500;
+          const perChapterMax = (project as any).maxWordsPerChapter || Math.round(perChapterMin * 1.15);
           
           const writerResult = await this.ghostwriter.execute({
             chapterNumber: sectionData.numero,
@@ -3138,27 +2706,9 @@ Responde SOLO con un JSON válido con la estructura:
             kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
           });
 
-          // CRITICAL: Validate that content exists before processing
-          if (!writerResult.content || writerResult.content.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Ghostwriter returned NULL/EMPTY content for ${sectionLabel} (expansion). Skipping...`);
-            this.callbacks.onAgentStatus("ghostwriter", "error", 
-              `${sectionLabel} vacío tras expansión. Saltando al siguiente.`
-            );
-            continue;
-          }
-
           const { cleanContent, continuityState } = this.ghostwriter.extractContinuityState(writerResult.content);
           let currentContent = cleanContent;
           const currentContinuityState = continuityState;
-          
-          // CRITICAL: Double-check after extraction that content is not empty
-          if (!currentContent || currentContent.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Content extraction resulted in EMPTY content for ${sectionLabel} (expansion). Skipping...`);
-            this.callbacks.onAgentStatus("ghostwriter", "error", 
-              `${sectionLabel} vacío tras extracción (expansión). Saltando al siguiente.`
-            );
-            continue;
-          }
           
           const contentWordCount = currentContent.split(/\s+/).filter((w: string) => w.length > 0).length;
           
@@ -3305,26 +2855,15 @@ Responde SOLO con un JSON válido con la estructura:
 
         const correctionInstructions = result.issues.join("\n");
 
-        for (let idx = 0; idx < result.chaptersToRevise.length; idx++) {
-          // Check cancellation before each chapter correction
-          if (await isProjectCancelledFromDb(project.id)) {
-            console.log(`[Orchestrator] Force sentinel corrections cancelled at chapter ${idx + 1}/${result.chaptersToRevise.length}`);
-            return;
-          }
-          
-          const chapterNum = result.chaptersToRevise[idx];
+        for (const chapterNum of result.chaptersToRevise) {
           const chapter = chapters.find(c => c.chapterNumber === chapterNum);
           const sectionData = allSections.find(s => s.numero === chapterNum);
 
           if (chapter && sectionData) {
-            this.callbacks.onAgentStatus("continuity-sentinel", "editing", 
-              `Corrigiendo capítulo ${chapterNum} (${idx + 1}/${result.chaptersToRevise.length})`
-            );
-            
             this.callbacks.onChapterRewrite(
               chapterNum,
               chapter.title || `Capítulo ${chapterNum}`,
-              idx + 1,
+              result.chaptersToRevise.indexOf(chapterNum) + 1,
               result.chaptersToRevise.length,
               "Corrección forzada por Centinela"
             );
@@ -3410,12 +2949,6 @@ Responde SOLO con un JSON válido con la estructura:
       );
 
       for (let i = 0; i < truncatedChapters.length; i++) {
-        // Check cancellation before each chapter regeneration
-        if (await isProjectCancelledFromDb(project.id)) {
-          console.log(`[Orchestrator] Truncated chapter regeneration cancelled at chapter ${i + 1}/${truncatedChapters.length}`);
-          return;
-        }
-        
         const chapter = truncatedChapters[i];
         const sectionData = allSections.find(s => s.numero === chapter.chapterNumber);
 
@@ -3423,10 +2956,6 @@ Responde SOLO con un JSON válido con la estructura:
           console.error(`No section data found for chapter ${chapter.chapterNumber}`);
           continue;
         }
-
-        this.callbacks.onAgentStatus("ghostwriter", "writing", 
-          `Regenerando capítulo truncado ${chapter.chapterNumber} (${i + 1}/${truncatedChapters.length})`
-        );
 
         this.callbacks.onChapterRewrite(
           chapter.chapterNumber,
@@ -3457,11 +2986,9 @@ Responde SOLO con un JSON válido con la estructura:
         // Retry loop for truncated responses
         const MAX_REGENERATION_ATTEMPTS = 3;
         // Use project's per-chapter settings, fallback to calculated from total
-        // SPECIAL: Author's Note has different word limits (800-1200 words)
-        const isAuthorNoteRegen = chapter.chapterNumber === -2;
         const calculatedTargetRegen = this.calculatePerChapterTarget((project as any).minWordCount, chapters.length);
-        const perChapterMinRegen = isAuthorNoteRegen ? 800 : ((project as any).minWordsPerChapter || calculatedTargetRegen);
-        const perChapterMaxRegen = isAuthorNoteRegen ? 1200 : ((project as any).maxWordsPerChapter || Math.round(perChapterMinRegen * 1.15));
+        const perChapterMinRegen = (project as any).minWordsPerChapter || calculatedTargetRegen;
+        const perChapterMaxRegen = (project as any).maxWordsPerChapter || Math.round(perChapterMinRegen * 1.15);
         const MARGIN_REGEN = 0.15; // 15% flexibility
         const TARGET_MIN_WORDS = Math.round(perChapterMinRegen * (1 - MARGIN_REGEN));
         const TARGET_MAX_WORDS = perChapterMaxRegen;
@@ -3491,20 +3018,7 @@ Responde SOLO con un JSON válido con la estructura:
 
           await this.trackTokenUsage(project.id, writerResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", chapter.chapterNumber, "chapter_regenerate");
 
-          // CRITICAL: Validate that content exists before processing
-          if (!writerResult.content || writerResult.content.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Ghostwriter returned NULL/EMPTY content for Chapter ${chapter.chapterNumber} (regenerate). Retrying...`);
-            continue; // Will try again on next iteration
-          }
-
           const { cleanContent } = this.ghostwriter.extractContinuityState(writerResult.content);
-          
-          // CRITICAL: Double-check after extraction that content is not empty
-          if (!cleanContent || cleanContent.trim().length === 0) {
-            console.error(`[Orchestrator] CRITICAL: Content extraction resulted in EMPTY content for Chapter ${chapter.chapterNumber} (regenerate). Retrying...`);
-            continue; // Will try again on next iteration
-          }
-          
           const wordCount = cleanContent.split(/\s+/).filter((w: string) => w.length > 0).length;
 
           // Accept if it meets the target minimum (with 15% margin)
@@ -3983,18 +3497,6 @@ Responde SOLO con un JSON válido con la estructura:
     // Método 1: Parse directo
     try {
       const parsed = JSON.parse(cleanContent);
-      
-      // Normalize: if personajes is at root level, wrap it in world_bible
-      if (parsed.personajes && !parsed.world_bible) {
-        console.log(`[Orchestrator] Normalizing flat format to world_bible structure`);
-        parsed.world_bible = {
-          personajes: parsed.personajes,
-          lugares: parsed.lugares || [],
-          temas_centrales: parsed.temas_centrales || [],
-          premisa: parsed.premisa || "",
-        };
-      }
-      
       console.log(`[Orchestrator] Direct JSON parse SUCCESS - Characters: ${parsed.world_bible?.personajes?.length || 0}, Chapters: ${parsed.escaleta_capitulos?.length || 0}`);
       return this.sanitizeChapterTitles(parsed);
     } catch (e1) {
@@ -4435,47 +3937,46 @@ Responde SOLO con un JSON válido con la estructura:
     
     const sectionLabel = this.getSectionLabel(sectionData);
     
-    // Use CopyEditor for microsurgery instead of Ghostwriter for full rewrite
-    // Report as ghostwriter for UI compatibility
     this.callbacks.onAgentStatus("ghostwriter", "writing", 
-      `Microcirugía ${sectionLabel} por ${qaLabels[qaSource]}`
+      `Reescribiendo ${sectionLabel} por ${qaLabels[qaSource]}`
     );
 
-    // Get continuity context for corrections (especially important for continuity QA)
     const allChapters = await storage.getChaptersByProject(project.id);
     const previousChapter = allChapters.find(c => c.chapterNumber === chapter.chapterNumber - 1);
-    const continuityContext = previousChapter?.content 
-      ? `\nCONTEXTO DE CONTINUIDAD (final del capítulo anterior):\n${previousChapter.content.slice(-1500)}\n` 
-      : "";
+    
+    let previousContinuity = "";
+    if (previousChapter?.continuityState) {
+      previousContinuity = `ESTADO DE CONTINUIDAD DEL CAPÍTULO ANTERIOR:\n${JSON.stringify(previousChapter.continuityState, null, 2)}`;
+    } else if (previousChapter?.content) {
+      const lastParagraphs = previousChapter.content.split("\n\n").slice(-3).join("\n\n");
+      previousContinuity = `FINAL DEL CAPÍTULO ANTERIOR:\n${lastParagraphs}`;
+    }
 
-    // Build targeted correction prompt for CopyEditor
-    const correctionPrompt = `
-CORRECCIONES ESPECÍFICAS DE ${qaLabels[qaSource].toUpperCase()}:
-${correctionInstructions}
-${continuityContext}
-MODO MICROCIRUGÍA OBLIGATORIO:
-- Modifica SOLO las frases/párrafos que causan el problema
-- Preserva el 95% del texto original INTACTO
-- NO reescribas secciones que funcionan bien
-- Aplica cambios quirúrgicos mínimos
-- Mantén la continuidad con el capítulo anterior
-${guiaEstilo}`;
-
-    const copyEditResult = await this.copyeditor.execute({
-      chapterNumber: chapter.chapterNumber,
-      chapterTitle: chapter.title || `Capítulo ${chapter.chapterNumber}`,
-      chapterContent: chapter.content || "",
-      guiaEstilo: correctionPrompt,
+    // Use project's per-chapter settings for QA rewrites
+    const allChaptersCount = (await storage.getChaptersByProject(project.id)).length || project.chapterCount || 1;
+    const calculatedTargetRewrite = this.calculatePerChapterTarget((project as any).minWordCount, allChaptersCount);
+    const perChapterMinRewrite = (project as any).minWordsPerChapter || calculatedTargetRewrite;
+    const perChapterMaxRewrite = (project as any).maxWordsPerChapter || Math.round(perChapterMinRewrite * 1.15);
+    
+    const writerResult = await this.ghostwriter.execute({
+      chapterNumber: sectionData.numero,
+      chapterData: sectionData,
+      worldBible: worldBibleData.world_bible,
+      guiaEstilo,
+      previousContinuity,
+      refinementInstructions: `CORRECCIONES DE ${qaLabels[qaSource].toUpperCase()}:\n${correctionInstructions}`,
+      minWordCount: perChapterMinRewrite,
+      maxWordCount: perChapterMaxRewrite,
+      kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
     });
 
-    await this.trackTokenUsage(project.id, copyEditResult.tokenUsage, "El Estilista", "gemini-3-pro-preview", chapter.chapterNumber, "qa_microsurgery");
+    await this.trackTokenUsage(project.id, writerResult.tokenUsage, "El Narrador", "gemini-3-pro-preview", sectionData.numero, "qa_rewrite");
 
-    const correctedContent = copyEditResult.result?.texto_final;
-    if (correctedContent) {
-      const wordCount = correctedContent.split(/\s+/).filter((w: string) => w.length > 0).length;
+    if (writerResult.content) {
+      const wordCount = writerResult.content.split(/\s+/).filter(w => w.length > 0).length;
       
       await storage.updateChapter(chapter.id, {
-        content: correctedContent,
+        content: writerResult.content,
         status: "completed",
         wordCount,
         needsRevision: false,
@@ -4484,7 +3985,7 @@ ${guiaEstilo}`;
 
       this.callbacks.onChapterStatusChange(chapter.chapterNumber, "completed");
       this.callbacks.onAgentStatus("ghostwriter", "completed", 
-        `${sectionLabel} corregido (microcirugía)`
+        `${sectionLabel} reescrito correctamente`
       );
     }
   }

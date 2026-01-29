@@ -288,18 +288,10 @@ export class GhostwriterAgent extends BaseAgent {
       name: "El Narrador",
       role: "ghostwriter",
       systemPrompt: SYSTEM_PROMPT,
-      model: "deepseek-chat", // V3: Fast model for prose generation (10-60s vs 5-15min with R1)
-      useThinking: false,
     });
   }
 
   async execute(input: GhostwriterInput): Promise<AgentResponse> {
-    // SPECIAL HANDLING: Author's Note (Chapter -2)
-    // This is NOT narrative fiction - it's a personal text from the author to readers
-    if (input.chapterNumber === -2) {
-      return this.executeAuthorNote(input);
-    }
-    
     let prompt = `
     CONTEXTO DEL MUNDO (World Bible): ${JSON.stringify(input.worldBible)}
     GUÍA DE ESTILO: ${input.guiaEstilo}
@@ -400,66 +392,32 @@ export class GhostwriterAgent extends BaseAgent {
     if (input.refinementInstructions) {
       prompt += `
     
-    ╔═══════════════════════════════════════════════════════════════════╗
-    ║  🔬🔬🔬 MODO CIRUGÍA LÁSER - CAMBIOS MÍNIMOS OBLIGATORIOS 🔬🔬🔬  ║
-    ╠═══════════════════════════════════════════════════════════════════╣
-    ║                                                                   ║
-    ║   TU OBJETIVO: MODIFICAR SOLO LAS FRASES/PALABRAS INDICADAS      ║
-    ║   PRESERVAR EL 95% DEL TEXTO ORIGINAL INTACTO                    ║
-    ║                                                                   ║
-    ╚═══════════════════════════════════════════════════════════════════╝
-    
-    INSTRUCCIONES DE CORRECCIÓN ESPECÍFICAS:
-    ─────────────────────────────────────────
+    ========================================
+    INSTRUCCIONES DE REESCRITURA (PLAN QUIRÚRGICO DEL EDITOR):
+    ========================================
     ${input.refinementInstructions}
-    ─────────────────────────────────────────
     
-    ⛔ REGLAS INVIOLABLES DE EDICIÓN QUIRÚRGICA:
-    
-    1. COPIA LITERAL: Copia el 95% del texto original SIN CAMBIOS
-       - Cada párrafo que NO esté afectado por las instrucciones → CÓPIALO EXACTAMENTE
-       - No cambies palabras "para mejorar" si no están en las instrucciones
-       - No reorganices párrafos que funcionan
-    
-    2. CAMBIOS MÍNIMOS: Solo modifica lo ESTRICTAMENTE indicado
-       - Si dice "cambiar X por Y" → cambia SOLO esa palabra/frase
-       - Si dice "eliminar la referencia a Z" → elimina SOLO esa referencia
-       - Si dice "añadir contexto sobre W" → añade UNA frase sobre W
-    
-    3. LOCALIZACIÓN PRECISA: Los cambios deben estar en las ubicaciones indicadas
-       - Si menciona un diálogo específico → modifica SOLO ese diálogo
-       - Si menciona un párrafo específico → modifica SOLO ese párrafo
-    
-    4. PROHIBIDO REESCRIBIR ESCENAS COMPLETAS
-       - Una instrucción de corregir una frase NO es permiso para reescribir la escena
-       - Mantén la estructura, el ritmo y el tono del original
-    
-    5. CUENTA DE PALABRAS: El resultado debe tener ±50 palabras del original
-       - No expandas innecesariamente
-       - No reduzcas si no se pide
+    ⚠️ REGLAS DE REESCRITURA (CRÍTICAS):
+    1. PRESERVA las fortalezas y pasajes efectivos del borrador anterior
+    2. APLICA solo las correcciones específicas indicadas
+    3. NO reduzcas la extensión - mantén o aumenta el número de palabras
+    4. NO reescribas desde cero - es una EDICIÓN QUIRÚRGICA, no una reescritura total
+    5. Si algo funcionaba bien, MANTENLO INTACTO
     ========================================
     `;
 
       if (input.previousChapterContent) {
-        // Aumentar límite para mejor contexto
-        const truncatedPrevious = input.previousChapterContent.length > 50000 
-          ? input.previousChapterContent.substring(0, 50000) + "\n[...contenido truncado...]"
+        const truncatedPrevious = input.previousChapterContent.length > 20000 
+          ? input.previousChapterContent.substring(0, 20000) + "\n[...contenido truncado...]"
           : input.previousChapterContent;
         prompt += `
-    ════════════════════════════════════════════════════════════════════
-    📋 TEXTO ORIGINAL (COPIA Y MODIFICA SOLO LO INDICADO):
-    ════════════════════════════════════════════════════════════════════
+    ========================================
+    BORRADOR ANTERIOR (BASE PARA EDICIÓN):
+    ========================================
     ${truncatedPrevious}
-    ════════════════════════════════════════════════════════════════════
+    ========================================
     
-    🎯 PROCESO OBLIGATORIO:
-    1. Lee el texto original COMPLETO
-    2. Identifica las frases/palabras EXACTAS que deben cambiar
-    3. Copia el texto párrafo por párrafo
-    4. Al llegar a una frase que debe cambiar → aplica el cambio mínimo
-    5. Continúa copiando el resto SIN MODIFICAR
-    
-    ⚠️ Si cambias más de lo indicado, el Editor RECHAZARÁ tu trabajo.
+    INSTRUCCIÓN: Usa este borrador como BASE. Modifica SOLO lo que indican las instrucciones de corrección.
     `;
       }
     }
@@ -617,18 +575,7 @@ export class GhostwriterAgent extends BaseAgent {
     ═══════════════════════════════════════════════════════════════════
     🚨 RECORDATORIO FINAL: ESCRIBE EL CAPÍTULO COMPLETO 🚨
     ═══════════════════════════════════════════════════════════════════
-    
-    ⛔ FORMATO DEL ENCABEZADO (OBLIGATORIO - UNA SOLA VEZ):
-    ${chapterData.numero === 0 ? '# Prólogo' : 
-      chapterData.numero === -1 ? '# Epílogo' : 
-      chapterData.numero === -2 ? '# Nota del Autor' :
-      `# Capítulo ${chapterData.numero}: ${chapterData.titulo}`}
-    
-    - El encabezado DEBE aparecer EXACTAMENTE UNA VEZ al inicio
-    - NO repitas el encabezado
-    - NO uses formatos alternativos (CAPÍTULO, Chapter, etc.)
-    - Después del encabezado, salta DOS líneas y comienza la narrativa
-    
+    Comienza directamente con la narrativa. Sin introducción ni comentarios.
     Recuerda: NO repitas expresiones, metáforas o conceptos. Cada imagen debe ser única.
     
     ⚠️ TU CAPÍTULO DEBE TENER MÍNIMO ${minWords} PALABRAS ⚠️
@@ -674,14 +621,11 @@ export class GhostwriterAgent extends BaseAgent {
     
     if (parts.length < 2) {
       console.log("[Ghostwriter] No continuity state separator found in content");
-      return { cleanContent: this.cleanDuplicateHeaders(content), continuityState: null };
+      return { cleanContent: content, continuityState: null };
     }
     
-    let cleanContent = parts[0].trim();
+    const cleanContent = parts[0].trim();
     const stateJson = parts[1].trim();
-    
-    // Clean duplicate headers from content
-    cleanContent = this.cleanDuplicateHeaders(cleanContent);
     
     try {
       const continuityState = JSON.parse(stateJson);
@@ -699,150 +643,7 @@ export class GhostwriterAgent extends BaseAgent {
           console.log("[Ghostwriter] Regex extraction also failed");
         }
       }
-      return { cleanContent, continuityState: null };
+      return { cleanContent: content, continuityState: null };
     }
-  }
-  
-  /**
-   * Remove duplicate chapter headers from content
-   * Keeps only the first header and removes any duplicates
-   */
-  private cleanDuplicateHeaders(content: string): string {
-    if (!content || content.trim() === '') return content;
-    
-    let cleaned = content.trim();
-    
-    // Pattern to match chapter/section headers
-    const headerPattern = /^#+ *(CHAPTER|CAPÍTULO|CAP\.?|Capítulo|Chapter|PRÓLOGO|Prólogo|PROLOGUE|Prologue|EPÍLOGO|Epílogo|EPILOGUE|Epilogue|NOTA DEL AUTOR|Nota del Autor|AUTHOR'?S?\s*NOTE|Author'?s?\s*Note)[^\n]*\n+/i;
-    
-    // Find and save the first header
-    const firstHeaderMatch = cleaned.match(headerPattern);
-    let firstHeader = '';
-    
-    if (firstHeaderMatch) {
-      firstHeader = firstHeaderMatch[0];
-      cleaned = cleaned.slice(firstHeader.length);
-    }
-    
-    // Remove any additional headers at the start (duplicates)
-    let prevLength = 0;
-    while (cleaned.length !== prevLength) {
-      prevLength = cleaned.length;
-      cleaned = cleaned.replace(headerPattern, '').trim();
-    }
-    
-    // Restore the first header (normalized)
-    if (firstHeader) {
-      cleaned = firstHeader + cleaned;
-    }
-    
-    return cleaned;
-  }
-
-  /**
-   * Special method for generating Author's Note (Chapter -2)
-   * This is NOT narrative fiction - it's a personal text from the author to readers
-   */
-  private async executeAuthorNote(input: GhostwriterInput): Promise<AgentResponse> {
-    const authorName = input.authorName || "El Autor";
-    const worldBible = input.worldBible;
-    const title = worldBible?.titulo || "esta novela";
-    const genre = worldBible?.genero || "ficción";
-    const premise = worldBible?.premisa || "";
-    const setting = worldBible?.ambientacion?.epoca || "";
-    const location = worldBible?.ambientacion?.ubicacion || "";
-    
-    const authorNotePrompt = `
-═══════════════════════════════════════════════════════════════════
-⚠️ INSTRUCCIONES ESPECIALES: NOTA DEL AUTOR (NO ES NARRATIVA)
-═══════════════════════════════════════════════════════════════════
-
-IMPORTANTE: Esto NO es un capítulo de ficción. Es una NOTA DEL AUTOR - un texto 
-personal y sincero dirigido directamente a los lectores, escrito en primera 
-persona desde la perspectiva del autor "${authorName}".
-
-═══════════════════════════════════════════════════════════════════
-INFORMACIÓN DEL PROYECTO
-═══════════════════════════════════════════════════════════════════
-- Título de la novela: ${title}
-- Género: ${genre}
-- Premisa: ${premise}
-- Época/Ambientación: ${setting}
-- Ubicación: ${location}
-
-═══════════════════════════════════════════════════════════════════
-ESTRUCTURA DE LA NOTA DEL AUTOR
-═══════════════════════════════════════════════════════════════════
-
-La Nota del Autor debe incluir estos elementos (en el orden que prefieras):
-
-1. SALUDO PERSONAL AL LECTOR
-   - Agradece al lector por haber llegado hasta el final
-   - Reconoce el tiempo que han dedicado a la historia
-
-2. GÉNESIS DE LA HISTORIA
-   - ¿Qué inspiró esta novela? (puede ser ficticio pero creíble)
-   - ¿Qué pregunta o inquietud quería explorar el autor?
-   - Menciona alguna anécdota sobre cómo surgió la idea
-
-3. PROCESO DE INVESTIGACIÓN (si aplica al género)
-   - Para novela histórica: menciona fuentes, viajes, expertos consultados
-   - Para thriller: aspectos técnicos investigados
-   - Para cualquier género: el trabajo detrás de la ambientación
-
-4. REFLEXIÓN PERSONAL
-   - ¿Qué significan los personajes para el autor?
-   - ¿Qué mensaje o emoción espera transmitir?
-   - Conexión emocional con la historia
-
-5. AGRADECIMIENTOS BREVES
-   - A la familia por su paciencia
-   - Al equipo editorial (mencionado de forma genérica)
-   - A los lectores fieles
-
-6. CIERRE CÁLIDO
-   - Invitación a conectar (redes sociales genéricas)
-   - Despedida personal y cálida
-   - Posible mención del próximo proyecto (opcional)
-
-═══════════════════════════════════════════════════════════════════
-TONO Y ESTILO
-═══════════════════════════════════════════════════════════════════
-
-- PRIMERA PERSONA: Escribe como "${authorName}" hablando directamente al lector
-- TONO ÍNTIMO Y CERCANO: Como si hablaras con un amigo
-- SINCERIDAD: Transmite pasión genuina por el oficio de escribir
-- HUMILDAD: Sin arrogancia, con gratitud
-- CALIDEZ: El lector debe sentirse valorado
-
-PROHIBIDO:
-- NO escribas narrativa ficticia (escenas, diálogos de personajes)
-- NO incluyas spoilers de la trama
-- NO uses el tono formal de la novela
-- NO hagas referencias a IA o generación automática
-- NO incluyas elementos meta-textuales sobre el proceso de escritura técnico
-
-═══════════════════════════════════════════════════════════════════
-EXTENSIÓN
-═══════════════════════════════════════════════════════════════════
-
-Escribe entre 800 y 1200 palabras. Es un texto breve pero significativo.
-
-═══════════════════════════════════════════════════════════════════
-FORMATO DE SALIDA
-═══════════════════════════════════════════════════════════════════
-
-Escribe SOLO el texto de la Nota del Autor, sin encabezados ni marcadores.
-Comienza directamente con el texto, como si fuera la página de la nota
-en un libro impreso.
-
-Firma al final con:
-${authorName}
-[Mes y año ficticios coherentes]
-`;
-
-    console.log(`[Ghostwriter] Generating Author's Note for "${title}" by ${authorName}`);
-    
-    return this.generateContent(authorNotePrompt);
   }
 }
