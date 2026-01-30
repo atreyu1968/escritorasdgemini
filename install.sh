@@ -5,6 +5,16 @@ set -e
 # Autoinstalador para EscritorasdGemini (LitAgents)
 # Compatible con Ubuntu 22.04/24.04
 # Repositorio: https://github.com/atreyu1968/escritorasdgemini
+# 
+# Uso desatendido:
+#   GEMINI_API_KEY="tu-key" bash install.sh --unattended
+#
+# Variables de entorno opcionales:
+#   GEMINI_API_KEY          - (Requerido) API key de Google Gemini
+#   DEEPSEEK_API_KEY        - (Opcional) API key de DeepSeek
+#   DEEPSEEK_TRANSLATOR_API_KEY - (Opcional) API key de DeepSeek Translator
+#   LITAGENTS_PASSWORD      - (Opcional) Contrasena de acceso
+#   CF_TUNNEL_TOKEN         - (Opcional) Token de Cloudflare Tunnel
 # ============================================================
 
 # Colores para output
@@ -32,6 +42,63 @@ DB_NAME="litagents_db"
 DB_USER="litagents"
 GITHUB_REPO="https://github.com/atreyu1968/escritorasdgemini.git"
 
+# Modo de instalación
+UNATTENDED=false
+
+# Parsear argumentos de línea de comandos
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --unattended|-u)
+            UNATTENDED=true
+            shift
+            ;;
+        --gemini-key=*)
+            GEMINI_API_KEY="${1#*=}"
+            shift
+            ;;
+        --deepseek-key=*)
+            DEEPSEEK_API_KEY="${1#*=}"
+            shift
+            ;;
+        --deepseek-translator-key=*)
+            DEEPSEEK_TRANSLATOR_API_KEY="${1#*=}"
+            shift
+            ;;
+        --password=*)
+            LITAGENTS_PASSWORD="${1#*=}"
+            shift
+            ;;
+        --cf-token=*)
+            CF_TUNNEL_TOKEN="${1#*=}"
+            shift
+            ;;
+        --help|-h)
+            echo "Uso: sudo bash install.sh [opciones]"
+            echo ""
+            echo "Opciones:"
+            echo "  --unattended, -u              Instalación sin interacción"
+            echo "  --gemini-key=KEY              API key de Google Gemini (requerido)"
+            echo "  --deepseek-key=KEY            API key de DeepSeek (opcional)"
+            echo "  --deepseek-translator-key=KEY API key DeepSeek Translator (opcional)"
+            echo "  --password=PASS               Contrasena de acceso (opcional)"
+            echo "  --cf-token=TOKEN              Token de Cloudflare Tunnel (opcional)"
+            echo "  --help, -h                    Mostrar esta ayuda"
+            echo ""
+            echo "Ejemplo desatendido:"
+            echo "  GEMINI_API_KEY=\"tu-key\" sudo bash install.sh --unattended"
+            echo ""
+            echo "  O con argumentos:"
+            echo "  sudo bash install.sh --unattended --gemini-key=\"tu-key\" --password=\"secreto\""
+            exit 0
+            ;;
+        *)
+            print_error "Opción desconocida: $1"
+            echo "Usa --help para ver las opciones disponibles"
+            exit 1
+            ;;
+    esac
+done
+
 # Verificar que se ejecuta como root
 if [ "$EUID" -ne 0 ]; then
     print_error "Este script debe ejecutarse como root"
@@ -39,9 +106,20 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Guardar variables de entorno proporcionadas antes de cargar config existente
+PROVIDED_GEMINI_API_KEY="${GEMINI_API_KEY:-}"
+PROVIDED_DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-}"
+PROVIDED_DEEPSEEK_TRANSLATOR_API_KEY="${DEEPSEEK_TRANSLATOR_API_KEY:-}"
+PROVIDED_LITAGENTS_PASSWORD="${LITAGENTS_PASSWORD:-}"
+PROVIDED_CF_TUNNEL_TOKEN="${CF_TUNNEL_TOKEN:-}"
+
 print_header "INSTALADOR DE LITAGENTS (EscritorasdGemini)"
 echo "Este script instalará y configurará la aplicación completa."
 echo ""
+
+if [ "$UNATTENDED" = true ]; then
+    print_status "Modo desatendido activado"
+fi
 
 # Detectar si es una actualización
 IS_UPDATE=false
@@ -50,15 +128,25 @@ if [ -f "$CONFIG_DIR/env" ]; then
     print_warning "Instalación existente detectada. Se realizará una ACTUALIZACIÓN."
     print_status "Las credenciales y configuración se preservarán."
     source "$CONFIG_DIR/env"
+    
+    # Restaurar variables proporcionadas (tienen prioridad sobre las existentes)
+    [ -n "$PROVIDED_GEMINI_API_KEY" ] && GEMINI_API_KEY="$PROVIDED_GEMINI_API_KEY"
+    [ -n "$PROVIDED_DEEPSEEK_API_KEY" ] && DEEPSEEK_API_KEY="$PROVIDED_DEEPSEEK_API_KEY"
+    [ -n "$PROVIDED_DEEPSEEK_TRANSLATOR_API_KEY" ] && DEEPSEEK_TRANSLATOR_API_KEY="$PROVIDED_DEEPSEEK_TRANSLATOR_API_KEY"
+    [ -n "$PROVIDED_LITAGENTS_PASSWORD" ] && LITAGENTS_PASSWORD="$PROVIDED_LITAGENTS_PASSWORD"
+    [ -n "$PROVIDED_CF_TUNNEL_TOKEN" ] && CF_TUNNEL_TOKEN="$PROVIDED_CF_TUNNEL_TOKEN"
 else
     print_status "Instalación nueva detectada."
 fi
 
-echo ""
-read -p "¿Continuar con la instalación? (s/N): " CONFIRM
-if [[ ! "$CONFIRM" =~ ^[Ss]$ ]]; then
-    echo "Instalación cancelada."
-    exit 0
+# Confirmación (solo en modo interactivo)
+if [ "$UNATTENDED" = false ]; then
+    echo ""
+    read -p "¿Continuar con la instalación? (s/N): " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Ss]$ ]]; then
+        echo "Instalación cancelada."
+        exit 0
+    fi
 fi
 
 # ============================================================
@@ -67,33 +155,50 @@ fi
 print_header "PASO 1: Configuración de API Keys"
 
 if [ "$IS_UPDATE" = false ]; then
-    echo "Necesitas proporcionar tu API key de Google Gemini."
-    echo "Puedes obtenerla en: https://aistudio.google.com/apikey"
-    echo ""
-    
-    read -p "GEMINI_API_KEY: " INPUT_GEMINI_KEY
-    if [ -z "$INPUT_GEMINI_KEY" ]; then
-        print_error "La API key de Gemini es obligatoria"
-        exit 1
+    if [ "$UNATTENDED" = true ]; then
+        # Modo desatendido: usar variables de entorno
+        if [ -z "$GEMINI_API_KEY" ]; then
+            print_error "La variable GEMINI_API_KEY es obligatoria en modo desatendido"
+            echo "Uso: GEMINI_API_KEY=\"tu-key\" sudo bash install.sh --unattended"
+            exit 1
+        fi
+        print_success "Usando GEMINI_API_KEY desde variable de entorno"
+        
+        # Las opcionales pueden estar vacías
+        DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-}"
+        DEEPSEEK_TRANSLATOR_API_KEY="${DEEPSEEK_TRANSLATOR_API_KEY:-}"
+        LITAGENTS_PASSWORD="${LITAGENTS_PASSWORD:-}"
+        CF_TOKEN="${CF_TUNNEL_TOKEN:-}"
+    else
+        # Modo interactivo: solicitar al usuario
+        echo "Necesitas proporcionar tu API key de Google Gemini."
+        echo "Puedes obtenerla en: https://aistudio.google.com/apikey"
+        echo ""
+        
+        read -p "GEMINI_API_KEY: " INPUT_GEMINI_KEY
+        if [ -z "$INPUT_GEMINI_KEY" ]; then
+            print_error "La API key de Gemini es obligatoria"
+            exit 1
+        fi
+        GEMINI_API_KEY="$INPUT_GEMINI_KEY"
+        
+        echo ""
+        echo "(Opcional) Si tienes API keys de DeepSeek, ingrésalas ahora."
+        echo "Presiona Enter para omitir."
+        read -p "DEEPSEEK_API_KEY (opcional): " INPUT_DEEPSEEK_KEY
+        DEEPSEEK_API_KEY="${INPUT_DEEPSEEK_KEY:-}"
+        
+        read -p "DEEPSEEK_TRANSLATOR_API_KEY (opcional): " INPUT_DEEPSEEK_TRANSLATOR_KEY
+        DEEPSEEK_TRANSLATOR_API_KEY="${INPUT_DEEPSEEK_TRANSLATOR_KEY:-}"
+        
+        echo ""
+        echo "=== Configuracion de Seguridad ==="
+        echo "(Opcional) Configura una contrasena para proteger el acceso a la aplicacion."
+        echo "Presiona Enter para omitir (acceso sin contrasena)."
+        read -sp "LITAGENTS_PASSWORD (opcional): " INPUT_PASSWORD
+        echo ""
+        LITAGENTS_PASSWORD="${INPUT_PASSWORD:-}"
     fi
-    GEMINI_API_KEY="$INPUT_GEMINI_KEY"
-    
-    echo ""
-    echo "(Opcional) Si tienes API keys de DeepSeek, ingrésalas ahora."
-    echo "Presiona Enter para omitir."
-    read -p "DEEPSEEK_API_KEY (opcional): " INPUT_DEEPSEEK_KEY
-    DEEPSEEK_API_KEY="${INPUT_DEEPSEEK_KEY:-}"
-    
-    read -p "DEEPSEEK_TRANSLATOR_API_KEY (opcional): " INPUT_DEEPSEEK_TRANSLATOR_KEY
-    DEEPSEEK_TRANSLATOR_API_KEY="${INPUT_DEEPSEEK_TRANSLATOR_KEY:-}"
-    
-    echo ""
-    echo "=== Configuracion de Seguridad ==="
-    echo "(Opcional) Configura una contrasena para proteger el acceso a la aplicacion."
-    echo "Presiona Enter para omitir (acceso sin contrasena)."
-    read -sp "LITAGENTS_PASSWORD (opcional): " INPUT_PASSWORD
-    echo ""
-    LITAGENTS_PASSWORD="${INPUT_PASSWORD:-}"
     
     if [ -n "$LITAGENTS_PASSWORD" ]; then
         print_success "Contrasena configurada"
@@ -116,6 +221,7 @@ fi
 print_header "PASO 2: Instalando dependencias del sistema"
 
 print_status "Actualizando repositorios..."
+export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 
 print_status "Instalando paquetes base..."
@@ -216,11 +322,13 @@ print_header "PASO 6: Guardando configuración"
 
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$LOG_DIR"
+mkdir -p "$APP_DIR"
 mkdir -p "$APP_DIR/inbox"
+mkdir -p "$APP_DIR/inbox/processed"
 mkdir -p "$APP_DIR/exports"
 chown "$APP_USER:$APP_USER" "$LOG_DIR"
-chown "$APP_USER:$APP_USER" "$APP_DIR/inbox" 2>/dev/null || true
-chown "$APP_USER:$APP_USER" "$APP_DIR/exports" 2>/dev/null || true
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/inbox"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/exports"
 
 if [ "$IS_UPDATE" = true ]; then
     # En actualizaciones, preservar la configuración existente
@@ -230,6 +338,12 @@ if [ "$IS_UPDATE" = true ]; then
     if [ -n "$GEMINI_API_KEY" ] && [ "$GEMINI_API_KEY" != "$(grep -oP 'GEMINI_API_KEY=\K.*' "$CONFIG_DIR/env" 2>/dev/null)" ]; then
         sed -i "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=$GEMINI_API_KEY|" "$CONFIG_DIR/env"
         print_status "API key de Gemini actualizada"
+    fi
+    
+    # Asegurar que existen los directorios de archivos en la config
+    if ! grep -q "LITAGENTS_INBOX_DIR" "$CONFIG_DIR/env" 2>/dev/null; then
+        echo "LITAGENTS_INBOX_DIR=$APP_DIR/inbox" >> "$CONFIG_DIR/env"
+        echo "LITAGENTS_EXPORTS_DIR=$APP_DIR/exports" >> "$CONFIG_DIR/env"
     fi
     
     print_success "Configuración preservada"
@@ -273,6 +387,11 @@ else
     print_status "Clonando repositorio..."
     rm -rf "$APP_DIR"
     git clone --depth 1 "$GITHUB_REPO" "$APP_DIR"
+    
+    # Recrear directorios después de clonar
+    mkdir -p "$APP_DIR/inbox"
+    mkdir -p "$APP_DIR/inbox/processed"
+    mkdir -p "$APP_DIR/exports"
 fi
 
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
@@ -306,6 +425,10 @@ print_success "Aplicación compilada"
 # ============================================================
 print_header "PASO 9: Configurando servicio systemd"
 
+# Obtener rutas de inbox/exports desde config
+INBOX_DIR="${LITAGENTS_INBOX_DIR:-$APP_DIR/inbox}"
+EXPORTS_DIR="${LITAGENTS_EXPORTS_DIR:-$APP_DIR/exports}"
+
 cat > "/etc/systemd/system/$APP_NAME.service" << EOF
 [Unit]
 Description=LitAgents Application
@@ -332,7 +455,7 @@ MemoryMax=2G
 # Seguridad
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=$APP_DIR $LOG_DIR
+ReadWritePaths=$APP_DIR $LOG_DIR $INBOX_DIR $EXPORTS_DIR
 
 [Install]
 WantedBy=multi-user.target
@@ -437,11 +560,24 @@ fi
 # ============================================================
 print_header "PASO 12: Cloudflare Tunnel (opcional)"
 
-echo "Si tienes un Cloudflare Tunnel, puedes configurarlo ahora."
-echo "Esto te permite acceder a la aplicación desde internet sin abrir puertos."
-echo "Puedes obtener el token en: https://one.dash.cloudflare.com/"
-echo ""
-read -p "Token de Cloudflare Tunnel (Enter para omitir): " CF_TOKEN
+# Usar variable de entorno o argumento si está disponible
+CF_TOKEN="${CF_TUNNEL_TOKEN:-$PROVIDED_CF_TUNNEL_TOKEN}"
+
+if [ "$UNATTENDED" = true ]; then
+    if [ -n "$CF_TOKEN" ]; then
+        print_status "Configurando Cloudflare Tunnel desde variable de entorno..."
+    else
+        print_status "Cloudflare Tunnel omitido (no se proporcionó CF_TUNNEL_TOKEN)"
+    fi
+else
+    if [ -z "$CF_TOKEN" ]; then
+        echo "Si tienes un Cloudflare Tunnel, puedes configurarlo ahora."
+        echo "Esto te permite acceder a la aplicación desde internet sin abrir puertos."
+        echo "Puedes obtener el token en: https://one.dash.cloudflare.com/"
+        echo ""
+        read -p "Token de Cloudflare Tunnel (Enter para omitir): " CF_TOKEN
+    fi
+fi
 
 if [ -n "$CF_TOKEN" ]; then
     print_status "Instalando cloudflared..."
@@ -564,12 +700,19 @@ if [ -n "$CF_TOKEN" ]; then
 echo "  URL Cloudflare: Revisa tu dashboard de Cloudflare"
 fi
 echo ""
+echo -e "${CYAN}Directorios de archivos:${NC}"
+echo "  Entrada (inbox): $APP_DIR/inbox"
+echo "  Exportaciones:   $APP_DIR/exports"
+echo ""
 echo -e "${CYAN}Comandos útiles:${NC}"
 echo "  Estado:        sudo systemctl status $APP_NAME"
 echo "  Logs:          sudo journalctl -u $APP_NAME -f"
 echo "  Reiniciar:     sudo systemctl restart $APP_NAME"
 echo "  Actualizar:    sudo $APP_DIR/update.sh"
 echo "  Backup:        sudo $APP_DIR/backup.sh"
+echo ""
+echo -e "${CYAN}Subir manuscritos:${NC}"
+echo "  scp archivo.docx usuario@$SERVER_IP:$APP_DIR/inbox/"
 echo ""
 echo -e "${CYAN}Archivos importantes:${NC}"
 echo "  Configuración: $CONFIG_DIR/env"

@@ -102,18 +102,49 @@ git --version
 
 ## Instalacion Rapida
 
-### 1. Descargar e instalar
+### Opcion A: Instalacion Interactiva
 
 ```bash
 # Clonar repositorio
 git clone https://github.com/atreyu1968/escritorasdgemini.git
 cd escritorasdgemini
 
-# Ejecutar instalador
+# Ejecutar instalador (te pedira las configuraciones)
 sudo bash install.sh
 ```
 
-### 2. Durante la instalacion
+### Opcion B: Instalacion Desatendida (Sin Interaccion)
+
+Ideal para automatizacion y scripts de despliegue:
+
+```bash
+# Clonar repositorio
+git clone https://github.com/atreyu1968/escritorasdgemini.git
+cd escritorasdgemini
+
+# Instalacion con variables de entorno
+sudo GEMINI_API_KEY="tu-api-key-aqui" bash install.sh --unattended
+
+# O con todos los parametros opcionales
+sudo GEMINI_API_KEY="tu-api-key" \
+     LITAGENTS_PASSWORD="tu-contrasena" \
+     DEEPSEEK_API_KEY="opcional" \
+     CF_TUNNEL_TOKEN="token-cloudflare-opcional" \
+     bash install.sh --unattended
+```
+
+Tambien puedes usar argumentos de linea de comandos:
+
+```bash
+sudo bash install.sh --unattended \
+    --gemini-key="tu-api-key" \
+    --password="tu-contrasena" \
+    --cf-token="token-cloudflare"
+```
+
+Ver todas las opciones: `bash install.sh --help`
+
+### Durante la instalacion interactiva
 
 El instalador te pedira las siguientes configuraciones:
 
