@@ -124,6 +124,9 @@ El instalador te pedira las siguientes configuraciones:
 - `DEEPSEEK_API_KEY`: Para generacion de novelas
 - `DEEPSEEK_TRANSLATOR_API_KEY`: Para traduccion de manuscritos
 
+**Seguridad:**
+- `LITAGENTS_PASSWORD`: Contrasena para proteger el acceso (opcional)
+
 **Otras opciones:**
 - `Cloudflare Tunnel Token`: Para acceso HTTPS externo (opcional)
 
@@ -147,6 +150,7 @@ sudo nano /etc/litagents/env
 GEMINI_API_KEY=tu_clave_gemini
 DEEPSEEK_API_KEY=tu_clave_deepseek
 DEEPSEEK_TRANSLATOR_API_KEY=tu_clave_traductor
+LITAGENTS_PASSWORD=tu_contrasena
 
 # Guardar y salir (Ctrl+O, Enter, Ctrl+X)
 
@@ -263,6 +267,7 @@ sudo chown -R litagents:litagents /var/www/litagents
 | `GEMINI_API_KEY` | API key de Google Gemini | Si |
 | `DEEPSEEK_API_KEY` | API key de DeepSeek | Opcional |
 | `DEEPSEEK_TRANSLATOR_API_KEY` | API key de DeepSeek - Traductor | Opcional |
+| `LITAGENTS_PASSWORD` | Contrasena de acceso | Opcional |
 | `SECURE_COOKIES` | true/false para cookies seguras | Si (auto) |
 | `PORT` | Puerto de la aplicacion | Si (auto: 5000) |
 

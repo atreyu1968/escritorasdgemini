@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { queueManager } from "./queue-manager";
 import { autoResumeReeditProjects, startWatchdog } from "./reedit-auto-resume";
+import { setupAuth, authMiddleware, isAuthEnabled } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -24,6 +25,10 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+
+setupAuth(app);
+
+app.use(authMiddleware);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

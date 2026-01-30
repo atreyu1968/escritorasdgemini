@@ -87,6 +87,20 @@ if [ "$IS_UPDATE" = false ]; then
     read -p "DEEPSEEK_TRANSLATOR_API_KEY (opcional): " INPUT_DEEPSEEK_TRANSLATOR_KEY
     DEEPSEEK_TRANSLATOR_API_KEY="${INPUT_DEEPSEEK_TRANSLATOR_KEY:-}"
     
+    echo ""
+    echo "=== Configuracion de Seguridad ==="
+    echo "(Opcional) Configura una contrasena para proteger el acceso a la aplicacion."
+    echo "Presiona Enter para omitir (acceso sin contrasena)."
+    read -sp "LITAGENTS_PASSWORD (opcional): " INPUT_PASSWORD
+    echo ""
+    LITAGENTS_PASSWORD="${INPUT_PASSWORD:-}"
+    
+    if [ -n "$LITAGENTS_PASSWORD" ]; then
+        print_success "Contrasena configurada"
+    else
+        print_status "Acceso sin contrasena (cualquiera podra acceder)"
+    fi
+    
     # Generar credenciales
     DB_PASS=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)
     SESSION_SECRET=$(openssl rand -base64 32)
@@ -227,6 +241,7 @@ SESSION_SECRET=$SESSION_SECRET
 GEMINI_API_KEY=$GEMINI_API_KEY
 DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
 DEEPSEEK_TRANSLATOR_API_KEY=$DEEPSEEK_TRANSLATOR_API_KEY
+LITAGENTS_PASSWORD=$LITAGENTS_PASSWORD
 SECURE_COOKIES=false
 EOF
     

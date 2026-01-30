@@ -9,6 +9,10 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ProjectProvider, useProject } from "@/lib/project-context";
 import { ProjectSelector } from "@/components/project-selector";
+import { LoginForm } from "@/components/login-form";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { LogOut, Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import ManuscriptPage from "@/pages/manuscript";
@@ -58,40 +62,91 @@ function GlobalProjectSelector() {
   );
 }
 
-function App() {
+function LogoutButton() {
+  const { authEnabled, logout } = useAuth();
+  
+  if (!authEnabled) return null;
+  
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Error al cerrar sesion:", err);
+    }
+  };
+  
+  return (
+    <Button
+      data-testid="button-logout"
+      variant="ghost"
+      size="icon"
+      onClick={handleLogout}
+      title="Cerrar sesion"
+    >
+      <LogOut className="h-4 w-4" />
+    </Button>
+  );
+}
+
+function AuthenticatedApp() {
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
+    <ProjectProvider>
+      <SidebarProvider style={style as React.CSSProperties}>
+        <div className="flex h-screen w-full">
+          <AppSidebar />
+          <div className="flex flex-col flex-1 min-w-0">
+            <header className="flex items-center justify-between gap-4 p-3 border-b shrink-0 sticky top-0 z-50 bg-background">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <div className="flex items-center gap-3">
+                <GlobalProjectSelector />
+                <ThemeToggle />
+                <LogoutButton />
+              </div>
+            </header>
+            <main className="flex-1 overflow-auto">
+              <Router />
+            </main>
+            <footer className="flex items-center justify-center gap-2 px-3 py-1.5 border-t text-xs text-muted-foreground shrink-0">
+              <img src={asdLogo} alt="ASD" className="h-4 w-auto" />
+              <span>&copy; {new Date().getFullYear()} Atreyu Servicios Digitales</span>
+            </footer>
+          </div>
+        </div>
+      </SidebarProvider>
+      <Toaster />
+    </ProjectProvider>
+  );
+}
+
+function AppContent() {
+  const { isLoading, authEnabled, authenticated } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (authEnabled && !authenticated) {
+    return <LoginForm />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <ProjectProvider>
-            <SidebarProvider style={style as React.CSSProperties}>
-              <div className="flex h-screen w-full">
-                <AppSidebar />
-                <div className="flex flex-col flex-1 min-w-0">
-                  <header className="flex items-center justify-between gap-4 p-3 border-b shrink-0 sticky top-0 z-50 bg-background">
-                    <SidebarTrigger data-testid="button-sidebar-toggle" />
-                    <div className="flex items-center gap-3">
-                      <GlobalProjectSelector />
-                      <ThemeToggle />
-                    </div>
-                  </header>
-                  <main className="flex-1 overflow-auto">
-                    <Router />
-                  </main>
-                  <footer className="flex items-center justify-center gap-2 px-3 py-1.5 border-t text-xs text-muted-foreground shrink-0">
-                    <img src={asdLogo} alt="ASD" className="h-4 w-auto" />
-                    <span>&copy; {new Date().getFullYear()} Atreyu Servicios Digitales</span>
-                  </footer>
-                </div>
-              </div>
-            </SidebarProvider>
-            <Toaster />
-          </ProjectProvider>
+          <AppContent />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
