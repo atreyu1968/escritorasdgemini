@@ -1,0 +1,281 @@
+LitAgents - Sistema de Orquestación de Agentes Literarios IA
+Sistema autónomo de orquestación de agentes de IA para la escritura, edición y producción de novelas completas.
+
+Características Principales
+Generador de Novelas (LitAgents 2.0): Pipeline basado en escenas con 6 agentes especializados
+Re-editor de Manuscritos (LitEditors): Editor de desarrollo con auditoría forense de consistencia
+Traductor de Novelas (LitTranslators 2.0): Sistema de traducción literaria con revisión nativa
+World Bible: Base de datos de consistencia para personajes, ubicaciones y reglas del mundo
+Seguimiento de Costos: Tracking granular de uso de tokens por proyecto
+Autenticación: Protección con contraseña para instalaciones en servidor propio
+Novedades v2.1
+Native Beta Reader (Revisor Nativo)
+Revisión como hablante nativo: Analiza traducciones desde la perspectiva de un lector nativo del idioma destino
+Soporte multi-idioma: Español, Inglés, Francés, Alemán, Italiano, Portugués, Catalán
+Feedback por género literario: Expectativas específicas para Romance, Fantasía, Misterio, Thriller, Ciencia Ficción, Horror, Literaria, Histórica
+Correcciones automáticas: Aplica correcciones directamente al texto traducido
+Panel de resumen: Muestra puntuaciones de calidad, fluidez, género y adaptación cultural en la interfaz
+Sistema de Autenticación
+Protección con contraseña: Configurable durante la instalación
+Sesiones seguras: Cookies HTTPOnly con expiración de 24 horas
+Desactivable en Replit: Se desactiva automáticamente cuando se ejecuta en Replit
+Mejoras en el Generador (LitAgents 2.1)
+Módulo de Consistencia Universal: Inyección de restricciones antes de la planificación Y escritura
+Guardian de Consistencia: Validación después de cada capítulo con reescritura forzada si hay violaciones
+Zero-tolerance rewrites: El sistema garantiza que no se produzcan errores de continuidad
+Mejoras en el Re-editor (LitEditors)
+Forensic Consistency Auditor: Detecta errores de consistencia existentes en manuscritos
+Beta Reader comercial: Análisis de viabilidad comercial con comparaciones de mercado
+Agentes del Sistema
+Generador (LitAgents 2.0):
+
+Global Architect - Planificación de estructura narrativa
+Chapter Architect - Diseño de escenas por capítulo (recibe restricciones de consistencia)
+Ghostwriter V2 - Escritura creativa de escenas (recibe restricciones de consistencia)
+Smart Editor - Edición y refinamiento
+Summarizer - Generación de resúmenes
+Narrative Director - Control de coherencia narrativa
+Re-editor (LitEditors):
+
+Forensic Consistency Auditor - Detección de errores de consistencia
+Beta Reader - Análisis de viabilidad comercial
+Copyeditor - Corrección de estilo
+Final Reviewer - Evaluación final
+Traductor (LitTranslators 2.0):
+
+Strategist - Análisis de estilo y tipografía
+Drafter - Traducción inicial preservando contexto
+Proofreader - Revisión y corrección
+Native Beta Reader - Revisión como hablante nativo con feedback por género
+Requisitos del Sistema
+Ubuntu 22.04 / 24.04 LTS
+4GB RAM mínimo (8GB recomendado)
+20GB espacio en disco
+Conexión a internet
+Preparación del Servidor Ubuntu
+Antes de instalar LitAgents, asegúrate de que tu servidor Ubuntu esté actualizado y tenga las herramientas básicas instaladas.
+
+Actualizar el sistema
+# Actualizar lista de paquetes
+sudo apt update
+
+# Actualizar todos los paquetes instalados
+sudo apt upgrade -y
+
+# (Opcional) Actualizar el sistema completo incluyendo kernel
+sudo apt full-upgrade -y
+
+# Limpiar paquetes obsoletos
+sudo apt autoremove -y
+Instalar herramientas necesarias
+# Instalar curl, git y otras herramientas básicas
+sudo apt install -y curl git wget nano build-essential
+
+# Verificar instalación
+curl --version
+git --version
+Instalación Rápida
+1. Descargar e instalar
+# Clonar repositorio
+git clone https://github.com/atreyu1968/API-Orchestrator-II.git
+cd API-Orchestrator-II
+
+# Ejecutar instalador
+sudo bash install.sh
+2. Durante la instalación
+El instalador te pedirá las siguientes configuraciones:
+
+DeepSeek (3 claves separadas para gestión de cuotas):
+
+DEEPSEEK_API_KEY (Escritor): Para generación de novelas
+DEEPSEEK_TRANSLATOR_API_KEY (Traductor): Para traducción de manuscritos
+DEEPSEEK_REEDITOR_API_KEY (Re-editor): Para edición de manuscritos
+Otras:
+
+Gemini API Key: Alternativa a DeepSeek
+Contraseña de acceso: Para proteger la aplicación (opcional)
+Cloudflare Tunnel Token: Para acceso HTTPS externo
+Nota: Puedes usar la misma clave de DeepSeek para las tres funciones, o crear claves separadas en la plataforma DeepSeek para mejor control de cuotas y costos.
+
+3. Acceder a la aplicación
+http://TU_IP_SERVIDOR
+Si configuraste una contraseña, verás una pantalla de login antes de acceder a la aplicación.
+
+Configuración Manual de API Keys
+Si omitiste las claves durante la instalación:
+
+# Editar configuración
+sudo nano /etc/litagents/env
+
+# Agregar/modificar estas líneas:
+# DeepSeek (puedes usar la misma clave para las 3, o diferentes)
+DEEPSEEK_API_KEY=tu_clave_escritor
+DEEPSEEK_TRANSLATOR_API_KEY=tu_clave_traductor
+DEEPSEEK_REEDITOR_API_KEY=tu_clave_reeditor
+
+# Gemini (alternativa)
+GEMINI_API_KEY=tu_clave_gemini
+
+# Contraseña de acceso (dejar vacío para desactivar)
+LITAGENTS_PASSWORD=tu_contraseña
+
+# Guardar y salir (Ctrl+O, Enter, Ctrl+X)
+
+# Reiniciar servicio
+sudo systemctl restart litagents
+Obtener API Keys
+DeepSeek (Recomendado - Principal)
+Visita https://platform.deepseek.com/
+Crea una cuenta y agrega créditos
+Genera una API key
+Google Gemini (Alternativo)
+Visita https://aistudio.google.com/
+Crea un proyecto y habilita la API
+Genera una API key
+Comandos de Administración
+# Ver estado del servicio
+systemctl status litagents
+
+# Ver logs en tiempo real
+journalctl -u litagents -f
+
+# Reiniciar servicio
+sudo systemctl restart litagents
+
+# Detener servicio
+sudo systemctl stop litagents
+
+# Iniciar servicio
+sudo systemctl start litagents
+Actualización
+Para actualizar a la última versión:
+
+cd /var/www/litagents
+sudo bash install.sh
+El instalador detectará la instalación existente y preservará:
+
+Credenciales de base de datos
+API keys configuradas
+Contraseña de acceso
+Proyectos existentes
+Estructura de Archivos
+/var/www/litagents/     # Código de la aplicación
+/etc/litagents/env      # Configuración y variables de entorno
+/etc/systemd/system/litagents.service  # Servicio systemd
+/etc/nginx/sites-available/litagents   # Configuración Nginx
+Acceso Externo con Cloudflare Tunnel
+Si necesitas acceso externo con HTTPS:
+
+Crea un túnel en https://one.dash.cloudflare.com/
+Obtén el token del túnel
+Ejecuta el instalador y proporciona el token
+Configura el hostname del túnel apuntando a http://localhost:5000
+Solución de Problemas
+El servicio no inicia
+# Ver logs de error
+journalctl -u litagents -n 50
+
+# Verificar configuración
+cat /etc/litagents/env
+
+# Verificar PostgreSQL
+systemctl status postgresql
+Error de conexión a base de datos
+# Verificar que PostgreSQL está corriendo
+sudo systemctl start postgresql
+
+# Probar conexión manual
+sudo -u postgres psql -c "\l"
+Login no funciona
+Si usas Cloudflare Tunnel, verifica que SECURE_COOKIES=true está configurado. Sin HTTPS, debe ser SECURE_COOKIES=false.
+
+Permisos de archivos
+# Reparar permisos
+sudo chown -R litagents:litagents /var/www/litagents
+Variables de Entorno
+Variable	Descripción	Requerido
+DATABASE_URL	URL de conexión PostgreSQL	Sí (auto)
+SESSION_SECRET	Secreto para sesiones	Sí (auto)
+DEEPSEEK_API_KEY	API key de DeepSeek - Escritor	Recomendado
+DEEPSEEK_TRANSLATOR_API_KEY	API key de DeepSeek - Traductor	Opcional*
+DEEPSEEK_REEDITOR_API_KEY	API key de DeepSeek - Re-editor	Opcional*
+GEMINI_API_KEY	API key de Google Gemini	Opcional
+LITAGENTS_PASSWORD	Contraseña de acceso	Opcional
+SECURE_COOKIES	true/false para cookies seguras	Sí (auto)
+PORT	Puerto de la aplicación	Sí (auto: 5000)
+*Si no se configuran, se usa DEEPSEEK_API_KEY como fallback.
+
+Backup de Base de Datos
+# Crear backup
+sudo -u postgres pg_dump litagents > backup_$(date +%Y%m%d).sql
+
+# Restaurar backup
+sudo -u postgres psql litagents < backup_20240101.sql
+Desinstalación
+# Detener y deshabilitar servicio
+sudo systemctl stop litagents
+sudo systemctl disable litagents
+
+# Eliminar archivos
+sudo rm -rf /var/www/litagents
+sudo rm -rf /etc/litagents
+sudo rm /etc/systemd/system/litagents.service
+sudo rm /etc/nginx/sites-enabled/litagents
+sudo rm /etc/nginx/sites-available/litagents
+
+# Eliminar base de datos (opcional)
+sudo -u postgres psql -c "DROP DATABASE litagents;"
+sudo -u postgres psql -c "DROP USER litagents;"
+
+# Recargar servicios
+sudo systemctl daemon-reload
+sudo systemctl restart nginx
+Licencia
+MIT License
+
+Soporte
+Para reportar problemas o solicitar funciones, abre un issue en el repositorio de GitHub.
+
+About
+Repository for https://replit.com/t/atreyu-servicios-digitales/repls/API-Orchestrator-II
+
+replit.com/t/atreyu-servicios-digitales/repls/API-Orchestrator-II
+Resources
+ Readme
+ Activity
+Stars
+ 0 stars
+Watchers
+ 0 watching
+Forks
+ 0 forks
+Releases
+No releases published
+Create a new release
+Packages
+No packages published
+Publish your first package
+Languages
+TypeScript
+99.0%
+ 
+Other
+1.0%
+Suggested workflows
+Based on your tech stack
+Deno logo
+Deno
+Test your Deno project
+SLSA Generic generator logo
+SLSA Generic generator
+Generate SLSA3 provenance for your existing release workflows
+Webpack logo
+Webpack
+Build a NodeJS project with npm and webpack.
+More workflows
+Footer
+© 2026 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
