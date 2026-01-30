@@ -2249,6 +2249,154 @@ ${series.seriesGuide.substring(0, 50000)}`;
     })),
   });
 
+  // ========== SERVER FILE STORAGE ROUTES ==========
+  const {
+    listInboxFiles,
+    readInboxFile,
+    deleteInboxFile,
+    moveToProcessed,
+    saveExportFile,
+    listExportFiles,
+    readExportFile,
+    deleteExportFile,
+    getStorageInfo,
+  } = await import("./services/file-storage");
+
+  app.get("/api/server-files/info", async (req: Request, res: Response) => {
+    try {
+      const info = getStorageInfo();
+      res.json(info);
+    } catch (error) {
+      console.error("Error getting storage info:", error);
+      res.status(500).json({ error: "Failed to get storage info" });
+    }
+  });
+
+  app.get("/api/server-files/inbox", async (req: Request, res: Response) => {
+    try {
+      const files = listInboxFiles();
+      res.json(files);
+    } catch (error) {
+      console.error("Error listing inbox files:", error);
+      res.status(500).json({ error: "Failed to list inbox files" });
+    }
+  });
+
+  app.get("/api/server-files/inbox/:filename", async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+      const buffer = readInboxFile(filename);
+      if (!buffer) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      
+      const ext = filename.toLowerCase().split(".").pop();
+      let content = "";
+      
+      if (ext === "docx" || ext === "doc") {
+        const mammoth = await import("mammoth");
+        const result = await mammoth.extractRawText({ buffer });
+        content = result.value;
+      } else {
+        content = buffer.toString("utf-8");
+      }
+      
+      res.json({ filename, content, size: buffer.length });
+    } catch (error) {
+      console.error("Error reading inbox file:", error);
+      res.status(500).json({ error: "Failed to read file" });
+    }
+  });
+
+  app.delete("/api/server-files/inbox/:filename", async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+      const deleted = deleteInboxFile(filename);
+      if (!deleted) {
+        return res.status(404).json({ error: "File not found or could not be deleted" });
+      }
+      res.json({ success: true, message: "File deleted" });
+    } catch (error) {
+      console.error("Error deleting inbox file:", error);
+      res.status(500).json({ error: "Failed to delete file" });
+    }
+  });
+
+  app.post("/api/server-files/inbox/:filename/process", async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+      const moved = moveToProcessed(filename);
+      if (!moved) {
+        return res.status(404).json({ error: "File not found or could not be moved" });
+      }
+      res.json({ success: true, message: "File moved to processed folder" });
+    } catch (error) {
+      console.error("Error processing inbox file:", error);
+      res.status(500).json({ error: "Failed to process file" });
+    }
+  });
+
+  app.get("/api/server-files/exports", async (req: Request, res: Response) => {
+    try {
+      const files = listExportFiles();
+      res.json(files);
+    } catch (error) {
+      console.error("Error listing export files:", error);
+      res.status(500).json({ error: "Failed to list export files" });
+    }
+  });
+
+  app.get("/api/server-files/exports/:filename/download", async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+      const buffer = readExportFile(filename);
+      if (!buffer) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error downloading export file:", error);
+      res.status(500).json({ error: "Failed to download file" });
+    }
+  });
+
+  app.delete("/api/server-files/exports/:filename", async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+      const deleted = deleteExportFile(filename);
+      if (!deleted) {
+        return res.status(404).json({ error: "File not found or could not be deleted" });
+      }
+      res.json({ success: true, message: "File deleted" });
+    } catch (error) {
+      console.error("Error deleting export file:", error);
+      res.status(500).json({ error: "Failed to delete file" });
+    }
+  });
+
+  app.post("/api/server-files/save-export", async (req: Request, res: Response) => {
+    try {
+      const { filename, content } = req.body;
+      if (!filename || !content) {
+        return res.status(400).json({ error: "Filename and content are required" });
+      }
+      
+      const savedPath = saveExportFile(filename, content);
+      if (!savedPath) {
+        return res.status(500).json({ error: "Failed to save file" });
+      }
+      
+      res.json({ success: true, path: savedPath });
+    } catch (error) {
+      console.error("Error saving export file:", error);
+      res.status(500).json({ error: "Failed to save file" });
+    }
+  });
+  // ========== END SERVER FILE STORAGE ROUTES ==========
+
   app.get("/api/imported-manuscripts", async (req: Request, res: Response) => {
     try {
       const manuscripts = await storage.getAllImportedManuscripts();

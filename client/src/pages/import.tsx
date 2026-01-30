@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { ServerFilePicker } from "@/components/server-file-picker";
 import { 
   Upload, 
   FileText, 
@@ -23,7 +24,8 @@ import {
   AlertCircle,
   Languages,
   Pencil,
-  Download
+  Download,
+  HardDrive,
 } from "lucide-react";
 import type { ImportedManuscript, ImportedChapter } from "@shared/schema";
 
@@ -600,8 +602,10 @@ function ManuscriptDetail({ manuscriptId, onBack }: { manuscriptId: number; onBa
 export default function ImportPage() {
   const { toast } = useToast();
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<number | null>(null);
+  const [importSource, setImportSource] = useState<"upload" | "server">("server");
   const [uploadState, setUploadState] = useState<{
     file: File | null;
+    serverFilename: string | null;
     title: string;
     targetLanguage: string;
     parsedChapters: { chapterNumber: number; title: string | null; content: string }[];
@@ -609,6 +613,7 @@ export default function ImportPage() {
     isParsing: boolean;
   }>({
     file: null,
+    serverFilename: null,
     title: "",
     targetLanguage: "es",
     parsedChapters: [],
@@ -631,14 +636,28 @@ export default function ImportPage() {
       targetLanguage: string;
       detectedLanguage: string;
       chapters: { chapterNumber: number; title: string | null; content: string }[];
+      serverFilename?: string | null;
     }) => {
       const res = await apiRequest("POST", "/api/imported-manuscripts", data);
-      return res.json();
+      const result = await res.json();
+      
+      if (data.serverFilename) {
+        try {
+          await apiRequest("POST", `/api/server-files/inbox/${encodeURIComponent(data.serverFilename)}/process`);
+        } catch (e) {
+          console.warn("Could not move file to processed:", e);
+        }
+      }
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/imported-manuscripts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/server-files/inbox'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/server-files/info'] });
       setUploadState({
         file: null,
+        serverFilename: null,
         title: "",
         targetLanguage: "es",
         parsedChapters: [],
@@ -722,15 +741,48 @@ export default function ImportPage() {
     }
   }, [toast]);
 
-  const handleImport = useCallback(() => {
-    if (!uploadState.file || uploadState.parsedChapters.length === 0) return;
+  const handleServerFileSelect = useCallback((filename: string, content: string) => {
+    setUploadState(prev => ({
+      ...prev,
+      serverFilename: filename,
+      title: filename.replace(/\.[^/.]+$/, ""),
+      isParsing: true,
+    }));
 
+    try {
+      const chapters = parseChaptersFromText(content);
+      setUploadState(prev => ({
+        ...prev,
+        parsedChapters: chapters,
+        isParsing: false,
+      }));
+      toast({
+        title: "Archivo procesado",
+        description: `Se detectaron ${chapters.length} capitulo(s)`,
+      });
+    } catch (error) {
+      setUploadState(prev => ({ ...prev, isParsing: false, serverFilename: null }));
+      toast({
+        title: "Error al procesar",
+        description: error instanceof Error ? error.message : "Error desconocido",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const handleImport = useCallback(() => {
+    const hasSource = uploadState.file || uploadState.serverFilename;
+    if (!hasSource || uploadState.parsedChapters.length === 0) return;
+
+    const filename = uploadState.file?.name || uploadState.serverFilename || "manuscrito";
+    
     createManuscriptMutation.mutate({
-      title: uploadState.title || uploadState.file.name,
-      originalFileName: uploadState.file.name,
+      title: uploadState.title || filename,
+      originalFileName: filename,
       targetLanguage: uploadState.targetLanguage,
       detectedLanguage: uploadState.targetLanguage,
       chapters: uploadState.parsedChapters,
+      serverFilename: uploadState.serverFilename,
     });
   }, [uploadState, createManuscriptMutation]);
 
@@ -745,54 +797,85 @@ export default function ImportPage() {
     );
   }
 
+  const hasFileSelected = uploadState.file || uploadState.serverFilename;
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Importar Manuscrito</h1>
         <p className="text-muted-foreground">
-          Sube un manuscrito en Word para edición profesional por capítulos
+          Importa un manuscrito para edicion profesional por capitulos
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Subir Manuscrito
-            </CardTitle>
-            <CardDescription>
-              Soporta archivos .docx en inglés, francés, alemán, italiano, portugués y catalán
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="file">Archivo Word</Label>
-              <Input
-                id="file"
-                type="file"
-                accept=".docx,.doc"
-                onChange={handleFileChange}
-                disabled={uploadState.isParsing}
-                data-testid="input-file-upload"
+        <div className="space-y-4">
+          <Tabs value={importSource} onValueChange={(v) => setImportSource(v as "upload" | "server")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="server" className="flex items-center gap-2" data-testid="tab-server-files">
+                <HardDrive className="h-4 w-4" />
+                Archivos del Servidor
+              </TabsTrigger>
+              <TabsTrigger value="upload" className="flex items-center gap-2" data-testid="tab-upload">
+                <Upload className="h-4 w-4" />
+                Subir Archivo
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="server" className="mt-4">
+              <ServerFilePicker 
+                onFileSelect={handleServerFileSelect}
+                isProcessing={uploadState.isParsing}
               />
-            </div>
+            </TabsContent>
+            
+            <TabsContent value="upload" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Upload className="h-4 w-4" />
+                    Subir Manuscrito
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Soporta archivos .docx, .doc, .txt y .md
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="file">Archivo</Label>
+                    <Input
+                      id="file"
+                      type="file"
+                      accept=".docx,.doc,.txt,.md"
+                      onChange={handleFileChange}
+                      disabled={uploadState.isParsing}
+                      data-testid="input-file-upload"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
 
-            {uploadState.file && (
-              <>
+          {hasFileSelected && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Configurar Importacion</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="title">Título</Label>
+                  <Label htmlFor="title">Titulo</Label>
                   <Input
                     id="title"
                     value={uploadState.title}
                     onChange={(e) => setUploadState(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="Título del manuscrito"
+                    placeholder="Titulo del manuscrito"
                     data-testid="input-manuscript-title"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="language">Idioma de edición</Label>
+                  <Label htmlFor="language">Idioma de edicion</Label>
                   <Select
                     value={uploadState.targetLanguage}
                     onValueChange={(value) => setUploadState(prev => ({ ...prev, targetLanguage: value }))}
@@ -819,12 +902,12 @@ export default function ImportPage() {
 
                 {uploadState.parsedChapters.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Capítulos detectados: {uploadState.parsedChapters.length}</Label>
+                    <Label>Capitulos detectados: {uploadState.parsedChapters.length}</Label>
                     <ScrollArea className="h-32 border rounded-md p-2">
                       <ul className="space-y-1 text-sm">
                         {uploadState.parsedChapters.map((ch, i) => (
                           <li key={i} className="flex items-center gap-2">
-                            <Badge variant="outline">{getChapterBadge(ch.chapterNumber)}</Badge>
+                            <Badge variant="outline" className="no-default-hover-elevate no-default-active-elevate">{getChapterBadge(ch.chapterNumber)}</Badge>
                             <span className="truncate">{getChapterDisplayName(ch.chapterNumber, ch.title)}</span>
                             <span className="text-muted-foreground ml-auto text-xs">
                               {ch.content.split(/\s+/).length} palabras
@@ -845,10 +928,10 @@ export default function ImportPage() {
                   {createManuscriptMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Importar Manuscrito
                 </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         <Card>
           <CardHeader>

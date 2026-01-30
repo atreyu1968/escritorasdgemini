@@ -216,7 +216,11 @@ print_header "PASO 6: Guardando configuración"
 
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$LOG_DIR"
+mkdir -p "$APP_DIR/inbox"
+mkdir -p "$APP_DIR/exports"
 chown "$APP_USER:$APP_USER" "$LOG_DIR"
+chown "$APP_USER:$APP_USER" "$APP_DIR/inbox" 2>/dev/null || true
+chown "$APP_USER:$APP_USER" "$APP_DIR/exports" 2>/dev/null || true
 
 if [ "$IS_UPDATE" = true ]; then
     # En actualizaciones, preservar la configuración existente
@@ -243,6 +247,8 @@ DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
 DEEPSEEK_TRANSLATOR_API_KEY=$DEEPSEEK_TRANSLATOR_API_KEY
 LITAGENTS_PASSWORD=$LITAGENTS_PASSWORD
 SECURE_COOKIES=false
+LITAGENTS_INBOX_DIR=$APP_DIR/inbox
+LITAGENTS_EXPORTS_DIR=$APP_DIR/exports
 EOF
     
     chmod 600 "$CONFIG_DIR/env"

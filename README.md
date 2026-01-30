@@ -270,6 +270,52 @@ sudo chown -R litagents:litagents /var/www/litagents
 | `LITAGENTS_PASSWORD` | Contrasena de acceso | Opcional |
 | `SECURE_COOKIES` | true/false para cookies seguras | Si (auto) |
 | `PORT` | Puerto de la aplicacion | Si (auto: 5000) |
+| `LITAGENTS_INBOX_DIR` | Directorio de entrada de archivos | Opcional (auto) |
+| `LITAGENTS_EXPORTS_DIR` | Directorio de exportaciones | Opcional (auto) |
+
+## Sistema de Archivos del Servidor
+
+En servidores donde no es posible subir archivos desde el navegador, LitAgents permite importar manuscritos directamente desde el sistema de archivos.
+
+### Directorios
+
+| Directorio | Ubicacion | Proposito |
+|------------|-----------|-----------|
+| Entrada (inbox) | `/var/www/litagents/inbox/` | Coloca aqui los manuscritos a importar |
+| Exportaciones | `/var/www/litagents/exports/` | Aqui se guardan los archivos exportados |
+| Procesados | `/var/www/litagents/inbox/processed/` | Archivos ya procesados |
+
+### Como Subir Archivos al Servidor
+
+```bash
+# Usando SCP (desde tu maquina local)
+scp mi_manuscrito.docx usuario@tu-servidor:/var/www/litagents/inbox/
+
+# Usando SFTP
+sftp usuario@tu-servidor
+cd /var/www/litagents/inbox
+put mi_manuscrito.docx
+
+# Si estas en el servidor directamente
+cp /ruta/al/archivo.docx /var/www/litagents/inbox/
+```
+
+### Formatos Soportados
+
+- `.docx` - Microsoft Word (recomendado)
+- `.doc` - Microsoft Word antiguo
+- `.txt` - Texto plano
+- `.md` - Markdown
+
+### Flujo de Trabajo
+
+1. Copia el archivo al directorio `inbox`
+2. Abre la interfaz web y ve a "Importar Manuscrito"
+3. Selecciona la pestana "Archivos del Servidor"
+4. Haz clic en el archivo para cargarlo
+5. Configura titulo e idioma y pulsa "Importar"
+
+Los archivos procesados se mueven automaticamente a la carpeta `processed`.
 
 ## Backup de Base de Datos
 
