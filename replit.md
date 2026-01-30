@@ -41,9 +41,9 @@ Preferred communication style: Simple, everyday language.
 - **Key Tables**: `projects`, `chapters`, `worldBibles`, `thoughtLogs`, `agentStatuses`, `series`, `continuitySnapshots`, `importedManuscripts`, `importedChapters`. These tables store project metadata, chapter content, world-building elements, AI process logs, real-time status, series information, continuity summaries, and details on imported manuscripts.
 
 ### AI Integration
-- **Model**: Gemini 3 Pro Preview, accessed via Replit AI Integrations.
-- **Configuration**: Uses `thinkingBudget: 10000` for deep reasoning and `temperature: 1.0`, `topP: 0.95` for creative output.
-- **Client Setup**: Utilizes the `@google/genai` SDK with Replit's proxy, eliminating the need for an external API key.
+- **Model**: Gemini 3 Pro Preview, accessed via Google's Gemini API directly.
+- **Configuration**: Uses `thinkingBudget: 2048` for deep reasoning and `temperature: 1.0`, `topP: 0.95` for creative output.
+- **Client Setup**: Utilizes the `@google/genai` SDK with your own API key (`GEMINI_API_KEY`).
 
 ### Build System
 - **Development**: `tsx` for TypeScript execution with hot reload.
@@ -66,8 +66,37 @@ Preferred communication style: Simple, everyday language.
 ## External Dependencies
 
 ### AI Services
-- **Replit AI Integrations**: Provides access to the Gemini API using `AI_INTEGRATIONS_GEMINI_API_KEY` and `AI_INTEGRATIONS_GEMINI_BASE_URL` environment variables.
+- **Google Gemini API**: Direct access using your own API key (`GEMINI_API_KEY`).
 - **Models**: `gemini-3-pro-preview` for text generation, `gemini-2.5-flash-image` for image generation.
+
+## Deployment
+
+### Ubuntu Server Auto-Installer
+The project includes an `install.sh` script for automated deployment on Ubuntu 22.04/24.04 servers.
+
+**Features:**
+- Automatic installation of Node.js 20.x, PostgreSQL, and Nginx
+- systemd service management (more reliable than PM2)
+- Configuration stored in `/etc/litagents/env` (survives updates)
+- Optional Cloudflare Tunnel integration for HTTPS
+- Update and backup scripts included
+
+**Usage:**
+```bash
+# Download and run
+curl -fsSL https://raw.githubusercontent.com/atreyu1968/escritorasdgemini/main/install.sh | sudo bash
+
+# Or clone and run
+git clone https://github.com/atreyu1968/escritorasdgemini.git
+cd escritorasdgemini
+sudo bash install.sh
+```
+
+**Post-installation commands:**
+- Status: `sudo systemctl status litagents`
+- Logs: `sudo journalctl -u litagents -f`
+- Update: `sudo /var/www/litagents/update.sh`
+- Backup: `sudo /var/www/litagents/backup.sh`
 
 ### Database
 - **PostgreSQL**: Accessed via the `DATABASE_URL` environment variable.

@@ -1927,11 +1927,7 @@ export async function registerRoutes(
 
       const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY!,
-        httpOptions: { 
-          apiVersion: "",
-          baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL! 
-        },
+        apiKey: process.env.GEMINI_API_KEY!,
       });
 
       const extractionPrompt = `Analiza esta guía de serie literaria y extrae:
