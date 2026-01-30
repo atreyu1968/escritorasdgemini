@@ -71,7 +71,7 @@ export function ServerFilePicker({ onFileSelect, isProcessing }: ServerFilePicke
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await fetch("/api/server-files/inbox/upload", {
+      const response = await fetch("/api/upload/word", {
         method: "POST",
         body: formData,
       });
@@ -82,11 +82,10 @@ export function ServerFilePicker({ onFileSelect, isProcessing }: ServerFilePicke
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/server-files/inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/server-files/info"] });
+      onFileSelect(data.filename, data.content);
       toast({
-        title: "Archivo subido",
-        description: `${data.filename} se ha subido correctamente`,
+        title: "Archivo cargado",
+        description: `${data.filename} listo para procesar`,
       });
     },
     onError: (error: Error) => {
@@ -281,7 +280,7 @@ export function ServerFilePicker({ onFileSelect, isProcessing }: ServerFilePicke
         <div className="flex items-start gap-2 p-2 bg-muted rounded-md text-xs text-muted-foreground">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <div>
-            <p>Formatos permitidos: .docx, .doc, .txt, .md (max 50MB)</p>
+            <p>Formatos permitidos: .docx, .doc (max 10MB)</p>
           </div>
         </div>
       </CardContent>

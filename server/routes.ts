@@ -2337,31 +2337,6 @@ ${series.seriesGuide.substring(0, 50000)}`;
     }
   });
 
-  app.post("/api/server-files/inbox/upload", upload.single("file"), async (req: Request, res: Response) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No file provided" });
-      }
-      
-      const { saveInboxFile } = await import("./services/file-storage");
-      const result = saveInboxFile(req.file.originalname, req.file.buffer);
-      
-      if (!result.success) {
-        return res.status(400).json({ error: result.error });
-      }
-      
-      res.json({ 
-        success: true, 
-        message: "File uploaded successfully",
-        filename: path.basename(req.file.originalname),
-        path: result.path 
-      });
-    } catch (error) {
-      console.error("Error uploading file to inbox:", error);
-      res.status(500).json({ error: "Failed to upload file" });
-    }
-  });
-
   app.get("/api/server-files/exports", async (req: Request, res: Response) => {
     try {
       const files = listExportFiles();
