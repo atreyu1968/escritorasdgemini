@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,8 @@ import {
   RefreshCw,
   Trash2,
   HardDrive,
-  AlertCircle,
+  Upload,
+  Info,
 } from "lucide-react";
 
 interface ServerFile {
@@ -54,6 +55,7 @@ function formatDate(dateString: string): string {
 export function ServerFilePicker({ onFileSelect, isProcessing }: ServerFilePickerProps) {
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: storageInfo } = useQuery<StorageInfo>({
     queryKey: ["/api/server-files/info"],
@@ -64,6 +66,47 @@ export function ServerFilePicker({ onFileSelect, isProcessing }: ServerFilePicke
     queryKey: ["/api/server-files/inbox"],
     refetchInterval: 10000,
   });
+
+  const uploadFileMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/server-files/inbox/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Error al subir el archivo");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/server-files/inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/server-files/info"] });
+      toast({
+        title: "Archivo subido",
+        description: `${data.filename} se ha subido correctamente`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error al subir archivo",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      uploadFileMutation.mutate(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const loadFileMutation = useMutation({
     mutationFn: async (filename: string) => {
@@ -212,13 +255,33 @@ export function ServerFilePicker({ onFileSelect, isProcessing }: ServerFilePicke
           </ScrollArea>
         )}
 
-        <div className="flex items-start gap-2 p-2 bg-blue-500/10 rounded-md text-xs text-blue-600 dark:text-blue-400">
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          accept=".docx,.doc,.txt,.md"
+          className="hidden"
+          data-testid="input-file-upload"
+        />
+        
+        <Button
+          className="w-full"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadFileMutation.isPending || isProcessing}
+          data-testid="button-upload-file"
+        >
+          {uploadFileMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4 mr-2" />
+          )}
+          {uploadFileMutation.isPending ? "Subiendo..." : "Subir archivo"}
+        </Button>
+
+        <div className="flex items-start gap-2 p-2 bg-muted rounded-md text-xs text-muted-foreground">
+          <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium">Como subir archivos:</p>
-            <p className="mt-1 text-muted-foreground">
-              Usa SCP, SFTP o copia directa para colocar archivos en el directorio de entrada.
-            </p>
+            <p>Formatos permitidos: .docx, .doc, .txt, .md (max 50MB)</p>
           </div>
         </div>
       </CardContent>

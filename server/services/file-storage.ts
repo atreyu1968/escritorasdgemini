@@ -255,3 +255,31 @@ export function getStorageInfo(): { inboxDir: string; exportsDir: string; inboxF
     exportFiles: listExportFiles().length,
   };
 }
+
+export function saveInboxFile(filename: string, content: Buffer): { success: boolean; error?: string; path?: string } {
+  const basename = path.basename(filename);
+  
+  if (!isValidFilename(basename)) {
+    return { success: false, error: "Invalid filename or extension. Allowed: .docx, .doc, .txt, .md" };
+  }
+  
+  if (content.length > MAX_FILE_SIZE) {
+    return { success: false, error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` };
+  }
+  
+  const inboxDir = getInboxDir();
+  const filePath = path.join(inboxDir, basename);
+  
+  if (!isPathWithinDir(filePath, inboxDir)) {
+    return { success: false, error: "Security error: invalid path" };
+  }
+  
+  try {
+    fs.writeFileSync(filePath, content);
+    console.log("[FileStorage] Saved file to inbox:", filePath);
+    return { success: true, path: filePath };
+  } catch (error) {
+    console.error("[FileStorage] Error saving inbox file:", error);
+    return { success: false, error: "Failed to save file" };
+  }
+}
