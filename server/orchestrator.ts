@@ -43,13 +43,7 @@ interface ParsedWorldBible {
     personajes: any[];
     lugares: any[];
     reglas_lore: any[];
-    lexico_historico?: {
-      epoca?: string;
-      registro_linguistico?: string;
-      vocabulario_epoca_autorizado?: string[];
-      terminos_anacronicos_prohibidos?: string[];
-      notas_voz_historica?: string;
-    } | null;
+    epoca?: string | null;
     [key: string]: any;
   };
   escaleta_capitulos: any[];
@@ -213,13 +207,11 @@ export class Orchestrator {
   }
 
   // NOTA: La antigua tabla HISTORICAL_VOCABULARY (hardcoded por género) se
-  // eliminó en v6.6 porque generaba falsos positivos masivos: marcaba como
-  // anacrónicas palabras universales como "reloj", "minuto", "segundo",
-  // "carbono", "metrónomo", "estrés", etc., independientemente de la época
-  // real del proyecto. La fuente única de verdad ahora es
-  // worldBibleData.world_bible.lexico_historico, que el arquitecto define
-  // explícitamente al inicio de cada novela y se propaga a todos los agentes
-  // (editor, copyeditor, ghostwriter, surgeon, final reviewer).
+  // eliminó en v6.6 porque generaba falsos positivos masivos. La fuente única
+  // de verdad sobre la época es ahora worldBibleData.world_bible.epoca, una
+  // sola frase que el arquitecto declara al inicio. Cada agente posterior usa
+  // esa frase y aplica su propio criterio para decidir vocabulario, registro
+  // y posibles anacronismos — no hay listas mantenidas a mano.
 
   constructor(callbacks: OrchestratorCallbacks) {
     this.callbacks = callbacks;
@@ -1359,7 +1351,7 @@ Este es el intento #${wordCountRetries} de ${MAX_WORD_COUNT_RETRIES}.`;
           chapterNumber: sectionData.numero,
           chapterTitle: sectionData.titulo,
           guiaEstilo: styleGuideContent || undefined,
-          lexicoHistorico: worldBibleData.world_bible?.lexico_historico || null,
+          epoca: worldBibleData.world_bible?.epoca || null,
         });
 
         await this.trackTokenUsage(project.id, polishResult.tokenUsage, "El Estilista", "gemini-2.5-flash", sectionData.numero, "polish");
@@ -2001,7 +1993,7 @@ Este es el intento #${wordCountRetries} de ${MAX_WORD_COUNT_RETRIES}.`;
           chapterNumber: sectionData.numero,
           chapterTitle: sectionData.titulo,
           guiaEstilo: styleGuideContent || undefined,
-          lexicoHistorico: worldBibleData.world_bible?.lexico_historico || null,
+          epoca: worldBibleData.world_bible?.epoca || null,
         });
 
         await this.trackTokenUsage(project.id, polishResult.tokenUsage, "El Estilista", "gemini-2.5-flash", sectionData.numero, "polish");
@@ -2330,7 +2322,7 @@ Este es el intento #${wordCountRetries} de ${MAX_WORD_COUNT_RETRIES}.`;
         personajes: (worldBible.characters as Character[]) || [],
         lugares: lugares,
         reglas_lore: (worldBible.worldRules as WorldRule[]) || [],
-        lexico_historico: plotOutlineData?.lexico_historico || null,
+        epoca: plotOutlineData?.epoca || null,
       },
       escaleta_capitulos,
       premisa: plotOutlineData?.premise || project.premise || "",
@@ -5263,10 +5255,9 @@ Responde SOLO con un JSON válido con la estructura:
       parts.push(`\n✅ FORTALEZAS A MANTENER:\n${editorResult.fortalezas.map(f => `  + ${f}`).join("\n")}`);
     }
     
-    // El vocabulario de época viene ahora directamente del lexico_historico
-    // de la World Bible y se pasa al editor/copyeditor/ghostwriter por sus
-    // propios canales. No se inyecta aquí en el plan del cirujano para evitar
-    // duplicación y falsos positivos por género hardcoded.
+    // La época viene ahora directamente del campo "epoca" de la World Bible
+    // y se pasa al editor/copyeditor/ghostwriter por sus propios canales. No
+    // se inyecta aquí en el plan del cirujano para evitar duplicación.
 
     parts.push(`\n═══════════════════════════════════════════════════════════════════`);
     parts.push(`INSTRUCCIÓN FINAL: CORRIGE los problemas listados arriba SIN reescribir desde cero.`);
@@ -5497,7 +5488,7 @@ Responde SOLO con un JSON válido con la estructura:
           resolution: acts.acto3?.resolucion || "",
         },
       },
-      lexico_historico: data.world_bible?.lexico_historico || null,
+      epoca: data.world_bible?.epoca || null,
       chapterOutlines: (data.escaleta_capitulos || []).map((c: any) => ({
         number: c.numero,
         summary: c.objetivo_narrativo || "",
@@ -7299,7 +7290,7 @@ Devuelve el capítulo COMPLETO con las correcciones aplicadas y el resto del tex
         chapterNumber: sectionData.numero,
         chapterTitle: sectionData.titulo || `Capítulo ${sectionData.numero}`,
         guiaEstilo: styleGuideContent || undefined,
-        lexicoHistorico: worldBibleData.world_bible?.lexico_historico || null,
+        epoca: worldBibleData.world_bible?.epoca || null,
       });
 
       await this.trackTokenUsage(project.id, polishResult.tokenUsage, "El Estilista", "gemini-2.5-flash", sectionData.numero, "qa_polish");
@@ -7742,13 +7733,13 @@ Devuelve el capítulo COMPLETO con las correcciones aplicadas y el resto del tex
       `Puliendo voz y ritmo del capítulo ${chapter.chapterNumber}`
     );
 
-    let lexicoHistorico: any = null;
+    let epoca: string | null = null;
     try {
       const wb = await storage.getWorldBibleByProject(project.id);
       const plotOutline = wb?.plotOutline as any;
-      lexicoHistorico = plotOutline?.lexico_historico || null;
+      epoca = plotOutline?.epoca || null;
     } catch (e) {
-      lexicoHistorico = null;
+      epoca = null;
     }
 
     const copyEditResult = await this.copyeditor.execute({
@@ -7756,7 +7747,7 @@ Devuelve el capítulo COMPLETO con las correcciones aplicadas y el resto del tex
       chapterTitle: chapter.title || `Capítulo ${chapter.chapterNumber}`,
       chapterContent: chapter.content || "",
       guiaEstilo: `${styleGuideContent || "Tone: literary, professional"}\n\nCORRECCIONES DEL AUDITOR DE VOZ:\n${voiceIssues}\n\nAjusta el tono y ritmo según las indicaciones manteniendo el contenido narrativo.`,
-      lexicoHistorico,
+      epoca,
     });
 
     await this.trackTokenUsage(project.id, copyEditResult.tokenUsage, "El Estilista", "gemini-2.5-flash", chapter.chapterNumber, "voice_polish");

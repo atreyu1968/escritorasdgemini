@@ -108,37 +108,33 @@ DETECCIÓN DE ANACRONISMOS (BASADA EN LA ÉPOCA DECLARADA EN EL WORLD BIBLE)
 ═══════════════════════════════════════════════════════════════════
 
 PASO 0 — LEE LA ÉPOCA: Antes de detectar nada, lee el campo
-"world_bible.lexico_historico.epoca". Es la fuente única de verdad.
+"world_bible.epoca" (una sola frase, ej. "1888, Londres victoriano" o
+"Contemporánea, Madrid"). Es la fuente única de verdad.
 
 REGLAS DE ACTIVACIÓN:
 - Si "epoca" comienza con "Contemporánea" / "Actualidad" / "Presente" o describe
   una fecha en los últimos 30 años → la detección de anacronismos NO APLICA.
-  Salta esta sección entera. NO reportes anacronismos en novela contemporánea.
-- Si "epoca" describe una época histórica concreta (año, siglo, período histórico),
-  o un futuro alternativo, o un mundo secundario con tecnología equivalente declarada
-  → ACTIVA la detección con los criterios siguientes.
-- Si "epoca" está VACÍA o no parseable → reporta UNA debilidad informativa pidiendo
-  al arquitecto que la complete, y NO marques anacronismos (no tienes referencia).
+  Salta esta sección entera.
+- Si "epoca" describe un período histórico concreto, un futuro alternativo o un
+  mundo secundario con tecnología equivalente declarada → ACTIVA la detección.
+- Si "epoca" está VACÍA → reporta UNA debilidad informativa pidiendo al
+  arquitecto que la complete, y NO marques anacronismos (sin referencia).
 
 CUANDO LA DETECCIÓN ESTÁ ACTIVA:
 
-1. Usa como ÚNICA fuente de palabras prohibidas el campo
-   "world_bible.lexico_historico.terminos_anacronicos_prohibidos". NO inventes
-   listas propias. Si el ghostwriter usó cualquiera de esos términos → anacronismo.
-2. Detecta también anacronismos de razonamiento que el WB pueda no haber listado,
-   pero solo si son INEQUÍVOCOS para la época declarada (ej: un romano del s.I
-   hablando de "minutos exactos" o "bacterias"; un personaje de 1800 mencionando
-   "ADN" o "internet").
+1. Marca como anacronismo solo términos o conceptos INEQUÍVOCAMENTE posteriores
+   a la época declarada, aplicando tu propio criterio (ej: un romano del s.I
+   hablando de "bacterias", un personaje de 1800 mencionando "ADN" o "internet").
+2. NO marques palabras dudosas ("minuto", "reloj", "carbono" pueden ser válidas
+   según la época). Ante la duda, NO reportes.
 3. DISTINCIÓN NARRADOR vs DIÁLOGO:
-   - En diálogos: aplicar la regla con máximo rigor (los personajes solo conocen
-     su época).
-   - En narración con voz contemporánea declarada en el WB: mayor tolerancia léxica
-     (un narrador moderno puede decir "psicología" al describir un personaje
-     medieval). Solo marca como anacronismo si el narrador atribuye conocimiento
-     moderno al personaje.
-4. EXCEPCIÓN POR DISEÑO: si el WB declara "anacronismo deliberado" en
-   "registro_linguistico" o "notas_voz_historica" (steampunk, ucronía, viaje en
-   el tiempo, narrador omnisciente moderno), respeta esa decisión.
+   - En diálogos: rigor máximo (los personajes solo conocen su época).
+   - En narración con voz contemporánea declarada en la guía de estilo:
+     mayor tolerancia léxica. Solo marca anacronismo si el narrador atribuye
+     conocimiento moderno al personaje.
+4. EXCEPCIÓN POR DISEÑO: si la guía de estilo declara anacronismo deliberado
+   (steampunk, ucronía, viaje en el tiempo, narrador omnisciente moderno),
+   respeta esa decisión.
 
 REPORTE OBLIGATORIO (REGLA ANTI-ALUCINACIÓN):
 Cada anacronismo reportado DEBE incluir CITA LITERAL entre comillas dobles del

@@ -113,15 +113,14 @@ REGLAS OBLIGATORIAS:
 ═══════════════════════════════════════════════════════════════════
 🕰️ ÉPOCA DE LA ACCIÓN — UN ÚNICO CAMPO OBLIGATORIO
 ═══════════════════════════════════════════════════════════════════
-DEBES declarar el campo "world_bible.lexico_historico.epoca" con UNA frase corta:
+DEBES declarar el campo "world_bible.epoca" con UNA frase corta:
   - Histórica: "1888, Londres victoriano" / "Verano de 79 d.C., Pompeya".
   - Contemporánea: "Contemporánea, [ciudad/país]".
   - Futuro/sci-fi: "Año 3024, colonia marciana".
-  - Fantasía mundo secundario: "Mundo secundario, equivalente a [siglo X / cultura Y]".
+  - Fantasía mundo secundario: "Mundo secundario, equivalente al siglo XV".
 
-Los demás campos de "lexico_historico" son OPCIONALES y solo se rellenan si la
-novela es claramente HISTÓRICA (ambientada antes de 1980). Para novelas
-contemporáneas, futuristas o fantasía moderna, déjalos vacíos.
+Con esa única frase basta — los demás agentes saben qué vocabulario y registro
+corresponden a esa época y aplicarán su propio criterio.
 
 ═══════════════════════════════════════════════════════════════════
 FASE 1: WORLD BIBLE + ESTRUCTURA GLOBAL
@@ -176,13 +175,7 @@ Genera un JSON con estas claves:
   "temas_centrales": ["Los 2-3 temas filosóficos/morales"],
   "motivos_literarios": ["Símbolos recurrentes"],
   "vocabulario_prohibido": ["Palabras/frases cliché a EVITAR"],
-  "lexico_historico": {
-    "epoca": "Una frase corta. Ej: '1888, Londres victoriano' / 'Contemporánea, Madrid' / 'Año 3024, colonia marciana' / 'Mundo secundario, equivalente al siglo XV'. NUNCA vacío.",
-    "terminos_anacronicos_prohibidos": [],
-    "vocabulario_epoca_autorizado": [],
-    "registro_linguistico": "",
-    "notas_voz_historica": ""
-  },
+  "epoca": "Una frase corta. Ej: '1888, Londres victoriano' / 'Contemporánea, Madrid' / 'Año 3024, colonia marciana' / 'Mundo secundario, equivalente al siglo XV'. NUNCA vacío.",
   "paleta_sensorial_global": {
     "sentidos_dominantes": [],
     "imagenes_recurrentes_permitidas": [],

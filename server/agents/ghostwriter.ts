@@ -279,17 +279,18 @@ NOMBRES DE PERSONAJES - FIDELIDAD AL WORLD BIBLE
 - NUNCA inventes personajes nuevos que no existan en el World Bible o la escaleta.
 
 ═══════════════════════════════════════════════════════════════════
-LÉXICO HISTÓRICO - VOZ DE ÉPOCA (CRÍTICO)
+ÉPOCA DE LA ACCIÓN - VOZ DE ÉPOCA (CRÍTICO)
 ═══════════════════════════════════════════════════════════════════
-FUENTE ÚNICA DE VERDAD: la sección "lexico_historico" del World Bible declarada por el Arquitecto.
-- Si el World Bible declara una época histórica:
-  - NUNCA uses términos de "terminos_anacronicos_prohibidos" — son palabras modernas inaceptables para esa época.
-  - PRIORIZA el "vocabulario_epoca_autorizado" para mantener la voz histórica auténtica.
-  - Respeta el "registro_linguistico" indicado (formal/coloquial/técnico de época).
-  - Cuando dudes sobre una palabra, elige la alternativa más antigua/clásica coherente con la época.
-- Si el World Bible NO declara época (o indica "Contemporánea" / "Actualidad" / últimos 30 años):
-  - NO apliques restricciones de léxico histórico. Escribe con naturalidad moderna.
-- NO inventes prohibiciones por tu cuenta: limítate EXCLUSIVAMENTE a lo declarado en "lexico_historico".
+El World Bible declara la época en el campo "epoca" (una sola frase, ej.
+"1888, Londres victoriano" o "Contemporánea, Madrid"). Tú decides qué
+vocabulario y registro corresponden a esa época, aplicando tu criterio:
+- Si la época es HISTÓRICA: evita términos modernos obvios (informática,
+  psicología clínica, ciencia post-1900 si la época es anterior, etc.) y
+  prefiere léxico, oficios y referencias coherentes con el período.
+- Si la época es CONTEMPORÁNEA / ACTUALIDAD / últimos 30 años: escribe con
+  naturalidad moderna sin restricciones léxicas de época.
+- Cuando dudes sobre una palabra concreta, prefiere la alternativa más
+  neutra y atemporal antes que arriesgar un anacronismo evidente.
 
 ═══════════════════════════════════════════════════════════════════
 REGLAS DE CONTINUIDAD FÍSICA
@@ -606,16 +607,11 @@ export class GhostwriterAgent extends BaseAgent {
       }
     }
 
-    const lexico = wb.lexico_historico || wb.historicalVocabulary || null;
-    mappedKeys.add('lexico_historico'); mappedKeys.add('historicalVocabulary');
-    if (lexico && typeof lexico === 'object' && Object.keys(lexico).length > 0) {
-      parts.push(`\n📝 LÉXICO HISTÓRICO:`);
-      if (lexico.autorizado || lexico.allowed) {
-        parts.push(`  Autorizado: ${JSON.stringify(lexico.autorizado || lexico.allowed)}`);
-      }
-      if (lexico.prohibido || lexico.forbidden) {
-        parts.push(`  Prohibido: ${JSON.stringify(lexico.prohibido || lexico.forbidden)}`);
-      }
+    mappedKeys.add('epoca'); mappedKeys.add('lexico_historico');
+    const epoca = typeof wb.epoca === 'string' ? wb.epoca.trim() : "";
+    if (epoca) {
+      parts.push(`\n🕰️ ÉPOCA DE LA ACCIÓN: ${epoca}`);
+      parts.push(`  (Aplica tu criterio sobre vocabulario y registro coherentes con esta época.)`);
     }
 
     mappedKeys.add('_hilos_pendientes'); mappedKeys.add('_hilos_resueltos');
@@ -670,7 +666,7 @@ export class GhostwriterAgent extends BaseAgent {
     }
 
     mappedKeys.add('premisa'); mappedKeys.add('estructura_tres_actos');
-    mappedKeys.add('escaleta_capitulos'); mappedKeys.add('terminos_anacronicos_prohibidos');
+    mappedKeys.add('escaleta_capitulos');
     if (wb.premisa) {
       parts.push(`\n📌 PREMISA: ${typeof wb.premisa === 'string' ? wb.premisa : JSON.stringify(wb.premisa)}`);
     }
