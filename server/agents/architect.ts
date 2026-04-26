@@ -403,17 +403,47 @@ export class ArchitectAgent extends BaseAgent {
       phase1Json = repairJson(phase1Response.content);
       console.log(`[El Arquitecto] Fase 1: JSON parseado correctamente`);
     } catch (e) {
-      console.error(`[El Arquitecto] Fase 1: Error parseando JSON - ${(e as Error).message}`);
+      // Diagnóstico ampliado: extrae un fragmento alrededor del error para
+      // poder ver qué está mal (típico: comilla sin escapar, coma final).
+      const msg = (e as Error).message || "";
+      const posMatch = msg.match(/position\s+(\d+)/i);
+      let snippet = "";
+      if (posMatch) {
+        const pos = parseInt(posMatch[1], 10);
+        const start = Math.max(0, pos - 120);
+        const end = Math.min(phase1Response.content.length, pos + 120);
+        snippet = phase1Response.content
+          .slice(start, end)
+          .replace(/\s+/g, " ");
+      }
+      console.error(`[El Arquitecto] Fase 1: Error parseando JSON - ${msg}${snippet ? `\n[contexto] …${snippet}…` : ""}`);
       return {
         content: phase1Response.content,
-        error: `Phase 1 JSON parse error: ${(e as Error).message}`,
+        error: `Phase 1 JSON parse error: ${msg}`,
         timedOut: false,
         tokenUsage: phase1Response.tokenUsage,
         thoughtSignature: phase1Response.thoughtSignature,
       };
     }
 
-    console.log(`[El Arquitecto] Fase 1 completada. Personajes: ${phase1Json.world_bible?.personajes?.length || 0}, Arcos: ${phase1Json.matriz_arcos?.subtramas?.length || 0}`);
+    const phase1Personajes = phase1Json.world_bible?.personajes?.length || 0;
+    const phase1Arcos = phase1Json.matriz_arcos?.subtramas?.length || 0;
+    console.log(`[El Arquitecto] Fase 1 completada. Personajes: ${phase1Personajes}, Arcos: ${phase1Arcos}`);
+
+    // FAIL-FAST: si la Fase 1 no produjo personajes, no tiene sentido lanzar
+    // la Fase 2 (que tarda varios minutos y generará capítulos huérfanos sin
+    // referencias válidas). Mejor abortar ya y dejar que el orquestador
+    // reintente directamente la Fase 1.
+    if (phase1Personajes === 0) {
+      console.error(`[El Arquitecto] Fase 1: 0 personajes generados — abortando para reintentar sin desperdiciar Fase 2`);
+      return {
+        content: phase1Response.content,
+        error: `Phase 1 produjo 0 personajes (world_bible.personajes vacío o ausente). Reintento necesario.`,
+        timedOut: false,
+        tokenUsage: phase1Response.tokenUsage,
+        thoughtSignature: phase1Response.thoughtSignature,
+      };
+    }
 
     console.log(`[El Arquitecto] === FASE 2: Generando escaleta de ${input.chapterCount} capítulos ===`);
 

@@ -281,16 +281,15 @@ NOMBRES DE PERSONAJES - FIDELIDAD AL WORLD BIBLE
 ═══════════════════════════════════════════════════════════════════
 LÉXICO HISTÓRICO - VOZ DE ÉPOCA (CRÍTICO)
 ═══════════════════════════════════════════════════════════════════
-Consulta SIEMPRE la sección "lexico_historico" del World Bible:
-- NUNCA uses términos de "terminos_anacronicos_prohibidos" - son palabras modernas inaceptables
-- PRIORIZA el "vocabulario_epoca_autorizado" para mantener la voz histórica auténtica
-- Respeta el "registro_linguistico" indicado (formal/coloquial/técnico de época)
-- Cuando dudes sobre una palabra, elige la alternativa más antigua/clásica
-
-TÉRMINOS MODERNOS PROHIBIDOS EN FICCIÓN HISTÓRICA (lista por defecto):
-"burguesa", "estrés", "impacto" (metafórico), "enfocarse", "rol", "empoderamiento", "básico", 
-"literal", "problemática", "dinámico", "autoestima", "productivo", "agenda" (metafórico), 
-"contexto", "paradigma", "priorizar", "gestionar", "implementar", "escenario" (metafórico)
+FUENTE ÚNICA DE VERDAD: la sección "lexico_historico" del World Bible declarada por el Arquitecto.
+- Si el World Bible declara una época histórica:
+  - NUNCA uses términos de "terminos_anacronicos_prohibidos" — son palabras modernas inaceptables para esa época.
+  - PRIORIZA el "vocabulario_epoca_autorizado" para mantener la voz histórica auténtica.
+  - Respeta el "registro_linguistico" indicado (formal/coloquial/técnico de época).
+  - Cuando dudes sobre una palabra, elige la alternativa más antigua/clásica coherente con la época.
+- Si el World Bible NO declara época (o indica "Contemporánea" / "Actualidad" / últimos 30 años):
+  - NO apliques restricciones de léxico histórico. Escribe con naturalidad moderna.
+- NO inventes prohibiciones por tu cuenta: limítate EXCLUSIVAMENTE a lo declarado en "lexico_historico".
 
 ═══════════════════════════════════════════════════════════════════
 REGLAS DE CONTINUIDAD FÍSICA
