@@ -111,42 +111,26 @@ REGLAS OBLIGATORIAS:
 5. PROHIBIDO: Tramas donde la identidad del personaje sea deliberadamente ambigua sin resolución clara planificada
 
 ═══════════════════════════════════════════════════════════════════
-🕰️ ÉPOCA DE LA ACCIÓN — DEFINICIÓN OBLIGATORIA (CRÍTICO PARA ANACRONISMOS)
+🕰️ ÉPOCA DE LA ACCIÓN — UN ÚNICO CAMPO OBLIGATORIO
 ═══════════════════════════════════════════════════════════════════
-ANTES de escribir nada del JSON, define mentalmente la ÉPOCA EXACTA en la
-que ocurre la acción. Sin esto es IMPOSIBLE evitar anacronismos en los
-capítulos generados después.
+DEBES declarar el campo "world_bible.lexico_historico.epoca" con UNA frase corta:
+  - Histórica: "1888, Londres victoriano" / "Verano de 79 d.C., Pompeya".
+  - Contemporánea: "Contemporánea, [ciudad/país]".
+  - Futuro/sci-fi: "Año 3024, colonia marciana".
+  - Fantasía mundo secundario: "Mundo secundario, equivalente a [siglo X / cultura Y]".
 
-DEBES rellenar OBLIGATORIAMENTE el campo "world_bible.lexico_historico.epoca"
-con formato preciso:
-  - Si es novela histórica con período concreto: "Año(s) + Lugar geográfico".
-    Ej: "1888, Londres victoriano"; "Verano de 79 d.C., Pompeya";
-        "1936-1939, España (Guerra Civil)".
-  - Si es contemporánea: "Contemporánea, [ciudad/país]" o "Actualidad, Madrid".
-  - Si es futuro/sci-fi: "Futuro cercano (~2070), Tokio" / "Año 3024, colonia marciana".
-  - Si es fantasía con mundo secundario: "Mundo secundario, equivalente a [siglo X / cultura Y]".
-
-A partir de esa época concreta, RELLENA ADEMÁS:
-  - "terminos_anacronicos_prohibidos": lista de palabras/conceptos que NO existían
-    en esa época y que el ghostwriter NUNCA debe usar. Sé específico para la época
-    declarada (ej: para 1888 prohíbe "ordenador", "psicología clínica", "antibiótico";
-    para Roma 79 d.C. prohíbe "minuto exacto", "bacteria", "pólvora", "imprenta").
-    Mínimo 15 entradas para épocas históricas; vacío solo para contemporáneas.
-  - "vocabulario_epoca_autorizado": 15-30 términos auténticos del período que el
-    ghostwriter debería preferir (oficios, monedas, indumentaria, instituciones,
-    expresiones de época). Vacío solo para contemporáneas.
-  - "registro_linguistico": tipo de habla (formal cortesano / coloquial popular /
-    técnico jurídico / militar de campo / etc.) acorde a la época y los personajes.
-  - "notas_voz_historica": 2-4 frases con el matiz que el narrador debe mantener
-    para sonar de la época (sin caer en arcaísmo forzado).
-
-Si la novela es CONTEMPORÁNEA o FUTURISTA SIN restricciones de época, las listas
-pueden ir vacías PERO "epoca" debe estar declarada explícitamente para que los
-agentes posteriores sepan que NO hay restricciones (no es lo mismo que olvidarlo).
+Los demás campos de "lexico_historico" son OPCIONALES y solo se rellenan si la
+novela es claramente HISTÓRICA (ambientada antes de 1980). Para novelas
+contemporáneas, futuristas o fantasía moderna, déjalos vacíos.
 
 ═══════════════════════════════════════════════════════════════════
 FASE 1: WORLD BIBLE + ESTRUCTURA GLOBAL
 ═══════════════════════════════════════════════════════════════════
+⛔ PRIORIDAD ABSOLUTA: el campo más importante de toda la Fase 1 es
+"world_bible.personajes". Sin personajes la novela no existe. Empieza el JSON
+generando los personajes con todo el detalle, y SOLO después rellena el resto.
+NUNCA devuelvas un JSON con "personajes" vacío o con menos de 3 personajes.
+
 En esta fase, genera SOLO la base de la novela: personajes, mundo, arcos y estructura de actos.
 NO generes la escaleta de capítulos (eso vendrá en la Fase 2).
 
@@ -193,7 +177,7 @@ Genera un JSON con estas claves:
   "motivos_literarios": ["Símbolos recurrentes"],
   "vocabulario_prohibido": ["Palabras/frases cliché a EVITAR"],
   "lexico_historico": {
-    "epoca": "OBLIGATORIO. Formato exacto: 'Año(s) + Lugar geográfico'. Ejemplos válidos: '1888, Londres victoriano', 'Verano de 79 d.C., Pompeya', '1936-1939, España (Guerra Civil)', '2024, Madrid contemporáneo', 'Futuro cercano (~2070), Tokio'. Si la novela es contemporánea, escribe 'Contemporánea' o 'Actualidad' + ciudad/país. Si es fantasía/sci-fi sin equivalente histórico, escribe 'Mundo secundario, equivalente tecnológico/cultural a [siglo X / época Y]'. NUNCA dejes este campo vacío — es la base para detectar anacronismos.",
+    "epoca": "Una frase corta. Ej: '1888, Londres victoriano' / 'Contemporánea, Madrid' / 'Año 3024, colonia marciana' / 'Mundo secundario, equivalente al siglo XV'. NUNCA vacío.",
     "terminos_anacronicos_prohibidos": [],
     "vocabulario_epoca_autorizado": [],
     "registro_linguistico": "",
