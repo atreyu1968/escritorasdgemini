@@ -833,6 +833,13 @@ ${chapterSummaries || "Sin capítulos disponibles"}
             architectInstructions: project.architectInstructions || undefined,
             kindleUnlimitedOptimized: (project as any).kindleUnlimitedOptimized || false,
             forbiddenNames,
+            // Heartbeat inter-fase: cada onAgentStatus dispara updateHeartbeat()
+            // en la cola y reinicia el contador de 15 min. Sin esto, novelas
+            // largas en las que Fase 1 + Fase 2 sumadas pasan de 15 min son
+            // marcadas como congeladas y reiniciadas a media generación.
+            onProgress: async (_phase, message) => {
+              this.callbacks.onAgentStatus("architect", "thinking", message);
+            },
           });
 
           await this.trackTokenUsage(project.id, architectResult.tokenUsage, "El Arquitecto", "gemini-2.5-flash", undefined, "world_bible");
@@ -4313,6 +4320,9 @@ Responde SOLO con un JSON válido con la estructura:
         hasEpilogue: false,
         hasAuthorNote: false,
         tone: project.tone,
+        onProgress: async (_phase, message) => {
+          this.callbacks.onAgentStatus("architect", "planning", message);
+        },
       });
 
       if (!architectResult.content) {

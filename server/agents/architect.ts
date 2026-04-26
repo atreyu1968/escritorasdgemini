@@ -15,6 +15,11 @@ interface ArchitectInput {
   architectInstructions?: string;
   kindleUnlimitedOptimized?: boolean;
   forbiddenNames?: string[];
+  // Callback opcional para reportar progreso entre fases. CRÍTICO para
+  // mantener vivo el heartbeat de la cola: la Fase 1 + Fase 2 sumadas
+  // pueden superar los 15 min del HEARTBEAT_TIMEOUT, así que avisar entre
+  // fases evita que la cola marque el proyecto como congelado.
+  onProgress?: (phase: "phase1_done" | "phase2_start" | "phase2_done", message: string) => void | Promise<void>;
 }
 
 const PHASE1_SYSTEM_PROMPT = `
@@ -407,6 +412,20 @@ export class ArchitectAgent extends BaseAgent {
     const phase1Arcos = phase1Json.matriz_arcos?.subtramas?.length || 0;
     console.log(`[El Arquitecto] Fase 1 completada. Personajes: ${phase1Personajes}, Arcos: ${phase1Arcos}`);
 
+    // Heartbeat entre fases — sin esto, una novela larga (Fase 1 ~5 min +
+    // Fase 2 ~11 min) supera el HEARTBEAT_TIMEOUT_MS de 15 min y la cola
+    // marca el proyecto como congelado, abortando la Fase 2 a media generación.
+    if (input.onProgress) {
+      try {
+        await input.onProgress(
+          "phase1_done",
+          `Fase 1 completada (${phase1Personajes} personajes, ${phase1Arcos} subtramas). Iniciando Fase 2: escaleta de ${input.chapterCount} capítulos...`
+        );
+      } catch (e) {
+        console.warn(`[El Arquitecto] onProgress(phase1_done) falló: ${(e as Error).message}`);
+      }
+    }
+
     // FAIL-FAST: si la Fase 1 no produjo personajes, no tiene sentido lanzar
     // la Fase 2 (que tarda varios minutos y generará capítulos huérfanos sin
     // referencias válidas). Mejor abortar ya y dejar que el orquestador
@@ -507,6 +526,17 @@ export class ArchitectAgent extends BaseAgent {
 
     const chaptersCount = phase2Json.escaleta_capitulos?.length || 0;
     console.log(`[El Arquitecto] Fase 2 completada. Capítulos generados: ${chaptersCount}`);
+
+    if (input.onProgress) {
+      try {
+        await input.onProgress(
+          "phase2_done",
+          `Fase 2 completada: ${chaptersCount} capítulos en la escaleta.`
+        );
+      } catch (e) {
+        console.warn(`[El Arquitecto] onProgress(phase2_done) falló: ${(e as Error).message}`);
+      }
+    }
 
     const mergedResult = {
       ...phase1Json,
