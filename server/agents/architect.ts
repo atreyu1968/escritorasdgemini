@@ -111,29 +111,38 @@ REGLAS OBLIGATORIAS:
 5. PROHIBIDO: Tramas donde la identidad del personaje sea deliberadamente ambigua sin resolución clara planificada
 
 ═══════════════════════════════════════════════════════════════════
-🕰️ ÉPOCA DE LA ACCIÓN
+🕰️ ÉPOCA DE LA ACCIÓN — DEFINICIÓN OBLIGATORIA (CRÍTICO PARA ANACRONISMOS)
 ═══════════════════════════════════════════════════════════════════
-Identifica la época a partir de título/premisa/guía y rellena
-"world_bible.lexico_historico.epoca" con UNA LÍNEA. Ejemplos:
-  - "1888, Londres victoriano"     - "Contemporánea, Madrid"
-  - "Año 3024, colonia marciana"   - "Mundo secundario, s. XIX equiv."
+ANTES de escribir nada del JSON, define mentalmente la ÉPOCA EXACTA en la
+que ocurre la acción. Sin esto es IMPOSIBLE evitar anacronismos en los
+capítulos generados después.
 
-Si la Guía de Estilo trae sección "ÉPOCA(S) HISTÓRICA(S)", úsala como
-fuente de verdad: copia "epoca", ids de épocas paralelas y, si vienen,
-sus listas de vocabulario y registro. No las reinventes ni contradigas.
+DEBES rellenar OBLIGATORIAMENTE el campo "world_bible.lexico_historico.epoca"
+con formato preciso:
+  - Si es novela histórica con período concreto: "Año(s) + Lugar geográfico".
+    Ej: "1888, Londres victoriano"; "Verano de 79 d.C., Pompeya";
+        "1936-1939, España (Guerra Civil)".
+  - Si es contemporánea: "Contemporánea, [ciudad/país]" o "Actualidad, Madrid".
+  - Si es futuro/sci-fi: "Futuro cercano (~2070), Tokio" / "Año 3024, colonia marciana".
+  - Si es fantasía con mundo secundario: "Mundo secundario, equivalente a [siglo X / cultura Y]".
 
-Los demás campos de "lexico_historico" (terminos_anacronicos_prohibidos,
-vocabulario_epoca_autorizado, registro_linguistico, notas_voz_historica)
-son OPCIONALES en Fase 1: si los tienes claros añade 4-8 entradas como
-ancla; si no, déjalos como [] o "" — los agentes posteriores los
-completan bajo demanda. NO inventes listas largas: ahorrar tokens
-es más importante que cubrir todo el vocabulario aquí.
+A partir de esa época concreta, RELLENA ADEMÁS:
+  - "terminos_anacronicos_prohibidos": lista de palabras/conceptos que NO existían
+    en esa época y que el ghostwriter NUNCA debe usar. Sé específico para la época
+    declarada (ej: para 1888 prohíbe "ordenador", "psicología clínica", "antibiótico";
+    para Roma 79 d.C. prohíbe "minuto exacto", "bacteria", "pólvora", "imprenta").
+    Mínimo 15 entradas para épocas históricas; vacío solo para contemporáneas.
+  - "vocabulario_epoca_autorizado": 15-30 términos auténticos del período que el
+    ghostwriter debería preferir (oficios, monedas, indumentaria, instituciones,
+    expresiones de época). Vacío solo para contemporáneas.
+  - "registro_linguistico": tipo de habla (formal cortesano / coloquial popular /
+    técnico jurídico / militar de campo / etc.) acorde a la época y los personajes.
+  - "notas_voz_historica": 2-4 frases con el matiz que el narrador debe mantener
+    para sonar de la época (sin caer en arcaísmo forzado).
 
-MULTI-ÉPOCA (solo si la novela tiene timelines paralelos): añade entradas
-en "epocas_paralelas" con {id (slug), epoca}. El resto opcional. Cada
-capítulo de "escaleta_capitulos" debe traer "epoca_id" igual a un id del
-array, o null si pertenece a la época raíz. Si es mono-época, deja
-"epocas_paralelas" como [].
+Si la novela es CONTEMPORÁNEA o FUTURISTA SIN restricciones de época, las listas
+pueden ir vacías PERO "epoca" debe estar declarada explícitamente para que los
+agentes posteriores sepan que NO hay restricciones (no es lo mismo que olvidarlo).
 
 ═══════════════════════════════════════════════════════════════════
 FASE 1: WORLD BIBLE + ESTRUCTURA GLOBAL
@@ -184,12 +193,11 @@ Genera un JSON con estas claves:
   "motivos_literarios": ["Símbolos recurrentes"],
   "vocabulario_prohibido": ["Palabras/frases cliché a EVITAR"],
   "lexico_historico": {
-    "epoca": "OBLIGATORIO, una línea (ver instrucciones de ÉPOCA arriba).",
+    "epoca": "OBLIGATORIO. Formato exacto: 'Año(s) + Lugar geográfico'. Ejemplos válidos: '1888, Londres victoriano', 'Verano de 79 d.C., Pompeya', '1936-1939, España (Guerra Civil)', '2024, Madrid contemporáneo', 'Futuro cercano (~2070), Tokio'. Si la novela es contemporánea, escribe 'Contemporánea' o 'Actualidad' + ciudad/país. Si es fantasía/sci-fi sin equivalente histórico, escribe 'Mundo secundario, equivalente tecnológico/cultural a [siglo X / época Y]'. NUNCA dejes este campo vacío — es la base para detectar anacronismos.",
     "terminos_anacronicos_prohibidos": [],
     "vocabulario_epoca_autorizado": [],
     "registro_linguistico": "",
-    "notas_voz_historica": "",
-    "epocas_paralelas": []
+    "notas_voz_historica": ""
   },
   "paleta_sensorial_global": {
     "sentidos_dominantes": [],
@@ -271,7 +279,6 @@ FORMATO COMPACTO — Genera un JSON con "escaleta_capitulos":
       "numero": 1,
       "titulo": "Título evocador",
       "acto": "1",
-      "epoca_id": "presente_o_id_que_corresponda_o_null_si_novela_mono_epoca",
       "cronologia": "Momento temporal",
       "ubicacion": "Lugar con detalles sensoriales",
       "elenco_presente": ["Personaje1", "Personaje2"],
@@ -312,14 +319,9 @@ export class ArchitectAgent extends BaseAgent {
       systemPrompt: PHASE1_SYSTEM_PROMPT,
       model: "gemini-2.5-flash",
       useThinking: true,
-      thinkingBudget: 4096,        // bajado de 8192: menos cómputo interno = menos tiempo expuesto a drops del flash.
-      maxOutputTokens: 32768,
-      includeThoughts: false,      // el thoughtSignature solo se loguea, no lo usamos. Quitarlo reduce el tamaño de respuesta y baja el riesgo de drop a media generación.
+      thinkingBudget: 8192,
+      maxOutputTokens: 65536,
     });
-    // Override timeout: el Arquitecto genera JSON estructurado (no prosa larga).
-    // Bajamos de 12 min → 5 min para que cuelgues de Gemini fallen rápido y los
-    // 3 reintentos del orquestador quepan dentro del watchdog de 15 min.
-    this.timeoutMs = 5 * 60 * 1000;
   }
 
   async execute(input: ArchitectInput): Promise<AgentResponse> {
@@ -385,19 +387,6 @@ export class ArchitectAgent extends BaseAgent {
     La novela tendrá ${input.chapterCount} capítulos${input.hasPrologue ? " + prólogo" : ""}${input.hasEpilogue ? " + epílogo" : ""}${input.hasAuthorNote ? " + nota del autor" : ""}.
     Diseña los arcos, giros y tensión para exactamente esa cantidad de capítulos.
     
-    ⚡ BREVEDAD OBLIGATORIA — el JSON Fase 1 tiene cap de 32K tokens de salida. Para
-    no truncar la respuesta:
-    - Campos de prosa (perfil_psicologico, descripcion_sensorial, atmosfera, eventos_clave,
-      notas_voz_historica, etc.): MÁX. 2 frases concisas, NO párrafos largos.
-    - "linea_temporal": MÁX. 8 entradas de momentos clave, no una por capítulo.
-    - "personajes": describe a fondo solo a protagonistas y antagonistas (perfil ≤ 3 frases);
-      secundarios con 1-2 frases de perfil + contra_cliche obligatorio.
-    - "lexico_historico": SOLO el campo "epoca" es obligatorio (1 línea). Las listas
-      de vocabulario son OPCIONALES — si las añades máx. 4-8 entradas como ancla.
-      No las infles, los agentes posteriores las amplían bajo demanda.
-    - Termina el JSON limpiamente: si te quedas corto de tokens, recorta entradas
-      opcionales antes que dejar el JSON truncado a media frase.
-    
     Responde ÚNICAMENTE con el JSON estructurado según las instrucciones.
     `;
 
@@ -443,10 +432,6 @@ export class ArchitectAgent extends BaseAgent {
         lugares: phase1Json.world_bible?.lugares,
         temas_centrales: phase1Json.world_bible?.temas_centrales,
         motivos_literarios: phase1Json.world_bible?.motivos_literarios,
-        lexico_historico: phase1Json.world_bible?.lexico_historico ? {
-          epoca: phase1Json.world_bible.lexico_historico.epoca,
-          epocas_paralelas: phase1Json.world_bible.lexico_historico.epocas_paralelas,
-        } : undefined,
       },
       matriz_arcos: phase1Json.matriz_arcos,
       momentum_plan: phase1Json.momentum_plan,
@@ -489,16 +474,7 @@ export class ArchitectAgent extends BaseAgent {
     `;
 
     this.config.systemPrompt = PHASE2_SYSTEM_PROMPT;
-    // La escaleta puede ser muy larga (60+ capítulos). Subimos el cap para Fase 2,
-    // mientras Fase 1 (constructor) se queda en 32K para forzar concisión en la WB.
-    const previousMaxOut = this.config.maxOutputTokens;
-    this.config.maxOutputTokens = 65536;
-    let phase2Response;
-    try {
-      phase2Response = await this.generateContent(phase2Prompt);
-    } finally {
-      this.config.maxOutputTokens = previousMaxOut;
-    }
+    const phase2Response = await this.generateContent(phase2Prompt);
 
     console.log(`[El Arquitecto] Fase 2 API respondió: ${phase2Response.content?.length || 0} chars, tokens: in=${phase2Response.tokenUsage?.inputTokens || 0} out=${phase2Response.tokenUsage?.outputTokens || 0}, error=${phase2Response.error || "none"}, timedOut=${phase2Response.timedOut}`);
 
