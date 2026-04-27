@@ -19,7 +19,7 @@ interface ArchitectInput {
   // mantener vivo el heartbeat de la cola: la Fase 1 + Fase 2 sumadas
   // pueden superar los 15 min del HEARTBEAT_TIMEOUT, así que avisar entre
   // fases evita que la cola marque el proyecto como congelado.
-  onProgress?: (phase: "phase1_done" | "phase2_start" | "phase2_progress" | "phase2_done", message: string) => void | Promise<void>;
+  onProgress?: (phase: "phase1_done" | "phase2_start" | "phase2_done", message: string) => void | Promise<void>;
 }
 
 const PHASE1_SYSTEM_PROMPT = `
@@ -447,7 +447,7 @@ export class ArchitectAgent extends BaseAgent {
       };
     }
 
-    console.log(`[El Arquitecto] === FASE 2: Generando escaleta de ${input.chapterCount} capítulos (en lotes) ===`);
+    console.log(`[El Arquitecto] === FASE 2: Generando escaleta de ${input.chapterCount} capítulos (monolítica para preservar cohesión narrativa) ===`);
 
     const phase1Summary = JSON.stringify({
       premisa: phase1Json.premisa,
@@ -471,203 +471,80 @@ export class ArchitectAgent extends BaseAgent {
       linea_temporal: phase1Json.linea_temporal,
     });
 
-    // ═══════════════════════════════════════════════════════════════════
-    // FASE 2 EN LOTES — La Fase 2 monolítica (32 caps × 6 beats = ~25k
-    // tokens output) tarda 10-15 min en gemini-2.5-flash con thinking.
-    // Eso es muy frágil: roza el timeout de la API (12 min), agota
-    // el HEARTBEAT_TIMEOUT_MS de la cola (15 min) Y si el JSON se trunca
-    // cerca de maxOutputTokens=65536 hay que reintentar TODO desde cero.
-    //
-    // Solución: trocear en lotes de 8 capítulos. Cada lote:
-    //  - Tarda 2-4 min (lejos de cualquier timeout).
-    //  - Genera ~5k tokens de JSON (siempre completo y parseable).
-    //  - Emite heartbeat al terminar (resetea el contador de la cola).
-    //  - Reintenta hasta 2 veces sin tirar abajo los lotes anteriores.
-    // ═══════════════════════════════════════════════════════════════════
-    const BATCH_SIZE = 8;
-    const MAX_BATCH_RETRIES = 2;
+    const phase2Prompt = `
+    ${commonContext}
 
-    type Slot = { numero: number; etiqueta: string };
-    const slots: Slot[] = [];
-    if (input.hasPrologue) slots.push({ numero: 0, etiqueta: "Prólogo" });
-    for (let i = 1; i <= input.chapterCount; i++) {
-      slots.push({ numero: i, etiqueta: `Capítulo ${i}` });
-    }
-    if (input.hasEpilogue) slots.push({ numero: -1, etiqueta: "Epílogo" });
-    if (input.hasAuthorNote) slots.push({ numero: -2, etiqueta: "Nota del Autor" });
+    ═══════════════════════════════════════════════════════════════════
+    CONTEXTO DE LA FASE 1 (World Bible y estructura ya creadas):
+    ═══════════════════════════════════════════════════════════════════
+    ${phase1Summary}
 
-    const totalSlots = slots.length;
-    const numBatches = Math.ceil(totalSlots / BATCH_SIZE);
-
-    const allChapters: any[] = [];
-    let phase2InputTokens = 0;
-    let phase2OutputTokens = 0;
-    let phase2ThinkingTokens = 0;
-    const phase2ThoughtSignatures: string[] = [];
+    ═══════════════════════════════════════════════════════════════════
+    ⛔ REQUISITO ABSOLUTO: EXACTAMENTE ${input.chapterCount} CAPÍTULOS ⛔
+    ═══════════════════════════════════════════════════════════════════
+    
+    EL NÚMERO DE CAPÍTULOS NO ES TU DECISIÓN. DEBES generar EXACTAMENTE ${input.chapterCount} entradas en "escaleta_capitulos", numeradas del 1 al ${input.chapterCount}.
+    ${input.hasPrologue ? "ADEMÁS: Prólogo como capítulo número 0." : ""}
+    ${input.hasEpilogue ? "ADEMÁS: Epílogo como capítulo número -1." : ""}
+    ${input.hasAuthorNote ? "ADEMÁS: Nota del autor como capítulo número -2." : ""}
+    
+    Si la historia te parece "terminada" antes del capítulo ${input.chapterCount}:
+    - Expande subtramas existentes
+    - Añade complicaciones y obstáculos
+    - Desarrolla más los arcos de personajes secundarios
+    
+    CADA capítulo debe tener:
+    - ⛔ TÍTULO OBLIGATORIO: Campo "titulo" con valor literario (2-6 palabras), NUNCA vacío
+    - Beats detallados (mínimo 6 por capítulo)
+    - Información nueva
+    - Conflicto central
+    - Continuidad de entrada/salida
+    
+    ⚠️ VERIFICACIÓN FINAL: Antes de responder, CUENTA las entradas en escaleta_capitulos.
+    Si no hay EXACTAMENTE ${input.chapterCount} capítulos, tu respuesta es INVÁLIDA.
+    
+    Responde ÚNICAMENTE con el JSON que contenga "escaleta_capitulos".
+    `;
 
     this.config.systemPrompt = PHASE2_SYSTEM_PROMPT;
 
-    for (let b = 0; b < numBatches; b++) {
-      const batchStart = b * BATCH_SIZE;
-      const batchEnd = Math.min(batchStart + BATCH_SIZE, totalSlots);
-      const batchSlots = slots.slice(batchStart, batchEnd);
-      const batchLabel = `lote ${b + 1}/${numBatches}`;
-
-      // Contexto de continuidad: últimos 3 capítulos generados (sólo campos
-      // críticos para enlazar tono, identidades y hook). Mantiene el prompt
-      // pequeño aunque la escaleta crezca mucho.
-      const continuityCtx = allChapters.length > 0
-        ? JSON.stringify(allChapters.slice(-3).map((c) => ({
-            numero: c.numero,
-            titulo: c.titulo,
-            continuidad_salida: c.continuidad_salida,
-            hook_final: c.hook_final,
-            estado_identidades: c.estado_identidades,
-            nivel_tension: c.nivel_tension,
-          })))
-        : "(Es el primer lote: no hay capítulos previos.)";
-
-      const slotList = batchSlots
-        .map((s) => `  - "numero": ${s.numero}  → ${s.etiqueta}`)
-        .join("\n");
-
-      const batchPrompt = `
-      ${commonContext}
-
-      ═══════════════════════════════════════════════════════════════════
-      WORLD BIBLE Y ESTRUCTURA (Fase 1 — referencia obligatoria):
-      ═══════════════════════════════════════════════════════════════════
-      ${phase1Summary}
-
-      ═══════════════════════════════════════════════════════════════════
-      CONTINUIDAD DESDE LOTES PREVIOS (últimos capítulos generados):
-      ═══════════════════════════════════════════════════════════════════
-      ${continuityCtx}
-
-      Capítulos ya generados hasta ahora: ${allChapters.length} de ${totalSlots} totales.
-
-      ═══════════════════════════════════════════════════════════════════
-      ⛔ ESTE LOTE (${batchLabel}): GENERA EXACTAMENTE ${batchSlots.length} CAPÍTULOS ⛔
-      ═══════════════════════════════════════════════════════════════════
-
-      Debes producir UNA entrada en "escaleta_capitulos" para CADA UNO de estos números, EN ESTE ORDEN:
-${slotList}
-
-      Reglas para este lote:
-      - Respeta los números EXACTOS indicados arriba (incluyendo 0 para prólogo, -1 para epílogo, -2 para nota del autor si aparecen).
-      - Cada capítulo con TÍTULO literario (2-6 palabras), beats mínimos 6, información nueva, conflicto central.
-      - Encadena la "continuidad_entrada" del PRIMER capítulo de este lote con la "continuidad_salida" del último capítulo previo (si existe en el contexto de continuidad).
-      - NO repitas información ya revelada en lotes previos (puedes inferirla del contexto de continuidad).
-      - Mantén el plan de momentum y los arcos de la Fase 1: este lote cubre los capítulos ${batchSlots[0].numero} a ${batchSlots[batchSlots.length - 1].numero} de un total de ${input.chapterCount} regulares.
-
-      ⚠️ VERIFICACIÓN: Antes de responder, CUENTA las entradas. Si no hay EXACTAMENTE ${batchSlots.length}, tu respuesta es INVÁLIDA.
-
-      Responde ÚNICAMENTE con un JSON con la forma { "escaleta_capitulos": [ ... ${batchSlots.length} entradas ... ] }.
-      `;
-
-      let batchOk = false;
-      let batchAttempt = 0;
-      let lastBatchErr = "";
-
-      while (!batchOk && batchAttempt <= MAX_BATCH_RETRIES) {
-        batchAttempt++;
-        console.log(`[El Arquitecto] Fase 2 ${batchLabel} (intento ${batchAttempt}): generando capítulos ${batchSlots.map((s) => s.numero).join(", ")}`);
-
-        const batchResp = await this.generateContent(batchPrompt);
-
-        phase2InputTokens += batchResp.tokenUsage?.inputTokens || 0;
-        phase2OutputTokens += batchResp.tokenUsage?.outputTokens || 0;
-        phase2ThinkingTokens += batchResp.tokenUsage?.thinkingTokens || 0;
-        if (batchResp.thoughtSignature) phase2ThoughtSignatures.push(batchResp.thoughtSignature);
-
-        if (batchResp.error || batchResp.timedOut || !batchResp.content?.trim()) {
-          lastBatchErr = batchResp.error || "timeout/vacío";
-          console.warn(`[El Arquitecto] Fase 2 ${batchLabel} falló: ${lastBatchErr}`);
-          if (batchAttempt > MAX_BATCH_RETRIES) break;
-          await new Promise((r) => setTimeout(r, 2000));
-          continue;
-        }
-
-        let parsed: any;
-        try {
-          parsed = repairJson(batchResp.content);
-        } catch (e) {
-          lastBatchErr = `JSON parse: ${(e as Error).message}`;
-          console.warn(`[El Arquitecto] Fase 2 ${batchLabel} JSON inválido: ${lastBatchErr}`);
-          if (batchAttempt > MAX_BATCH_RETRIES) break;
-          continue;
-        }
-
-        const batchChapters: any[] = parsed.escaleta_capitulos || [];
-        if (batchChapters.length === 0) {
-          lastBatchErr = "0 capítulos en la respuesta";
-          console.warn(`[El Arquitecto] Fase 2 ${batchLabel}: ${lastBatchErr}`);
-          if (batchAttempt > MAX_BATCH_RETRIES) break;
-          continue;
-        }
-
-        // Aceptamos el lote aunque traiga ±1 capítulo (el modelo a veces
-        // genera de más/menos por interpretar el rango). Si trae menos,
-        // marcamos error para que el orquestador detecte la discrepancia.
-        allChapters.push(...batchChapters);
-        batchOk = true;
-        console.log(`[El Arquitecto] Fase 2 ${batchLabel} OK: ${batchChapters.length} capítulos. Acumulado: ${allChapters.length}/${totalSlots}`);
-      }
-
-      if (!batchOk) {
-        console.error(`[El Arquitecto] Fase 2 ${batchLabel} falló tras ${MAX_BATCH_RETRIES + 1} intentos: ${lastBatchErr}`);
-        return {
-          content: JSON.stringify({ ...phase1Json, escaleta_capitulos: allChapters }),
-          error: `Phase 2 ${batchLabel}: ${lastBatchErr}`,
-          timedOut: false,
-          tokenUsage: {
-            inputTokens: (phase1Response.tokenUsage?.inputTokens || 0) + phase2InputTokens,
-            outputTokens: (phase1Response.tokenUsage?.outputTokens || 0) + phase2OutputTokens,
-            thinkingTokens: (phase1Response.tokenUsage?.thinkingTokens || 0) + phase2ThinkingTokens,
-          },
-          thoughtSignature: [phase1Response.thoughtSignature || "", ...phase2ThoughtSignatures]
-            .filter(Boolean)
-            .join("\n\n--- FASE 2 ---\n\n") || undefined,
-        };
-      }
-
-      // Heartbeat después de cada lote → resetea el contador de la cola.
-      if (input.onProgress) {
-        try {
-          await input.onProgress(
-            "phase2_progress",
-            `Escaleta ${batchLabel} completada (${allChapters.length}/${totalSlots} capítulos generados).`
-          );
-        } catch (e) {
-          console.warn(`[El Arquitecto] onProgress(phase2_progress) falló: ${(e as Error).message}`);
-        }
-      }
+    // La escaleta puede ser muy larga (32+ capítulos × 6 beats × metadatos).
+    // Subimos el cap SOLO para la Fase 2 — el constructor mantiene 32K para
+    // la Fase 1 (forzando concisión en la World Bible y manteniendo Gemini
+    // rápido). Restauramos al salir, pase lo que pase.
+    const previousMaxOut = this.config.maxOutputTokens;
+    this.config.maxOutputTokens = 65536;
+    let phase2Response;
+    try {
+      phase2Response = await this.generateContent(phase2Prompt);
+    } finally {
+      this.config.maxOutputTokens = previousMaxOut;
     }
 
-    // Deduplicar por "numero" — si el modelo repitió el último capítulo de un
-    // lote en el siguiente lote (raro pero posible), nos quedamos con la
-    // última versión generada (la más rica en continuidad).
-    const dedupedByNumero = new Map<number, any>();
-    for (const ch of allChapters) {
-      if (ch && typeof ch.numero === "number") {
-        dedupedByNumero.set(ch.numero, ch);
-      }
-    }
-    const orderedChapters = slots
-      .map((s) => dedupedByNumero.get(s.numero))
-      .filter((ch) => ch != null);
+    console.log(`[El Arquitecto] Fase 2 API respondió: ${phase2Response.content?.length || 0} chars, tokens: in=${phase2Response.tokenUsage?.inputTokens || 0} out=${phase2Response.tokenUsage?.outputTokens || 0}, error=${phase2Response.error || "none"}, timedOut=${phase2Response.timedOut}`);
 
-    const chaptersCount = orderedChapters.length;
-    const missingNumeros = slots
-      .map((s) => s.numero)
-      .filter((n) => !dedupedByNumero.has(n));
-    if (missingNumeros.length > 0) {
-      console.warn(`[El Arquitecto] Fase 2: faltan ${missingNumeros.length} capítulos (números: ${missingNumeros.join(", ")}). El orquestador detectará la discrepancia y reintentará.`);
+    if (phase2Response.error || phase2Response.timedOut || !phase2Response.content?.trim()) {
+      console.error(`[El Arquitecto] Fase 2 falló: ${phase2Response.error || "timeout/vacío"}`);
+      return phase2Response;
     }
-    if (allChapters.length !== chaptersCount) {
-      console.log(`[El Arquitecto] Fase 2: deduplicados ${allChapters.length - chaptersCount} capítulos repetidos entre lotes.`);
+
+    let phase2Json: any;
+    try {
+      phase2Json = repairJson(phase2Response.content);
+      console.log(`[El Arquitecto] Fase 2: JSON parseado correctamente`);
+    } catch (e) {
+      console.error(`[El Arquitecto] Fase 2: Error parseando JSON - ${(e as Error).message}`);
+      return {
+        content: phase2Response.content,
+        error: `Phase 2 JSON parse error: ${(e as Error).message}`,
+        timedOut: false,
+        tokenUsage: phase2Response.tokenUsage,
+        thoughtSignature: phase2Response.thoughtSignature,
+      };
     }
-    console.log(`[El Arquitecto] Fase 2 completada. Capítulos totales: ${chaptersCount}/${totalSlots}`);
+
+    const chaptersCount = phase2Json.escaleta_capitulos?.length || 0;
+    console.log(`[El Arquitecto] Fase 2 completada. Capítulos generados: ${chaptersCount}`);
 
     if (input.onProgress) {
       try {
@@ -682,18 +559,19 @@ ${slotList}
 
     const mergedResult = {
       ...phase1Json,
-      escaleta_capitulos: orderedChapters,
+      escaleta_capitulos: phase2Json.escaleta_capitulos,
     };
 
     const mergedTokenUsage = {
-      inputTokens: (phase1Response.tokenUsage?.inputTokens || 0) + phase2InputTokens,
-      outputTokens: (phase1Response.tokenUsage?.outputTokens || 0) + phase2OutputTokens,
-      thinkingTokens: (phase1Response.tokenUsage?.thinkingTokens || 0) + phase2ThinkingTokens,
+      inputTokens: (phase1Response.tokenUsage?.inputTokens || 0) + (phase2Response.tokenUsage?.inputTokens || 0),
+      outputTokens: (phase1Response.tokenUsage?.outputTokens || 0) + (phase2Response.tokenUsage?.outputTokens || 0),
+      thinkingTokens: (phase1Response.tokenUsage?.thinkingTokens || 0) + (phase2Response.tokenUsage?.thinkingTokens || 0),
     };
 
-    const mergedThoughts = [phase1Response.thoughtSignature || "", ...phase2ThoughtSignatures]
-      .filter(Boolean)
-      .join("\n\n--- FASE 2 ---\n\n");
+    const mergedThoughts = [
+      phase1Response.thoughtSignature || "",
+      phase2Response.thoughtSignature || "",
+    ].filter(Boolean).join("\n\n--- FASE 2 ---\n\n");
 
     console.log(`[El Arquitecto] ✅ Ambas fases completadas. Total: ${mergedResult.world_bible?.personajes?.length || 0} personajes, ${chaptersCount} capítulos`);
 
